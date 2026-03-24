@@ -1,6 +1,7 @@
 package com.yongsoo.youtubeatlasbackend.youtube;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -9,9 +10,6 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeApiClient.RemoteVideoCategoryItem;
@@ -28,26 +26,22 @@ import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasVideoCategory;
 public class YouTubeCatalogService {
 
     private static final int MIN_VIDEOS_PER_SOURCE_PAGE = 12;
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final CategoryCatalog categoryCatalog;
     private final CatalogResponseCache catalogResponseCache;
     private final YouTubeApiClient youTubeApiClient;
     private final TrendSignalRepository trendSignalRepository;
-    private final ObjectMapper objectMapper;
 
     public YouTubeCatalogService(
         CategoryCatalog categoryCatalog,
         CatalogResponseCache catalogResponseCache,
         YouTubeApiClient youTubeApiClient,
-        TrendSignalRepository trendSignalRepository,
-        ObjectMapper objectMapper
+        TrendSignalRepository trendSignalRepository
     ) {
         this.categoryCatalog = categoryCatalog;
         this.catalogResponseCache = catalogResponseCache;
         this.youTubeApiClient = youTubeApiClient;
         this.trendSignalRepository = trendSignalRepository;
-        this.objectMapper = objectMapper;
     }
 
     public List<VideoCategoryResponse> getCategories(String regionCode) {
@@ -86,18 +80,18 @@ public class YouTubeCatalogService {
             }
         }
 
-        List<VideoCategoryResponse> mergedResponses = new ArrayList<>();
-        mergedResponses.add(toResponse(categoryCatalog.allCategory()));
+        List<VideoCategoryResponse> responses = new ArrayList<>();
+        responses.add(toResponse(categoryCatalog.allCategory()));
+        categories.stream()
+            .sorted(Comparator.comparing(AtlasVideoCategory::label, Comparator.naturalOrder()))
+            .map(this::toResponse)
+            .forEach(responses::add);
 
-        for (AtlasVideoCategory category : categoryCatalog.mergeCategories(categories)) {
-            mergedResponses.add(toResponse(category));
-        }
-
-        if (mergedResponses.size() == 1) {
+        if (responses.size() == 1) {
             throw new IllegalArgumentException("표시할 수 있는 카테고리가 없습니다.");
         }
 
-        return List.copyOf(mergedResponses);
+        return List.copyOf(responses);
     }
 
     private VideoCategorySectionResponse loadPopularVideosByCategory(String normalizedRegionCode, String categoryId, String pageToken) {
@@ -118,59 +112,12 @@ public class YouTubeCatalogService {
             .map(item -> new AtlasVideoCategory(item.id(), item.label(), item.description(), item.sourceIds()))
             .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 카테고리입니다: " + categoryId));
 
-        if (category.sourceIds().size() <= 1) {
-            String sourceCategoryId = category.sourceIds().isEmpty() ? category.id() : category.sourceIds().getFirst();
-            RemoteVideoPage page;
+        String sourceCategoryId = category.sourceIds().isEmpty() ? category.id() : category.sourceIds().getFirst();
+        RemoteVideoPage page;
 
-            try {
-                page = fetchPopularVideosPageForSource(normalizedRegionCode, sourceCategoryId, pageToken);
-            } catch (UnsupportedSourceCategoryException exception) {
-                throw unsupportedCategoryException(normalizedRegionCode);
-            }
-
-            return new VideoCategorySectionResponse(
-                category.id(),
-                category.label(),
-                category.description(),
-                page.items().stream().map(this::toVideoResponse).toList(),
-                page.nextPageToken()
-            );
-        }
-
-        MergedCategoryPageState pageState = parseMergedCategoryPageState(pageToken);
-        List<String> activeSourceIds = category.sourceIds().stream()
-            .filter(sourceId -> !pageState.exhaustedSourceIds().contains(sourceId))
-            .toList();
-        Map<String, String> nextPageTokens = new LinkedHashMap<>();
-        List<String> exhaustedSourceIds = new ArrayList<>(pageState.exhaustedSourceIds());
-        List<AtlasVideo> mergedVideos = new ArrayList<>();
-        int supportedSourceCount = 0;
-
-        for (String sourceId : activeSourceIds) {
-            RemoteVideoPage sourcePage;
-
-            try {
-                sourcePage = fetchPopularVideosPageForSource(
-                    normalizedRegionCode,
-                    sourceId,
-                    pageState.nextPageTokens().get(sourceId)
-                );
-                supportedSourceCount++;
-            } catch (UnsupportedSourceCategoryException exception) {
-                markSourceAsExhausted(exhaustedSourceIds, sourceId);
-                continue;
-            }
-
-            mergedVideos.addAll(sourcePage.items());
-
-            if (StringUtils.hasText(sourcePage.nextPageToken())) {
-                nextPageTokens.put(sourceId, sourcePage.nextPageToken());
-            } else {
-                markSourceAsExhausted(exhaustedSourceIds, sourceId);
-            }
-        }
-
-        if (supportedSourceCount == 0) {
+        try {
+            page = fetchPopularVideosPageForSource(normalizedRegionCode, sourceCategoryId, pageToken);
+        } catch (UnsupportedSourceCategoryException exception) {
             throw unsupportedCategoryException(normalizedRegionCode);
         }
 
@@ -178,8 +125,8 @@ public class YouTubeCatalogService {
             category.id(),
             category.label(),
             category.description(),
-            dedupeVideos(mergedVideos).stream().map(this::toVideoResponse).toList(),
-            buildMergedCategoryPageToken(new MergedCategoryPageState(exhaustedSourceIds, nextPageTokens), category.sourceIds())
+            page.items().stream().map(this::toVideoResponse).toList(),
+            page.nextPageToken()
         );
     }
 
@@ -284,12 +231,6 @@ public class YouTubeCatalogService {
         return new RemoteVideoPage(items, nextPageToken);
     }
 
-    private void markSourceAsExhausted(List<String> exhaustedSourceIds, String sourceId) {
-        if (!exhaustedSourceIds.contains(sourceId)) {
-            exhaustedSourceIds.add(sourceId);
-        }
-    }
-
     private List<AtlasVideo> dedupeVideos(List<AtlasVideo> items) {
         Map<String, AtlasVideo> uniqueItems = new LinkedHashMap<>();
 
@@ -298,45 +239,6 @@ public class YouTubeCatalogService {
         }
 
         return new ArrayList<>(uniqueItems.values());
-    }
-
-    private MergedCategoryPageState parseMergedCategoryPageState(String pageToken) {
-        if (!StringUtils.hasText(pageToken)) {
-            return new MergedCategoryPageState(List.of(), Map.of());
-        }
-
-        try {
-            Map<String, Object> parsed = objectMapper.readValue(pageToken, MAP_TYPE);
-            List<String> exhaustedSourceIds = parsed.get("exhaustedSourceIds") instanceof List<?> rawExhaustedIds
-                ? rawExhaustedIds.stream().filter(String.class::isInstance).map(String.class::cast).toList()
-                : List.of();
-            Map<String, String> nextPageTokens = new LinkedHashMap<>();
-
-            if (parsed.get("nextPageTokens") instanceof Map<?, ?> rawTokens) {
-                rawTokens.forEach((key, value) -> {
-                    if (key instanceof String stringKey && value instanceof String stringValue) {
-                        nextPageTokens.put(stringKey, stringValue);
-                    }
-                });
-            }
-
-            return new MergedCategoryPageState(exhaustedSourceIds, nextPageTokens);
-        } catch (JsonProcessingException ignored) {
-            return new MergedCategoryPageState(List.of(), Map.of());
-        }
-    }
-
-    private String buildMergedCategoryPageToken(MergedCategoryPageState pageState, List<String> sourceIds) {
-        boolean hasRemainingPages = sourceIds.stream().anyMatch(sourceId -> StringUtils.hasText(pageState.nextPageTokens().get(sourceId)));
-        if (!hasRemainingPages) {
-            return null;
-        }
-
-        try {
-            return objectMapper.writeValueAsString(pageState);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("병합 카테고리 페이지 토큰을 직렬화할 수 없습니다.", exception);
-        }
     }
 
     private VideoCategoryResponse toResponse(AtlasVideoCategory category) {
@@ -455,12 +357,6 @@ public class YouTubeCatalogService {
 
     private IllegalArgumentException unsupportedCategoryException(String regionCode) {
         return new IllegalArgumentException("현재 " + regionCode + "에서는 요청한 카테고리 인기 차트를 지원하지 않습니다.");
-    }
-
-    private record MergedCategoryPageState(
-        List<String> exhaustedSourceIds,
-        Map<String, String> nextPageTokens
-    ) {
     }
 
     private static class UnsupportedSourceCategoryException extends RuntimeException {

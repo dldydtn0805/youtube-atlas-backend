@@ -15,7 +15,6 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yongsoo.youtubeatlasbackend.common.ExternalServiceException;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
@@ -56,8 +55,7 @@ class YouTubeCatalogServiceTest {
             new CategoryCatalog(),
             new CatalogResponseCache(atlasProperties),
             youTubeApiClient,
-            trendSignalRepository,
-            new ObjectMapper()
+            trendSignalRepository
         );
     }
 
@@ -81,16 +79,16 @@ class YouTubeCatalogServiceTest {
         when(youTubeApiClient.fetchMostPopularVideos("KR", "10", null)).thenReturn(
             new RemoteVideoPage(List.of(video("video-1", "10")), null)
         );
-        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "music", List.of("video-1")))
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "10", List.of("video-1")))
             .thenReturn(List.of());
 
-        assertThat(youTubeCatalogService.getPopularVideosByCategory("kr", "music", null).items()).hasSize(1);
-        assertThat(youTubeCatalogService.getPopularVideosByCategory("KR", "music", null).items()).hasSize(1);
+        assertThat(youTubeCatalogService.getPopularVideosByCategory("kr", "10", null).items()).hasSize(1);
+        assertThat(youTubeCatalogService.getPopularVideosByCategory("KR", "10", null).items()).hasSize(1);
 
         verify(youTubeApiClient, times(1)).fetchVideoCategories("KR");
         verify(youTubeApiClient, times(1)).fetchMostPopularVideos("KR", "10", null);
         verify(trendSignalRepository, times(2))
-            .findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "music", List.of("video-1"));
+            .findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "10", List.of("video-1"));
     }
 
     @Test
@@ -101,10 +99,10 @@ class YouTubeCatalogServiceTest {
         when(youTubeApiClient.fetchMostPopularVideos("KR", "10", null)).thenReturn(
             new RemoteVideoPage(List.of(video("video-1", "10")), null)
         );
-        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn(eq("KR"), eq("music"), eq(List.of("video-1"))))
-            .thenReturn(List.of(trendSignal("KR", "music", "video-1")));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn(eq("KR"), eq("10"), eq(List.of("video-1"))))
+            .thenReturn(List.of(trendSignal("KR", "10", "video-1")));
 
-        var response = youTubeCatalogService.getPopularVideosByCategory("KR", "music", null);
+        var response = youTubeCatalogService.getPopularVideosByCategory("KR", "10", null);
 
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().getFirst().trend()).isNotNull();
@@ -114,36 +112,14 @@ class YouTubeCatalogServiceTest {
     }
 
     @Test
-    void getPopularVideosByCategorySkipsUnsupportedSourcesForMergedCategory() {
+    void getPopularVideosByCategoryThrowsWhenSourceCategoryIsUnsupported() {
         when(youTubeApiClient.fetchVideoCategories("KR")).thenReturn(List.of(
-            new RemoteVideoCategoryItem("24", new RemoteCategorySnippet(true, "Entertainment")),
-            new RemoteVideoCategoryItem("23", new RemoteCategorySnippet(true, "Comedy"))
+            new RemoteVideoCategoryItem("24", new RemoteCategorySnippet(true, "Entertainment"))
         ));
         when(youTubeApiClient.fetchMostPopularVideos("KR", "24", null))
             .thenThrow(new ExternalServiceException("Requested entity was not found."));
-        when(youTubeApiClient.fetchMostPopularVideos("KR", "23", null)).thenReturn(
-            new RemoteVideoPage(List.of(video("video-1", "23")), null)
-        );
-        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "entertainment", List.of("video-1")))
-            .thenReturn(List.of());
 
-        var response = youTubeCatalogService.getPopularVideosByCategory("KR", "entertainment", null);
-
-        assertThat(response.items()).extracting(item -> item.id()).containsExactly("video-1");
-    }
-
-    @Test
-    void getPopularVideosByCategoryThrowsWhenMergedCategoryHasNoSupportedSources() {
-        when(youTubeApiClient.fetchVideoCategories("KR")).thenReturn(List.of(
-            new RemoteVideoCategoryItem("24", new RemoteCategorySnippet(true, "Entertainment")),
-            new RemoteVideoCategoryItem("23", new RemoteCategorySnippet(true, "Comedy"))
-        ));
-        when(youTubeApiClient.fetchMostPopularVideos("KR", "24", null))
-            .thenThrow(new ExternalServiceException("Requested entity was not found."));
-        when(youTubeApiClient.fetchMostPopularVideos("KR", "23", null))
-            .thenThrow(new ExternalServiceException("The requested video chart is not supported or is not available."));
-
-        assertThatThrownBy(() -> youTubeCatalogService.getPopularVideosByCategory("KR", "entertainment", null))
+        assertThatThrownBy(() -> youTubeCatalogService.getPopularVideosByCategory("KR", "24", null))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("현재 KR에서는 요청한 카테고리 인기 차트를 지원하지 않습니다.");
     }
