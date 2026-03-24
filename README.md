@@ -36,6 +36,7 @@ DB_PASSWORD=postgres
 ALLOWED_ORIGINS=http://localhost:5173
 TRENDING_SCHEDULER_ENABLED=false
 TRENDING_SYNC_CRON=0 0/30 * * * *
+TRENDING_SYNC_MAX_PAGES_PER_SOURCE=3
 ```
 
 `DB_*`를 비워 두면 로컬에선 H2 인메모리 DB로 실행됩니다.

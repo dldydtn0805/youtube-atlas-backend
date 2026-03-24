@@ -1,10 +1,12 @@
 package com.yongsoo.youtubeatlasbackend.youtube;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -13,6 +15,9 @@ import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSignalId;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeApiClient.RemoteCategorySnippet;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeApiClient.RemoteVideoCategoryItem;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeApiClient.RemoteVideoPage;
@@ -24,11 +29,13 @@ import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasVideoStatistics;
 class YouTubeCatalogServiceTest {
 
     private YouTubeApiClient youTubeApiClient;
+    private TrendSignalRepository trendSignalRepository;
     private YouTubeCatalogService youTubeCatalogService;
 
     @BeforeEach
     void setUp() {
         youTubeApiClient = org.mockito.Mockito.mock(YouTubeApiClient.class);
+        trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
 
         AtlasProperties atlasProperties = new AtlasProperties();
         atlasProperties.getYoutube().getCache().setCategoriesTtlSeconds(60);
@@ -38,6 +45,7 @@ class YouTubeCatalogServiceTest {
             new CategoryCatalog(),
             new CatalogResponseCache(atlasProperties),
             youTubeApiClient,
+            trendSignalRepository,
             new ObjectMapper()
         );
     }
@@ -62,12 +70,53 @@ class YouTubeCatalogServiceTest {
         when(youTubeApiClient.fetchMostPopularVideos("KR", "10", null)).thenReturn(
             new RemoteVideoPage(List.of(video("video-1", "10")), null)
         );
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "music", List.of("video-1")))
+            .thenReturn(List.of());
 
         assertThat(youTubeCatalogService.getPopularVideosByCategory("kr", "music", null).items()).hasSize(1);
         assertThat(youTubeCatalogService.getPopularVideosByCategory("KR", "music", null).items()).hasSize(1);
 
         verify(youTubeApiClient, times(1)).fetchVideoCategories("KR");
         verify(youTubeApiClient, times(1)).fetchMostPopularVideos("KR", "10", null);
+        verify(trendSignalRepository, times(2))
+            .findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "music", List.of("video-1"));
+    }
+
+    @Test
+    void getPopularVideosByCategoryAddsTrendSignalToItems() {
+        when(youTubeApiClient.fetchVideoCategories("KR")).thenReturn(List.of(
+            new RemoteVideoCategoryItem("10", new RemoteCategorySnippet(true, "Music"))
+        ));
+        when(youTubeApiClient.fetchMostPopularVideos("KR", "10", null)).thenReturn(
+            new RemoteVideoPage(List.of(video("video-1", "10")), null)
+        );
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn(eq("KR"), eq("music"), eq(List.of("video-1"))))
+            .thenReturn(List.of(trendSignal("KR", "music", "video-1")));
+
+        var response = youTubeCatalogService.getPopularVideosByCategory("KR", "music", null);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().trend()).isNotNull();
+        assertThat(response.items().getFirst().trend().currentRank()).isEqualTo(3);
+        assertThat(response.items().getFirst().trend().rankChange()).isEqualTo(2);
+        assertThat(response.items().getFirst().trend().capturedAt()).isEqualTo(Instant.parse("2026-03-24T12:00:00Z"));
+    }
+
+    @Test
+    void fetchMergedCategoryVideosCollectsMultiplePagesForTrendingSync() {
+        when(youTubeApiClient.fetchMostPopularVideos("KR", "10", null)).thenReturn(
+            new RemoteVideoPage(List.of(video("video-1", "10")), "page-2")
+        );
+        when(youTubeApiClient.fetchMostPopularVideos("KR", "10", "page-2")).thenReturn(
+            new RemoteVideoPage(List.of(video("video-2", "10")), "page-3")
+        );
+        when(youTubeApiClient.fetchMostPopularVideos("KR", "10", "page-3")).thenReturn(
+            new RemoteVideoPage(List.of(video("video-3", "10")), null)
+        );
+
+        var videos = youTubeCatalogService.fetchMergedCategoryVideos("KR", List.of("10"), 3);
+
+        assertThat(videos).extracting(AtlasVideo::id).containsExactly("video-1", "video-2", "video-3");
     }
 
     private AtlasVideo video(String id, String categoryId) {
@@ -83,5 +132,26 @@ class YouTubeCatalogServiceTest {
             ),
             new AtlasVideoStatistics(100L)
         );
+    }
+
+    private TrendSignal trendSignal(String regionCode, String categoryId, String videoId) {
+        TrendSignal signal = new TrendSignal();
+        signal.setId(new TrendSignalId(regionCode, categoryId, videoId));
+        signal.setCategoryLabel("Music");
+        signal.setCurrentRunId(10L);
+        signal.setPreviousRunId(9L);
+        signal.setCurrentRank(3);
+        signal.setPreviousRank(5);
+        signal.setRankChange(2);
+        signal.setCurrentViewCount(1_000L);
+        signal.setPreviousViewCount(700L);
+        signal.setViewCountDelta(300L);
+        signal.setNew(false);
+        signal.setTitle("Title");
+        signal.setChannelTitle("Channel");
+        signal.setThumbnailUrl("https://example.com/thumb.jpg");
+        signal.setCapturedAt(Instant.parse("2026-03-24T12:00:00Z"));
+        signal.setUpdatedAt(Instant.parse("2026-03-24T12:30:00Z"));
+        return signal;
     }
 }

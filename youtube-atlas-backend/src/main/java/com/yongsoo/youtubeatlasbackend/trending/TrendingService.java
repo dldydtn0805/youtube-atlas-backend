@@ -73,7 +73,11 @@ public class TrendingService {
         currentRun.setCapturedAt(now);
         currentRun = trendRunRepository.save(currentRun);
 
-        List<AtlasVideo> videos = youTubeCatalogService.fetchMergedCategoryVideos(regionCode, sourceCategoryIds);
+        List<AtlasVideo> videos = youTubeCatalogService.fetchMergedCategoryVideos(
+            regionCode,
+            sourceCategoryIds,
+            atlasProperties.getTrending().getSyncMaxPagesPerSource()
+        );
         List<TrendSnapshot> snapshots = new ArrayList<>();
 
         for (int index = 0; index < videos.size(); index++) {

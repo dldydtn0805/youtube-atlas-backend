@@ -1,6 +1,7 @@
 package com.yongsoo.youtubeatlasbackend.youtube;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +12,8 @@ import org.springframework.util.StringUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeApiClient.RemoteVideoCategoryItem;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeApiClient.RemoteVideoPage;
 import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategoryResponse;
@@ -30,17 +33,20 @@ public class YouTubeCatalogService {
     private final CategoryCatalog categoryCatalog;
     private final CatalogResponseCache catalogResponseCache;
     private final YouTubeApiClient youTubeApiClient;
+    private final TrendSignalRepository trendSignalRepository;
     private final ObjectMapper objectMapper;
 
     public YouTubeCatalogService(
         CategoryCatalog categoryCatalog,
         CatalogResponseCache catalogResponseCache,
         YouTubeApiClient youTubeApiClient,
+        TrendSignalRepository trendSignalRepository,
         ObjectMapper objectMapper
     ) {
         this.categoryCatalog = categoryCatalog;
         this.catalogResponseCache = catalogResponseCache;
         this.youTubeApiClient = youTubeApiClient;
+        this.trendSignalRepository = trendSignalRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -51,12 +57,13 @@ public class YouTubeCatalogService {
 
     public VideoCategorySectionResponse getPopularVideosByCategory(String regionCode, String categoryId, String pageToken) {
         String normalizedRegionCode = normalizeRegionCode(regionCode);
-        return catalogResponseCache.getVideoSection(
+        VideoCategorySectionResponse section = catalogResponseCache.getVideoSection(
             normalizedRegionCode,
             categoryId,
             pageToken,
             () -> loadPopularVideosByCategory(normalizedRegionCode, categoryId, pageToken)
         );
+        return attachTrendSignals(normalizedRegionCode, categoryId, section);
     }
 
     private List<VideoCategoryResponse> loadCategories(String normalizedRegionCode) {
@@ -157,14 +164,19 @@ public class YouTubeCatalogService {
     }
 
     public List<AtlasVideo> fetchMergedCategoryVideos(String regionCode, List<String> sourceCategoryIds) {
+        return fetchMergedCategoryVideos(regionCode, sourceCategoryIds, 1);
+    }
+
+    public List<AtlasVideo> fetchMergedCategoryVideos(String regionCode, List<String> sourceCategoryIds, int maxPagesPerSource) {
         String normalizedRegionCode = normalizeRegionCode(regionCode);
+        int pageLimit = Math.max(1, maxPagesPerSource);
 
         if (sourceCategoryIds == null || sourceCategoryIds.isEmpty()) {
-            return fetchPopularVideosPageForSource(normalizedRegionCode, null, null).items();
+            return fetchPopularVideosPagesForSource(normalizedRegionCode, null, pageLimit);
         }
 
         if (sourceCategoryIds.size() == 1) {
-            return fetchPopularVideosPageForSource(normalizedRegionCode, sourceCategoryIds.getFirst(), null).items();
+            return fetchPopularVideosPagesForSource(normalizedRegionCode, sourceCategoryIds.getFirst(), pageLimit);
         }
 
         List<AtlasVideo> mergedVideos = new ArrayList<>();
@@ -172,7 +184,7 @@ public class YouTubeCatalogService {
 
         for (String sourceCategoryId : sourceCategoryIds) {
             try {
-                mergedVideos.addAll(fetchPopularVideosPageForSource(normalizedRegionCode, sourceCategoryId, null).items());
+                mergedVideos.addAll(fetchPopularVideosPagesForSource(normalizedRegionCode, sourceCategoryId, pageLimit));
                 supportedSourceCount++;
             } catch (IllegalArgumentException exception) {
                 if (!youTubeApiClient.isIgnorableCategoryFetchError(exception)) {
@@ -186,6 +198,34 @@ public class YouTubeCatalogService {
         }
 
         return dedupeVideos(mergedVideos);
+    }
+
+    private List<AtlasVideo> fetchPopularVideosPagesForSource(String regionCode, String sourceCategoryId, int maxPages) {
+        String nextPageToken = null;
+        int pageLimit = Math.max(1, maxPages);
+        int fetchedPages = 0;
+        List<AtlasVideo> items = new ArrayList<>();
+
+        try {
+            do {
+                RemoteVideoPage page = youTubeApiClient.fetchMostPopularVideos(regionCode, sourceCategoryId, nextPageToken);
+                items.addAll(page.items());
+                nextPageToken = page.nextPageToken();
+                fetchedPages++;
+            } while (fetchedPages < pageLimit && StringUtils.hasText(nextPageToken));
+        } catch (RuntimeException exception) {
+            if (!youTubeApiClient.isIgnorableCategoryFetchError(exception)) {
+                throw exception;
+            }
+
+            if (!StringUtils.hasText(sourceCategoryId)) {
+                throw exception;
+            }
+
+            throw new IllegalArgumentException("현재 " + regionCode + "에서는 요청한 카테고리 인기 차트를 지원하지 않습니다.");
+        }
+
+        return items;
     }
 
     private RemoteVideoPage fetchPopularVideosPageForSource(String regionCode, String sourceCategoryId, String pageToken) {
@@ -267,6 +307,65 @@ public class YouTubeCatalogService {
         return new VideoCategoryResponse(category.id(), category.label(), category.description(), category.sourceIds());
     }
 
+    private VideoCategorySectionResponse attachTrendSignals(
+        String regionCode,
+        String categoryId,
+        VideoCategorySectionResponse section
+    ) {
+        if (section.items().isEmpty()) {
+            return section;
+        }
+
+        List<String> videoIds = section.items().stream()
+            .map(VideoItemResponse::id)
+            .toList();
+        Map<String, TrendSignal> signalsByVideoId = new HashMap<>();
+
+        for (TrendSignal signal : trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn(
+            regionCode,
+            categoryId.trim(),
+            videoIds
+        )) {
+            signalsByVideoId.put(signal.getId().getVideoId(), signal);
+        }
+
+        List<VideoItemResponse> itemsWithTrends = section.items().stream()
+            .map(item -> withTrend(item, signalsByVideoId.get(item.id())))
+            .toList();
+
+        return new VideoCategorySectionResponse(
+            section.categoryId(),
+            section.label(),
+            section.description(),
+            itemsWithTrends,
+            section.nextPageToken()
+        );
+    }
+
+    private VideoItemResponse withTrend(VideoItemResponse item, TrendSignal signal) {
+        return new VideoItemResponse(
+            item.id(),
+            item.contentDetails(),
+            item.snippet(),
+            item.statistics(),
+            signal != null ? toTrendResponse(signal) : null
+        );
+    }
+
+    private VideoItemResponse.TrendResponse toTrendResponse(TrendSignal signal) {
+        return new VideoItemResponse.TrendResponse(
+            signal.getCategoryLabel(),
+            signal.getCurrentRank(),
+            signal.getPreviousRank(),
+            signal.getRankChange(),
+            signal.getCurrentViewCount(),
+            signal.getPreviousViewCount(),
+            signal.getViewCountDelta(),
+            signal.isNew(),
+            signal.getCapturedAt()
+        );
+    }
+
     private VideoItemResponse toVideoResponse(AtlasVideo video) {
         return new VideoItemResponse(
             video.id(),
@@ -278,7 +377,8 @@ public class YouTubeCatalogService {
                 video.snippet() != null && video.snippet().publishedAt() != null ? video.snippet().publishedAt().toString() : null,
                 toThumbnailsResponse(video.snippet() != null ? video.snippet().thumbnails() : null)
             ),
-            new VideoItemResponse.StatisticsResponse(video.statistics() != null ? video.statistics().viewCount() : null)
+            new VideoItemResponse.StatisticsResponse(video.statistics() != null ? video.statistics().viewCount() : null),
+            null
         );
     }
 

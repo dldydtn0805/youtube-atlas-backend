@@ -136,6 +136,7 @@ public class AtlasProperties {
     public static class Trending {
         private boolean schedulerEnabled;
         private String cron = "0 0/30 * * * *";
+        private int syncMaxPagesPerSource = 3;
         private List<SyncJob> jobs = new ArrayList<>();
 
         public boolean isSchedulerEnabled() {
@@ -152,6 +153,14 @@ public class AtlasProperties {
 
         public void setCron(String cron) {
             this.cron = cron;
+        }
+
+        public int getSyncMaxPagesPerSource() {
+            return syncMaxPagesPerSource;
+        }
+
+        public void setSyncMaxPagesPerSource(int syncMaxPagesPerSource) {
+            this.syncMaxPagesPerSource = syncMaxPagesPerSource;
         }
 
         public List<SyncJob> getJobs() {
