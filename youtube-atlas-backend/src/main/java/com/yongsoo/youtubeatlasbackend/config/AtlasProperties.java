@@ -73,7 +73,12 @@ public class AtlasProperties {
     }
 
     public static class Realtime {
-        private List<String> allowedOrigins = new ArrayList<>(List.of("http://localhost:5173"));
+        private List<String> allowedOrigins = new ArrayList<>(List.of(
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "https://youtube-atlas.vercel.app",
+            "https://*.vercel.app"
+        ));
 
         public List<String> getAllowedOrigins() {
             return allowedOrigins;
