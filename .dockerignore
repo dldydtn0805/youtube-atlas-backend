@@ -1,0 +1,9 @@
+.git
+.gitignore
+.idea
+.DS_Store
+README.md
+youtube-atlas-backend/.gradle
+youtube-atlas-backend/build
+youtube-atlas-backend/.DS_Store
+youtube-atlas-backend/src/.DS_Store
