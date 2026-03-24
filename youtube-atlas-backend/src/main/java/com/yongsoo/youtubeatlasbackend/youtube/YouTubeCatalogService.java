@@ -120,7 +120,13 @@ public class YouTubeCatalogService {
 
         if (category.sourceIds().size() <= 1) {
             String sourceCategoryId = category.sourceIds().isEmpty() ? category.id() : category.sourceIds().getFirst();
-            RemoteVideoPage page = fetchPopularVideosPageForSource(normalizedRegionCode, sourceCategoryId, pageToken);
+            RemoteVideoPage page;
+
+            try {
+                page = fetchPopularVideosPageForSource(normalizedRegionCode, sourceCategoryId, pageToken);
+            } catch (UnsupportedSourceCategoryException exception) {
+                throw unsupportedCategoryException(normalizedRegionCode);
+            }
 
             return new VideoCategorySectionResponse(
                 category.id(),
@@ -138,20 +144,34 @@ public class YouTubeCatalogService {
         Map<String, String> nextPageTokens = new LinkedHashMap<>();
         List<String> exhaustedSourceIds = new ArrayList<>(pageState.exhaustedSourceIds());
         List<AtlasVideo> mergedVideos = new ArrayList<>();
+        int supportedSourceCount = 0;
 
         for (String sourceId : activeSourceIds) {
-            RemoteVideoPage sourcePage = fetchPopularVideosPageForSource(
-                normalizedRegionCode,
-                sourceId,
-                pageState.nextPageTokens().get(sourceId)
-            );
+            RemoteVideoPage sourcePage;
+
+            try {
+                sourcePage = fetchPopularVideosPageForSource(
+                    normalizedRegionCode,
+                    sourceId,
+                    pageState.nextPageTokens().get(sourceId)
+                );
+                supportedSourceCount++;
+            } catch (UnsupportedSourceCategoryException exception) {
+                markSourceAsExhausted(exhaustedSourceIds, sourceId);
+                continue;
+            }
+
             mergedVideos.addAll(sourcePage.items());
 
             if (StringUtils.hasText(sourcePage.nextPageToken())) {
                 nextPageTokens.put(sourceId, sourcePage.nextPageToken());
             } else {
-                exhaustedSourceIds.add(sourceId);
+                markSourceAsExhausted(exhaustedSourceIds, sourceId);
             }
+        }
+
+        if (supportedSourceCount == 0) {
+            throw unsupportedCategoryException(normalizedRegionCode);
         }
 
         return new VideoCategorySectionResponse(
@@ -248,10 +268,16 @@ public class YouTubeCatalogService {
                 throw exception;
             }
 
-            throw new IllegalArgumentException("현재 " + regionCode + "에서는 요청한 카테고리 인기 차트를 지원하지 않습니다.");
+            throw new UnsupportedSourceCategoryException(sourceCategoryId, exception);
         }
 
         return new RemoteVideoPage(items, nextPageToken);
+    }
+
+    private void markSourceAsExhausted(List<String> exhaustedSourceIds, String sourceId) {
+        if (!exhaustedSourceIds.contains(sourceId)) {
+            exhaustedSourceIds.add(sourceId);
+        }
     }
 
     private List<AtlasVideo> dedupeVideos(List<AtlasVideo> items) {
@@ -412,9 +438,20 @@ public class YouTubeCatalogService {
         return regionCode.trim().toUpperCase();
     }
 
+    private IllegalArgumentException unsupportedCategoryException(String regionCode) {
+        return new IllegalArgumentException("현재 " + regionCode + "에서는 요청한 카테고리 인기 차트를 지원하지 않습니다.");
+    }
+
     private record MergedCategoryPageState(
         List<String> exhaustedSourceIds,
         Map<String, String> nextPageTokens
     ) {
+    }
+
+    private static class UnsupportedSourceCategoryException extends RuntimeException {
+
+        private UnsupportedSourceCategoryException(String sourceCategoryId, RuntimeException cause) {
+            super("지원되지 않는 유튜브 카테고리입니다: " + sourceCategoryId, cause);
+        }
     }
 }
