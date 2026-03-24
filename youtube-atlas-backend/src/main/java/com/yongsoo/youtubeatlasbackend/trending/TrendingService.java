@@ -15,6 +15,7 @@ import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.trending.api.SyncTrendingRequest;
 import com.yongsoo.youtubeatlasbackend.trending.api.SyncTrendingResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.TrendSignalResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.CategoryCatalog;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeCatalogService;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasThumbnail;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasThumbnails;
@@ -22,6 +23,9 @@ import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasVideo;
 
 @Service
 public class TrendingService {
+
+    private static final String TRENDING_CATEGORY_ID = CategoryCatalog.ALL_VIDEO_CATEGORY_ID;
+    private static final String TRENDING_CATEGORY_LABEL = "전체";
 
     private final AtlasProperties atlasProperties;
     private final YouTubeCatalogService youTubeCatalogService;
@@ -51,7 +55,7 @@ public class TrendingService {
 
         return trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn(
             regionCode.trim().toUpperCase(),
-            categoryId.trim(),
+            TRENDING_CATEGORY_ID,
             videoIds
         ).stream().map(this::toResponse).toList();
     }
@@ -59,9 +63,9 @@ public class TrendingService {
     @Transactional
     public SyncTrendingResponse sync(SyncTrendingRequest request) {
         String regionCode = request.regionCode().trim().toUpperCase();
-        String categoryId = request.categoryId().trim();
-        String categoryLabel = request.categoryLabel().trim();
-        List<String> sourceCategoryIds = normalizeSourceCategoryIds(request.sourceCategoryIds());
+        String categoryId = TRENDING_CATEGORY_ID;
+        String categoryLabel = TRENDING_CATEGORY_LABEL;
+        List<String> sourceCategoryIds = List.of();
         Instant now = Instant.now();
 
         TrendRun currentRun = new TrendRun();
@@ -167,19 +171,16 @@ public class TrendingService {
             return;
         }
 
-        for (AtlasProperties.SyncJob job : atlasProperties.getTrending().getJobs()) {
-            if (!StringUtils.hasText(job.getRegionCode())
-                || !StringUtils.hasText(job.getCategoryId())
-                || !StringUtils.hasText(job.getCategoryLabel())) {
-                continue;
-            }
+        Set<String> scheduledRegions = new LinkedHashSet<>();
 
-            sync(new SyncTrendingRequest(
-                job.getRegionCode(),
-                job.getCategoryId(),
-                job.getCategoryLabel(),
-                job.getSourceCategoryIds()
-            ));
+        for (AtlasProperties.SyncJob job : atlasProperties.getTrending().getJobs()) {
+            if (StringUtils.hasText(job.getRegionCode())) {
+                scheduledRegions.add(job.getRegionCode().trim().toUpperCase());
+            }
+        }
+
+        for (String regionCode : scheduledRegions) {
+            syncAllCategory(regionCode);
         }
     }
 
@@ -203,16 +204,13 @@ public class TrendingService {
         );
     }
 
-    private List<String> normalizeSourceCategoryIds(List<String> sourceCategoryIds) {
-        if (sourceCategoryIds == null) {
-            return List.of();
-        }
-
-        return sourceCategoryIds.stream()
-            .filter(StringUtils::hasText)
-            .map(String::trim)
-            .distinct()
-            .toList();
+    public SyncTrendingResponse syncAllCategory(String regionCode) {
+        return sync(new SyncTrendingRequest(
+            regionCode,
+            TRENDING_CATEGORY_ID,
+            TRENDING_CATEGORY_LABEL,
+            List.of()
+        ));
     }
 
     private String resolveThumbnailUrl(AtlasThumbnails thumbnails) {

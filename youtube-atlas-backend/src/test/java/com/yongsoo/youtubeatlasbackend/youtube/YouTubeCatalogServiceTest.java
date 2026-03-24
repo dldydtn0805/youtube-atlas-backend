@@ -87,28 +87,40 @@ class YouTubeCatalogServiceTest {
 
         verify(youTubeApiClient, times(1)).fetchVideoCategories("KR");
         verify(youTubeApiClient, times(1)).fetchMostPopularVideos("KR", "10", null);
-        verify(trendSignalRepository, times(2))
-            .findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "10", List.of("video-1"));
+        org.mockito.Mockito.verifyNoInteractions(trendSignalRepository);
     }
 
     @Test
-    void getPopularVideosByCategoryAddsTrendSignalToItems() {
-        when(youTubeApiClient.fetchVideoCategories("KR")).thenReturn(List.of(
-            new RemoteVideoCategoryItem("10", new RemoteCategorySnippet(true, "Music"))
-        ));
-        when(youTubeApiClient.fetchMostPopularVideos("KR", "10", null)).thenReturn(
+    void getPopularVideosByCategoryAddsTrendSignalToAllCategoryItems() {
+        when(youTubeApiClient.fetchMostPopularVideos("KR", null, null)).thenReturn(
             new RemoteVideoPage(List.of(video("video-1", "10")), null)
         );
-        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn(eq("KR"), eq("10"), eq(List.of("video-1"))))
-            .thenReturn(List.of(trendSignal("KR", "10", "video-1")));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn(eq("KR"), eq("0"), eq(List.of("video-1"))))
+            .thenReturn(List.of(trendSignal("KR", "0", "video-1")));
 
-        var response = youTubeCatalogService.getPopularVideosByCategory("KR", "10", null);
+        var response = youTubeCatalogService.getPopularVideosByCategory("KR", "0", null);
 
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().getFirst().trend()).isNotNull();
         assertThat(response.items().getFirst().trend().currentRank()).isEqualTo(3);
         assertThat(response.items().getFirst().trend().rankChange()).isEqualTo(2);
         assertThat(response.items().getFirst().trend().capturedAt()).isEqualTo(Instant.parse("2026-03-24T12:00:00Z"));
+    }
+
+    @Test
+    void getPopularVideosByCategoryDoesNotAttachTrendSignalForNonAllCategory() {
+        when(youTubeApiClient.fetchVideoCategories("KR")).thenReturn(List.of(
+            new RemoteVideoCategoryItem("10", new RemoteCategorySnippet(true, "Music"))
+        ));
+        when(youTubeApiClient.fetchMostPopularVideos("KR", "10", null)).thenReturn(
+            new RemoteVideoPage(List.of(video("video-1", "10")), null)
+        );
+
+        var response = youTubeCatalogService.getPopularVideosByCategory("KR", "10", null);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().trend()).isNull();
+        org.mockito.Mockito.verifyNoInteractions(trendSignalRepository);
     }
 
     @Test

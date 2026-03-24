@@ -250,6 +250,10 @@ public class YouTubeCatalogService {
         String categoryId,
         VideoCategorySectionResponse section
     ) {
+        if (!CategoryCatalog.ALL_VIDEO_CATEGORY_ID.equals(categoryId)) {
+            return section;
+        }
+
         if (section.items().isEmpty()) {
             return section;
         }
