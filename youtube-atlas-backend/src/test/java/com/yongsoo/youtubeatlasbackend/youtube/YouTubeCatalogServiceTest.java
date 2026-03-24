@@ -165,6 +165,25 @@ class YouTubeCatalogServiceTest {
         assertThat(videos).extracting(AtlasVideo::id).containsExactly("video-1", "video-2", "video-3");
     }
 
+    @Test
+    void fetchMergedCategoryVideosCachesUnsupportedSourcesPerRegion() {
+        when(youTubeApiClient.fetchMostPopularVideos("KR", "24", null))
+            .thenThrow(new ExternalServiceException("Requested entity was not found."));
+        when(youTubeApiClient.fetchMostPopularVideos("KR", "23", null)).thenReturn(
+            new RemoteVideoPage(List.of(video("video-1", "23")), null)
+        );
+
+        assertThat(youTubeCatalogService.fetchMergedCategoryVideos("KR", List.of("24", "23"), 1))
+            .extracting(AtlasVideo::id)
+            .containsExactly("video-1");
+        assertThat(youTubeCatalogService.fetchMergedCategoryVideos("KR", List.of("24", "23"), 1))
+            .extracting(AtlasVideo::id)
+            .containsExactly("video-1");
+
+        verify(youTubeApiClient, times(1)).fetchMostPopularVideos("KR", "24", null);
+        verify(youTubeApiClient, times(2)).fetchMostPopularVideos("KR", "23", null);
+    }
+
     private AtlasVideo video(String id, String categoryId) {
         return new AtlasVideo(
             id,

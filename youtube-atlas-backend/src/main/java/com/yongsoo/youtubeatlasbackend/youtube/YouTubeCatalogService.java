@@ -206,8 +206,8 @@ public class YouTubeCatalogService {
             try {
                 mergedVideos.addAll(fetchPopularVideosPagesForSource(normalizedRegionCode, sourceCategoryId, pageLimit));
                 supportedSourceCount++;
-            } catch (IllegalArgumentException exception) {
-                if (!youTubeApiClient.isIgnorableCategoryFetchError(exception)) {
+            } catch (RuntimeException exception) {
+                if (!isIgnorableMergedSourceFetchError(exception, normalizedRegionCode)) {
                     throw exception;
                 }
             }
@@ -226,6 +226,10 @@ public class YouTubeCatalogService {
         int fetchedPages = 0;
         List<AtlasVideo> items = new ArrayList<>();
 
+        if (catalogResponseCache.isKnownUnsupportedSource(regionCode, sourceCategoryId)) {
+            throw new IllegalArgumentException("현재 " + regionCode + "에서는 요청한 카테고리 인기 차트를 지원하지 않습니다.");
+        }
+
         try {
             do {
                 RemoteVideoPage page = youTubeApiClient.fetchMostPopularVideos(regionCode, sourceCategoryId, nextPageToken);
@@ -242,6 +246,7 @@ public class YouTubeCatalogService {
                 throw exception;
             }
 
+            catalogResponseCache.markUnsupportedSource(regionCode, sourceCategoryId);
             throw new IllegalArgumentException("현재 " + regionCode + "에서는 요청한 카테고리 인기 차트를 지원하지 않습니다.");
         }
 
@@ -252,6 +257,10 @@ public class YouTubeCatalogService {
         String nextPageToken = pageToken;
         List<AtlasVideo> items = new ArrayList<>();
         RemoteVideoPage currentPage;
+
+        if (catalogResponseCache.isKnownUnsupportedSource(regionCode, sourceCategoryId)) {
+            throw new UnsupportedSourceCategoryException(sourceCategoryId);
+        }
 
         try {
             do {
@@ -268,6 +277,7 @@ public class YouTubeCatalogService {
                 throw exception;
             }
 
+            catalogResponseCache.markUnsupportedSource(regionCode, sourceCategoryId);
             throw new UnsupportedSourceCategoryException(sourceCategoryId, exception);
         }
 
@@ -438,6 +448,11 @@ public class YouTubeCatalogService {
         return regionCode.trim().toUpperCase();
     }
 
+    private boolean isIgnorableMergedSourceFetchError(RuntimeException exception, String regionCode) {
+        return youTubeApiClient.isIgnorableCategoryFetchError(exception)
+            || unsupportedCategoryException(regionCode).getMessage().equals(exception.getMessage());
+    }
+
     private IllegalArgumentException unsupportedCategoryException(String regionCode) {
         return new IllegalArgumentException("현재 " + regionCode + "에서는 요청한 카테고리 인기 차트를 지원하지 않습니다.");
     }
@@ -449,6 +464,10 @@ public class YouTubeCatalogService {
     }
 
     private static class UnsupportedSourceCategoryException extends RuntimeException {
+
+        private UnsupportedSourceCategoryException(String sourceCategoryId) {
+            super("지원되지 않는 유튜브 카테고리입니다: " + sourceCategoryId);
+        }
 
         private UnsupportedSourceCategoryException(String sourceCategoryId, RuntimeException cause) {
             super("지원되지 않는 유튜브 카테고리입니다: " + sourceCategoryId, cause);
