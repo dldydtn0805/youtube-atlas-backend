@@ -28,21 +28,39 @@ public class YouTubeCatalogService {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final CategoryCatalog categoryCatalog;
+    private final CatalogResponseCache catalogResponseCache;
     private final YouTubeApiClient youTubeApiClient;
     private final ObjectMapper objectMapper;
 
     public YouTubeCatalogService(
         CategoryCatalog categoryCatalog,
+        CatalogResponseCache catalogResponseCache,
         YouTubeApiClient youTubeApiClient,
         ObjectMapper objectMapper
     ) {
         this.categoryCatalog = categoryCatalog;
+        this.catalogResponseCache = catalogResponseCache;
         this.youTubeApiClient = youTubeApiClient;
         this.objectMapper = objectMapper;
     }
 
     public List<VideoCategoryResponse> getCategories(String regionCode) {
-        List<RemoteVideoCategoryItem> remoteCategories = youTubeApiClient.fetchVideoCategories(normalizeRegionCode(regionCode));
+        String normalizedRegionCode = normalizeRegionCode(regionCode);
+        return catalogResponseCache.getCategories(normalizedRegionCode, () -> loadCategories(normalizedRegionCode));
+    }
+
+    public VideoCategorySectionResponse getPopularVideosByCategory(String regionCode, String categoryId, String pageToken) {
+        String normalizedRegionCode = normalizeRegionCode(regionCode);
+        return catalogResponseCache.getVideoSection(
+            normalizedRegionCode,
+            categoryId,
+            pageToken,
+            () -> loadPopularVideosByCategory(normalizedRegionCode, categoryId, pageToken)
+        );
+    }
+
+    private List<VideoCategoryResponse> loadCategories(String normalizedRegionCode) {
+        List<RemoteVideoCategoryItem> remoteCategories = youTubeApiClient.fetchVideoCategories(normalizedRegionCode);
         List<AtlasVideoCategory> categories = new ArrayList<>();
 
         for (RemoteVideoCategoryItem remoteCategory : remoteCategories) {
@@ -72,12 +90,10 @@ public class YouTubeCatalogService {
             throw new IllegalArgumentException("표시할 수 있는 카테고리가 없습니다.");
         }
 
-        return mergedResponses;
+        return List.copyOf(mergedResponses);
     }
 
-    public VideoCategorySectionResponse getPopularVideosByCategory(String regionCode, String categoryId, String pageToken) {
-        String normalizedRegionCode = normalizeRegionCode(regionCode);
-
+    private VideoCategorySectionResponse loadPopularVideosByCategory(String normalizedRegionCode, String categoryId, String pageToken) {
         if (CategoryCatalog.ALL_VIDEO_CATEGORY_ID.equals(categoryId)) {
             RemoteVideoPage page = fetchPopularVideosPageForSource(normalizedRegionCode, null, pageToken);
             return new VideoCategorySectionResponse(

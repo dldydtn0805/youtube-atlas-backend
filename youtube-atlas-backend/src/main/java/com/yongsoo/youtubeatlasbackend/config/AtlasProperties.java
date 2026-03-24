@@ -30,6 +30,7 @@ public class AtlasProperties {
         private String categoryLanguage = "ko";
         private int maxResultsPerCategory = 50;
         private int shortsMaxDurationSeconds = 180;
+        private final Cache cache = new Cache();
 
         public String getApiBaseUrl() {
             return apiBaseUrl;
@@ -69,6 +70,49 @@ public class AtlasProperties {
 
         public void setShortsMaxDurationSeconds(int shortsMaxDurationSeconds) {
             this.shortsMaxDurationSeconds = shortsMaxDurationSeconds;
+        }
+
+        public Cache getCache() {
+            return cache;
+        }
+    }
+
+    public static class Cache {
+        private long categoriesTtlSeconds = 21_600;
+        private long videoSectionsTtlSeconds = 120;
+        private long categoriesMaxSize = 128;
+        private long videoSectionsMaxSize = 512;
+
+        public long getCategoriesTtlSeconds() {
+            return categoriesTtlSeconds;
+        }
+
+        public void setCategoriesTtlSeconds(long categoriesTtlSeconds) {
+            this.categoriesTtlSeconds = categoriesTtlSeconds;
+        }
+
+        public long getVideoSectionsTtlSeconds() {
+            return videoSectionsTtlSeconds;
+        }
+
+        public void setVideoSectionsTtlSeconds(long videoSectionsTtlSeconds) {
+            this.videoSectionsTtlSeconds = videoSectionsTtlSeconds;
+        }
+
+        public long getCategoriesMaxSize() {
+            return categoriesMaxSize;
+        }
+
+        public void setCategoriesMaxSize(long categoriesMaxSize) {
+            this.categoriesMaxSize = categoriesMaxSize;
+        }
+
+        public long getVideoSectionsMaxSize() {
+            return videoSectionsMaxSize;
+        }
+
+        public void setVideoSectionsMaxSize(long videoSectionsMaxSize) {
+            this.videoSectionsMaxSize = videoSectionsMaxSize;
         }
     }
 
