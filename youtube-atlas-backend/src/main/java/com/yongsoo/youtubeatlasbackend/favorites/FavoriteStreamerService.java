@@ -13,21 +13,26 @@ import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.favorites.api.CreateFavoriteStreamerRequest;
 import com.yongsoo.youtubeatlasbackend.favorites.api.FavoriteStreamerResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.YouTubeCatalogService;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategorySectionResponse;
 
 @Service
 public class FavoriteStreamerService {
 
     private final FavoriteStreamerRepository favoriteStreamerRepository;
     private final AppUserRepository appUserRepository;
+    private final YouTubeCatalogService youTubeCatalogService;
     private final Clock clock;
 
     public FavoriteStreamerService(
         FavoriteStreamerRepository favoriteStreamerRepository,
         AppUserRepository appUserRepository,
+        YouTubeCatalogService youTubeCatalogService,
         Clock clock
     ) {
         this.favoriteStreamerRepository = favoriteStreamerRepository;
         this.appUserRepository = appUserRepository;
+        this.youTubeCatalogService = youTubeCatalogService;
         this.clock = clock;
     }
 
@@ -36,6 +41,18 @@ public class FavoriteStreamerService {
         return favoriteStreamerRepository.findByUserIdOrderByCreatedAtDesc(authenticatedUser.id()).stream()
             .map(this::toResponse)
             .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public VideoCategorySectionResponse getFavoriteStreamerVideos(
+        AuthenticatedUser authenticatedUser,
+        String regionCode,
+        String pageToken
+    ) {
+        List<String> favoriteChannelIds = favoriteStreamerRepository.findByUserIdOrderByCreatedAtDesc(authenticatedUser.id()).stream()
+            .map(FavoriteStreamer::getChannelId)
+            .toList();
+        return youTubeCatalogService.getPopularVideosForChannels(regionCode, favoriteChannelIds, pageToken);
     }
 
     @Transactional

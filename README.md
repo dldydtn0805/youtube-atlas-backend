@@ -225,6 +225,18 @@ Authorization: Bearer {accessToken}
 
 현재 로그인한 사용자의 스트리머 즐겨찾기 목록을 최근 추가 순으로 반환합니다.
 
+### `GET /api/me/favorite-streamers/videos`
+
+쿼리 파라미터:
+
+- `regionCode`
+- `pageToken` 선택
+
+전체 인기 영상 기준으로 페이지를 훑으면서, 현재 로그인한 사용자가 즐겨찾기한 채널의 영상만 모아서 반환합니다.
+- 응답 형식은 `GET /api/catalog/regions/{regionCode}/categories/0/videos` 와 동일합니다.
+- 트렌드 시그널도 전체 인기 영상 기준으로 함께 붙습니다.
+- 즐겨찾기 채널이 없으면 빈 목록과 `nextPageToken = null` 을 반환합니다.
+
 ### `POST /api/me/favorite-streamers`
 
 요청 본문:

@@ -21,19 +21,28 @@ import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.favorites.api.CreateFavoriteStreamerRequest;
+import com.yongsoo.youtubeatlasbackend.youtube.YouTubeCatalogService;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategorySectionResponse;
 
 class FavoriteStreamerServiceTest {
 
     private FavoriteStreamerRepository favoriteStreamerRepository;
     private AppUserRepository appUserRepository;
+    private YouTubeCatalogService youTubeCatalogService;
     private FavoriteStreamerService favoriteStreamerService;
 
     @BeforeEach
     void setUp() {
         favoriteStreamerRepository = org.mockito.Mockito.mock(FavoriteStreamerRepository.class);
         appUserRepository = org.mockito.Mockito.mock(AppUserRepository.class);
+        youTubeCatalogService = org.mockito.Mockito.mock(YouTubeCatalogService.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-01T06:00:00Z"), ZoneOffset.UTC);
-        favoriteStreamerService = new FavoriteStreamerService(favoriteStreamerRepository, appUserRepository, fixedClock);
+        favoriteStreamerService = new FavoriteStreamerService(
+            favoriteStreamerRepository,
+            appUserRepository,
+            youTubeCatalogService,
+            fixedClock
+        );
     }
 
     @Test
@@ -107,6 +116,30 @@ class FavoriteStreamerServiceTest {
         );
 
         verify(favoriteStreamerRepository).delete(eq(favoriteStreamer));
+    }
+
+    @Test
+    void getFavoriteStreamerVideosUsesFavoriteChannelIdsToFilterPopularFeed() {
+        FavoriteStreamer newer = favoriteStreamer(2L, "channel-2", "Streamer Two", Instant.parse("2026-04-01T06:00:00Z"));
+        FavoriteStreamer older = favoriteStreamer(1L, "channel-1", "Streamer One", Instant.parse("2026-03-31T06:00:00Z"));
+        VideoCategorySectionResponse response = new VideoCategorySectionResponse(
+            "favorite-streamers",
+            "즐겨찾기 채널",
+            "전체 인기 영상 중 즐겨찾기한 채널의 영상만 모았습니다.",
+            List.of(),
+            "NEXT"
+        );
+        when(favoriteStreamerRepository.findByUserIdOrderByCreatedAtDesc(7L)).thenReturn(List.of(newer, older));
+        when(youTubeCatalogService.getPopularVideosForChannels("KR", List.of("channel-2", "channel-1"), "PAGE-1"))
+            .thenReturn(response);
+
+        var result = favoriteStreamerService.getFavoriteStreamerVideos(
+            new AuthenticatedUser(7L, "atlas@example.com", "Atlas User", null),
+            "KR",
+            "PAGE-1"
+        );
+
+        assertThat(result).isSameAs(response);
     }
 
     private FavoriteStreamer favoriteStreamer(Long id, String channelId, String channelTitle, Instant createdAt) {
