@@ -315,6 +315,7 @@ public class YouTubeCatalogService {
             new VideoItemResponse.SnippetResponse(
                 video.snippet() != null ? video.snippet().title() : null,
                 video.snippet() != null ? video.snippet().channelTitle() : null,
+                video.snippet() != null ? video.snippet().channelId() : null,
                 video.snippet() != null ? video.snippet().categoryId() : null,
                 video.snippet() != null && video.snippet().publishedAt() != null ? video.snippet().publishedAt().toString() : null,
                 toThumbnailsResponse(video.snippet() != null ? video.snippet().thumbnails() : null)

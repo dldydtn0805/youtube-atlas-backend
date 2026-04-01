@@ -16,6 +16,7 @@ public record TrendSignalResponse(
     boolean isNew,
     String title,
     String channelTitle,
+    String channelId,
     String thumbnailUrl,
     Instant capturedAt
 ) {

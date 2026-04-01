@@ -117,4 +117,18 @@ class AuthServiceTest {
 
         verify(authSessionRepository).delete(any(AuthSession.class));
     }
+
+    @Test
+    void requireCurrentUserReturnsAuthenticatedUser() {
+        when(googleTokenVerifier.verify("google-id-token")).thenReturn(
+            new GoogleIdentity("google-subject-1", "atlas@example.com", "Atlas User", "https://example.com/me.png")
+        );
+        AuthSessionResponse sessionResponse = authService.loginWithGoogle("google-id-token", 30);
+
+        AuthenticatedUser user = authService.requireCurrentUser("Bearer " + sessionResponse.accessToken());
+
+        assertThat(user.id()).isEqualTo(7L);
+        assertThat(user.email()).isEqualTo("atlas@example.com");
+        assertThat(user.displayName()).isEqualTo("Atlas User");
+    }
 }

@@ -19,6 +19,7 @@ public record VideoItemResponse(
     public record SnippetResponse(
         String title,
         String channelTitle,
+        String channelId,
         String categoryId,
         String publishedAt,
         ThumbnailsResponse thumbnails

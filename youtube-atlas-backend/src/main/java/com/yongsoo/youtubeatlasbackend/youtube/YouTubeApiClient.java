@@ -127,7 +127,7 @@ public class YouTubeApiClient {
     }
 
     private AtlasVideo toVideo(RemoteVideoItem item) {
-        RemoteSnippet snippet = item.snippet() != null ? item.snippet() : new RemoteSnippet(null, null, null, null, null);
+        RemoteSnippet snippet = item.snippet() != null ? item.snippet() : new RemoteSnippet(null, null, null, null, null, null);
         RemoteContentDetails contentDetails = item.contentDetails() != null ? item.contentDetails() : new RemoteContentDetails(null);
         RemoteStatistics statistics = item.statistics() != null ? item.statistics() : new RemoteStatistics(null);
 
@@ -137,6 +137,7 @@ public class YouTubeApiClient {
             new AtlasVideoSnippet(
                 snippet.title(),
                 snippet.channelTitle(),
+                snippet.channelId(),
                 snippet.categoryId(),
                 parsePublishedAt(snippet.publishedAt()),
                 toThumbnails(snippet.thumbnails())
@@ -281,6 +282,7 @@ public class YouTubeApiClient {
     public record RemoteSnippet(
         String title,
         String channelTitle,
+        String channelId,
         String categoryId,
         String publishedAt,
         RemoteThumbnails thumbnails

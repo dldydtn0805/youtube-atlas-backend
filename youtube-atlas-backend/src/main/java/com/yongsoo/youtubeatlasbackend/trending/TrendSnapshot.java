@@ -42,6 +42,9 @@ public class TrendSnapshot {
     @Column(name = "channel_title", nullable = false)
     private String channelTitle;
 
+    @Column(name = "channel_id", length = 128)
+    private String channelId;
+
     @Column(name = "thumbnail_url", nullable = false, length = 2000)
     private String thumbnailUrl;
 
@@ -112,6 +115,14 @@ public class TrendSnapshot {
 
     public void setChannelTitle(String channelTitle) {
         this.channelTitle = channelTitle;
+    }
+
+    public String getChannelId() {
+        return channelId;
+    }
+
+    public void setChannelId(String channelId) {
+        this.channelId = channelId;
     }
 
     public String getThumbnailUrl() {

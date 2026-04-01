@@ -7,6 +7,7 @@
 - 국가별 카테고리 조회
 - 국가/카테고리별 인기 영상 조회
 - Google ID 토큰 기반 로그인
+- 사용자별 스트리머 즐겨찾기
 - 영상별 댓글 조회/생성
 - STOMP WebSocket 기반 실시간 댓글 브로드캐스트
 - 급상승 스냅샷 동기화
@@ -67,6 +68,9 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `POST /api/auth/google`
 - `GET /api/auth/me`
 - `DELETE /api/auth/session`
+- `GET /api/me/favorite-streamers`
+- `POST /api/me/favorite-streamers`
+- `DELETE /api/me/favorite-streamers/{channelId}`
 - `GET /api/videos/{videoId}/comments`
 - `POST /api/videos/{videoId}/comments`
 - `GET /api/trending/signals?regionCode=KR&categoryId=0&videoIds=abc&videoIds=def`
@@ -178,6 +182,7 @@ Authorization: Bearer {accessToken}
       "snippet": {
         "title": "Sample title",
         "channelTitle": "Sample channel",
+        "channelId": "UCxxxxxxxxxxxx",
         "categoryId": "10",
         "publishedAt": "2026-03-24T10:00:00Z",
         "thumbnails": {
@@ -207,6 +212,36 @@ Authorization: Bearer {accessToken}
   "nextPageToken": "CAoQAA"
 }
 ```
+
+## 즐겨찾기 API
+
+모든 즐겨찾기 API는 아래 헤더가 필요합니다.
+
+```text
+Authorization: Bearer {accessToken}
+```
+
+### `GET /api/me/favorite-streamers`
+
+현재 로그인한 사용자의 스트리머 즐겨찾기 목록을 최근 추가 순으로 반환합니다.
+
+### `POST /api/me/favorite-streamers`
+
+요청 본문:
+
+```json
+{
+  "channelId": "UCxxxxxxxxxxxx",
+  "channelTitle": "Sample channel",
+  "thumbnailUrl": "https://example.com/channel.jpg"
+}
+```
+
+- 같은 사용자가 같은 `channelId` 를 다시 저장하면 기존 항목을 재사용하고 최신 제목/썸네일로 갱신합니다.
+
+### `DELETE /api/me/favorite-streamers/{channelId}`
+
+해당 스트리머 즐겨찾기를 삭제합니다. 항목이 없어도 `204 No Content` 를 반환합니다.
 
 ## 댓글 API
 

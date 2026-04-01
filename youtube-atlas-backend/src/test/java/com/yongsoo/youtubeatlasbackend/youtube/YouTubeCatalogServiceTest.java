@@ -179,6 +179,7 @@ class YouTubeCatalogServiceTest {
             new AtlasVideoSnippet(
                 "Title",
                 "Channel",
+                "channel-1",
                 categoryId,
                 OffsetDateTime.parse("2026-03-24T10:00:00Z"),
                 null
@@ -202,6 +203,7 @@ class YouTubeCatalogServiceTest {
         signal.setNew(false);
         signal.setTitle("Title");
         signal.setChannelTitle("Channel");
+        signal.setChannelId("channel-1");
         signal.setThumbnailUrl("https://example.com/thumb.jpg");
         signal.setCapturedAt(Instant.parse("2026-03-24T12:00:00Z"));
         signal.setUpdatedAt(Instant.parse("2026-03-24T12:30:00Z"));
