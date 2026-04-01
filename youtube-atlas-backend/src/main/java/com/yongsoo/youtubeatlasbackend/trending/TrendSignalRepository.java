@@ -13,4 +13,10 @@ public interface TrendSignalRepository extends JpaRepository<TrendSignal, TrendS
     );
 
     List<TrendSignal> findByIdRegionCodeAndIdCategoryId(String regionCode, String categoryId);
+
+    List<TrendSignal> findByIdRegionCodeAndIdCategoryIdAndRankChangeGreaterThanEqualOrderByRankChangeDescCurrentRankAsc(
+        String regionCode,
+        String categoryId,
+        Integer rankChange
+    );
 }

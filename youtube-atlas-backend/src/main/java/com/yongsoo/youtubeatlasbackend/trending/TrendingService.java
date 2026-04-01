@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
+import com.yongsoo.youtubeatlasbackend.trending.api.RealtimeSurgingResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.SyncTrendingRequest;
 import com.yongsoo.youtubeatlasbackend.trending.api.SyncTrendingResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.TrendSignalResponse;
@@ -58,6 +59,39 @@ public class TrendingService {
             TRENDING_CATEGORY_ID,
             videoIds
         ).stream().map(this::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public RealtimeSurgingResponse getRealtimeSurging(String regionCode) {
+        String normalizedRegionCode = regionCode.trim().toUpperCase();
+        int rankChangeThreshold = atlasProperties.getTrending().getRealtimeSurgingRankChangeThreshold();
+        List<TrendSignalResponse> items = trendSignalRepository
+            .findByIdRegionCodeAndIdCategoryIdAndRankChangeGreaterThanEqualOrderByRankChangeDescCurrentRankAsc(
+                normalizedRegionCode,
+                TRENDING_CATEGORY_ID,
+                rankChangeThreshold
+            )
+            .stream()
+            .map(this::toResponse)
+            .toList();
+
+        Instant capturedAt = items.stream()
+            .map(TrendSignalResponse::capturedAt)
+            .findFirst()
+            .orElseGet(() -> trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc(
+                normalizedRegionCode,
+                TRENDING_CATEGORY_ID
+            ).map(TrendRun::getCapturedAt).orElse(null));
+
+        return new RealtimeSurgingResponse(
+            normalizedRegionCode,
+            TRENDING_CATEGORY_ID,
+            TRENDING_CATEGORY_LABEL,
+            rankChangeThreshold,
+            items.size(),
+            capturedAt,
+            items
+        );
     }
 
     @Transactional

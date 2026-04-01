@@ -32,6 +32,11 @@ public class TrendingController {
         return trendingService.getSignals(regionCode, categoryId, videoIds);
     }
 
+    @GetMapping("/realtime-surging")
+    public RealtimeSurgingResponse getRealtimeSurging(@RequestParam String regionCode) {
+        return trendingService.getRealtimeSurging(regionCode);
+    }
+
     @PostMapping("/sync")
     public SyncTrendingResponse sync(@Valid @RequestBody SyncTrendingRequest request) {
         return trendingService.sync(request);

@@ -48,8 +48,8 @@ DB_PASSWORD=postgres
 ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 YOUTUBE_CATEGORY_LANGUAGE=ko
 TRENDING_SCHEDULER_ENABLED=false
-TRENDING_SYNC_CRON=0 0/30 * * * *
-TRENDING_SYNC_MAX_PAGES_PER_SOURCE=3
+TRENDING_SYNC_CRON=0 0 * * * *
+TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 ```
 
 - `DB_*`를 비워 두면 로컬에서는 H2 인메모리 DB로 실행됩니다.
@@ -63,6 +63,7 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=3
 - `GET /api/videos/{videoId}/comments`
 - `POST /api/videos/{videoId}/comments`
 - `GET /api/trending/signals?regionCode=KR&categoryId=0&videoIds=abc&videoIds=def`
+- `GET /api/trending/realtime-surging?regionCode=KR`
 - `POST /api/trending/sync`
 
 ## 카테고리 API
@@ -195,6 +196,54 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=3
 
 - 트렌드 시그널은 현재 `전체(0)` 기준으로만 저장하고 조회합니다.
 - 카테고리별 영상 응답에는 트렌드가 붙지 않고, 전체 인기 영상 응답에서만 트렌드가 붙습니다.
+
+### `GET /api/trending/realtime-surging`
+
+쿼리 파라미터:
+
+- `regionCode`
+
+예시:
+
+```text
+/api/trending/realtime-surging?regionCode=KR
+```
+
+- 전체 인기 영상 기준으로 저장된 트렌드 시그널 중 `rankChange >= 5` 인 영상만 반환합니다.
+- 응답은 이미 `rankChange` 내림차순, `currentRank` 오름차순으로 정렬되어 있습니다.
+- `totalCount` 는 현재 실시간 급상승 전체 개수입니다.
+
+응답 예시:
+
+```json
+{
+  "regionCode": "KR",
+  "categoryId": "0",
+  "categoryLabel": "전체",
+  "rankChangeThreshold": 5,
+  "totalCount": 12,
+  "capturedAt": "2026-04-01T05:30:00Z",
+  "items": [
+    {
+      "regionCode": "KR",
+      "categoryId": "0",
+      "categoryLabel": "전체",
+      "videoId": "abc",
+      "currentRank": 3,
+      "previousRank": 11,
+      "rankChange": 8,
+      "currentViewCount": 1900000,
+      "previousViewCount": 1700000,
+      "viewCountDelta": 200000,
+      "isNew": false,
+      "title": "Example",
+      "channelTitle": "Atlas",
+      "thumbnailUrl": "https://example.com/thumb.jpg",
+      "capturedAt": "2026-04-01T05:30:00Z"
+    }
+  ]
+}
+```
 
 ### `POST /api/trending/sync`
 

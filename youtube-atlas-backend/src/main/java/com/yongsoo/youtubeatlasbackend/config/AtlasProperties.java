@@ -135,8 +135,9 @@ public class AtlasProperties {
 
     public static class Trending {
         private boolean schedulerEnabled;
-        private String cron = "0 0/30 * * * *";
-        private int syncMaxPagesPerSource = 3;
+        private String cron = "0 0 * * * *";
+        private int syncMaxPagesPerSource = 4;
+        private int realtimeSurgingRankChangeThreshold = 5;
         private List<SyncJob> jobs = new ArrayList<>();
 
         public boolean isSchedulerEnabled() {
@@ -161,6 +162,14 @@ public class AtlasProperties {
 
         public void setSyncMaxPagesPerSource(int syncMaxPagesPerSource) {
             this.syncMaxPagesPerSource = syncMaxPagesPerSource;
+        }
+
+        public int getRealtimeSurgingRankChangeThreshold() {
+            return realtimeSurgingRankChangeThreshold;
+        }
+
+        public void setRealtimeSurgingRankChangeThreshold(int realtimeSurgingRankChangeThreshold) {
+            this.realtimeSurgingRankChangeThreshold = realtimeSurgingRankChangeThreshold;
         }
 
         public List<SyncJob> getJobs() {
