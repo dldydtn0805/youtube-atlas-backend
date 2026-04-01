@@ -12,11 +12,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.yongsoo.youtubeatlasbackend.auth.AuthService;
 import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerService;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategorySectionResponse;
 
 @RestController
 @RequestMapping("/api/me/favorite-streamers")
@@ -35,6 +37,19 @@ public class FavoriteStreamerController {
         @RequestHeader("Authorization") String authorizationHeader
     ) {
         return favoriteStreamerService.getFavoriteStreamers(authService.requireCurrentUser(authorizationHeader));
+    }
+
+    @GetMapping("/videos")
+    public VideoCategorySectionResponse getFavoriteStreamerVideos(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode,
+        @RequestParam(required = false) String pageToken
+    ) {
+        return favoriteStreamerService.getFavoriteStreamerVideos(
+            authService.requireCurrentUser(authorizationHeader),
+            regionCode,
+            pageToken
+        );
     }
 
     @PostMapping

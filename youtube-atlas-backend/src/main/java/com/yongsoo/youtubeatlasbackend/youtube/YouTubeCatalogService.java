@@ -3,9 +3,11 @@ package com.yongsoo.youtubeatlasbackend.youtube;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -58,6 +60,51 @@ public class YouTubeCatalogService {
             () -> loadPopularVideosByCategory(normalizedRegionCode, categoryId, pageToken)
         );
         return attachTrendSignals(normalizedRegionCode, categoryId, section);
+    }
+
+    public VideoCategorySectionResponse getPopularVideosForChannels(
+        String regionCode,
+        List<String> channelIds,
+        String pageToken
+    ) {
+        String normalizedRegionCode = normalizeRegionCode(regionCode);
+        Set<String> normalizedChannelIds = normalizeChannelIds(channelIds);
+
+        if (normalizedChannelIds.isEmpty()) {
+            return new VideoCategorySectionResponse(
+                "favorite-streamers",
+                "즐겨찾기 채널",
+                "전체 인기 영상 중 즐겨찾기한 채널의 영상만 모았습니다.",
+                List.of(),
+                null
+            );
+        }
+
+        String nextPageToken = pageToken;
+        List<VideoItemResponse> matchedItems = new ArrayList<>();
+
+        do {
+            RemoteVideoPage page = fetchPopularVideosPageForSource(normalizedRegionCode, null, nextPageToken);
+            for (AtlasVideo item : page.items()) {
+                String channelId = item.snippet() != null ? item.snippet().channelId() : null;
+                if (StringUtils.hasText(channelId) && normalizedChannelIds.contains(channelId.trim())) {
+                    matchedItems.add(toVideoResponse(item));
+                }
+            }
+            nextPageToken = page.nextPageToken();
+        } while (matchedItems.size() < MIN_VIDEOS_PER_SOURCE_PAGE && StringUtils.hasText(nextPageToken));
+
+        return attachTrendSignals(
+            normalizedRegionCode,
+            CategoryCatalog.ALL_VIDEO_CATEGORY_ID,
+            new VideoCategorySectionResponse(
+                "favorite-streamers",
+                "즐겨찾기 채널",
+                "전체 인기 영상 중 즐겨찾기한 채널의 영상만 모았습니다.",
+                List.copyOf(matchedItems),
+                nextPageToken
+            )
+        );
     }
 
     private List<VideoCategoryResponse> loadCategories(String normalizedRegionCode) {
@@ -353,6 +400,20 @@ public class YouTubeCatalogService {
         }
 
         return regionCode.trim().toUpperCase();
+    }
+
+    private Set<String> normalizeChannelIds(List<String> channelIds) {
+        if (channelIds == null || channelIds.isEmpty()) {
+            return Set.of();
+        }
+
+        Set<String> normalizedChannelIds = new HashSet<>();
+        for (String channelId : channelIds) {
+            if (StringUtils.hasText(channelId)) {
+                normalizedChannelIds.add(channelId.trim());
+            }
+        }
+        return Set.copyOf(normalizedChannelIds);
     }
 
     private boolean isIgnorableMergedSourceFetchError(RuntimeException exception, String regionCode) {

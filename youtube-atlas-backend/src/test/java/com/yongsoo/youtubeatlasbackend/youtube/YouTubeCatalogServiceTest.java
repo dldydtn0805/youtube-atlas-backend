@@ -124,6 +124,41 @@ class YouTubeCatalogServiceTest {
     }
 
     @Test
+    void getPopularVideosForChannelsFiltersAllCategoryFeedAndAddsTrendSignal() {
+        when(youTubeApiClient.fetchMostPopularVideos("KR", null, null)).thenReturn(
+            new RemoteVideoPage(List.of(video("video-1", "10"), video("video-2", "10", "channel-9")), null)
+        );
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "0", List.of("video-1")))
+            .thenReturn(List.of(trendSignal("KR", "0", "video-1")));
+
+        var response = youTubeCatalogService.getPopularVideosForChannels("KR", List.of("channel-1"), null);
+
+        assertThat(response.categoryId()).isEqualTo("favorite-streamers");
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().id()).isEqualTo("video-1");
+        assertThat(response.items().getFirst().trend()).isNotNull();
+    }
+
+    @Test
+    void getPopularVideosForChannelsContinuesToNextPageWhenCurrentPageHasNoFavoriteMatch() {
+        when(youTubeApiClient.fetchMostPopularVideos("KR", null, null)).thenReturn(
+            new RemoteVideoPage(List.of(video("video-9", "10", "channel-9")), "page-2")
+        );
+        when(youTubeApiClient.fetchMostPopularVideos("KR", null, "page-2")).thenReturn(
+            new RemoteVideoPage(List.of(video("video-1", "10")), null)
+        );
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "0", List.of("video-1")))
+            .thenReturn(List.of());
+
+        var response = youTubeCatalogService.getPopularVideosForChannels("KR", List.of("channel-1"), null);
+
+        assertThat(response.items()).extracting("id").containsExactly("video-1");
+        assertThat(response.nextPageToken()).isNull();
+        verify(youTubeApiClient).fetchMostPopularVideos("KR", null, null);
+        verify(youTubeApiClient).fetchMostPopularVideos("KR", null, "page-2");
+    }
+
+    @Test
     void getPopularVideosByCategoryThrowsWhenSourceCategoryIsUnsupported() {
         when(youTubeApiClient.fetchVideoCategories("KR")).thenReturn(List.of(
             new RemoteVideoCategoryItem("24", new RemoteCategorySnippet(true, "Entertainment"))
@@ -173,13 +208,17 @@ class YouTubeCatalogServiceTest {
     }
 
     private AtlasVideo video(String id, String categoryId) {
+        return video(id, categoryId, "channel-1");
+    }
+
+    private AtlasVideo video(String id, String categoryId, String channelId) {
         return new AtlasVideo(
             id,
             new AtlasContentDetails("PT10M"),
             new AtlasVideoSnippet(
                 "Title",
                 "Channel",
-                "channel-1",
+                channelId,
                 categoryId,
                 OffsetDateTime.parse("2026-03-24T10:00:00Z"),
                 null
