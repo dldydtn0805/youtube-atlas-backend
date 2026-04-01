@@ -128,6 +128,7 @@ public class TrendingService {
             snapshot.setRank(index + 1);
             snapshot.setTitle(video.snippet() != null ? video.snippet().title() : "");
             snapshot.setChannelTitle(video.snippet() != null ? video.snippet().channelTitle() : "");
+            snapshot.setChannelId(video.snippet() != null ? video.snippet().channelId() : null);
             snapshot.setThumbnailUrl(resolveThumbnailUrl(video.snippet() != null ? video.snippet().thumbnails() : null));
             snapshot.setViewCount(video.statistics() != null ? video.statistics().viewCount() : null);
             snapshot.setPublishedAt(
@@ -184,6 +185,7 @@ public class TrendingService {
             signal.setNew(previousSnapshot == null);
             signal.setTitle(snapshot.getTitle());
             signal.setChannelTitle(snapshot.getChannelTitle());
+            signal.setChannelId(snapshot.getChannelId());
             signal.setThumbnailUrl(snapshot.getThumbnailUrl());
             signal.setCapturedAt(currentRun.getCapturedAt());
             signal.setUpdatedAt(now);
@@ -233,6 +235,7 @@ public class TrendingService {
             signal.isNew(),
             signal.getTitle(),
             signal.getChannelTitle(),
+            signal.getChannelId(),
             signal.getThumbnailUrl(),
             signal.getCapturedAt()
         );

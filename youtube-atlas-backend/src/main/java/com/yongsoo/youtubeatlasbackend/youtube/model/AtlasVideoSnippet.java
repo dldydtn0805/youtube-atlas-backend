@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 public record AtlasVideoSnippet(
     String title,
     String channelTitle,
+    String channelId,
     String categoryId,
     OffsetDateTime publishedAt,
     AtlasThumbnails thumbnails

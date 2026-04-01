@@ -147,6 +147,7 @@ class TrendingServiceTest {
             new AtlasVideoSnippet(
                 "Title",
                 "Channel",
+                "channel-1",
                 "10",
                 OffsetDateTime.parse("2026-03-24T10:00:00Z"),
                 null
@@ -178,6 +179,7 @@ class TrendingServiceTest {
         signal.setNew(false);
         signal.setTitle(title);
         signal.setChannelTitle("Channel");
+        signal.setChannelId("channel-1");
         signal.setThumbnailUrl("https://example.com/thumb.jpg");
         signal.setCapturedAt(capturedAt);
         signal.setUpdatedAt(capturedAt);

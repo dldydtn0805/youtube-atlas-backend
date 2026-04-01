@@ -91,6 +91,11 @@ public class AuthService {
         return toAuthenticatedUser(requireSession(authorizationHeader).getUser());
     }
 
+    @Transactional(readOnly = true)
+    public AuthenticatedUser requireCurrentUser(String authorizationHeader) {
+        return toAuthenticatedUser(requireSession(authorizationHeader).getUser());
+    }
+
     @Transactional
     public void logout(String authorizationHeader) {
         authSessionRepository.delete(requireSession(authorizationHeader));
