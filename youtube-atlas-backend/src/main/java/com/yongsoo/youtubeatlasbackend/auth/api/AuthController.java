@@ -29,18 +29,38 @@ public class AuthController {
     }
 
     @PostMapping("/google")
-    public AuthSessionResponse loginWithGoogle(@Valid @RequestBody GoogleLoginRequest request) {
+    public AuthSessionResponse loginWithGoogle(
+        @Valid @RequestBody GoogleLoginRequest request,
+        @RequestHeader(value = "Origin", required = false) String origin,
+        @RequestHeader(value = "X-Requested-With", required = false) String requestedWith
+    ) {
+        if (StringUtils.hasText(request.code())) {
+            return authService.loginWithGoogleAuthorizationCode(
+                request.code(),
+                request.redirectUri(),
+                origin,
+                requestedWith,
+                atlasProperties.getAuth().getSessionTtlDays()
+            );
+        }
+
+        if (!StringUtils.hasText(request.idToken())) {
+            throw new IllegalArgumentException("code 또는 idToken은 필수입니다.");
+        }
+
         return authService.loginWithGoogle(request.idToken(), atlasProperties.getAuth().getSessionTtlDays());
     }
 
     @GetMapping("/google/config")
     public GoogleAuthConfigResponse getGoogleAuthConfig() {
         String clientId = atlasProperties.getAuth().getGoogleClientId();
+        String clientSecret = atlasProperties.getAuth().getGoogleClientSecret();
         String normalizedClientId = StringUtils.hasText(clientId) ? clientId.trim() : "";
+        String normalizedClientSecret = StringUtils.hasText(clientSecret) ? clientSecret.trim() : "";
 
         return new GoogleAuthConfigResponse(
             normalizedClientId,
-            StringUtils.hasText(normalizedClientId)
+            StringUtils.hasText(normalizedClientId) && StringUtils.hasText(normalizedClientSecret)
         );
     }
 

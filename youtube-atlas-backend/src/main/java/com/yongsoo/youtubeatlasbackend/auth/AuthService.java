@@ -21,6 +21,7 @@ public class AuthService {
 
     private final AppUserRepository appUserRepository;
     private final AuthSessionRepository authSessionRepository;
+    private final GoogleAuthorizationCodeExchanger googleAuthorizationCodeExchanger;
     private final GoogleTokenVerifier googleTokenVerifier;
     private final Clock clock;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -28,11 +29,13 @@ public class AuthService {
     public AuthService(
         AppUserRepository appUserRepository,
         AuthSessionRepository authSessionRepository,
+        GoogleAuthorizationCodeExchanger googleAuthorizationCodeExchanger,
         GoogleTokenVerifier googleTokenVerifier,
         Clock clock
     ) {
         this.appUserRepository = appUserRepository;
         this.authSessionRepository = authSessionRepository;
+        this.googleAuthorizationCodeExchanger = googleAuthorizationCodeExchanger;
         this.googleTokenVerifier = googleTokenVerifier;
         this.clock = clock;
     }
@@ -75,6 +78,18 @@ public class AuthService {
             session.getExpiresAt(),
             toUserResponse(savedUser)
         );
+    }
+
+    @Transactional
+    public AuthSessionResponse loginWithGoogleAuthorizationCode(
+        String code,
+        String redirectUri,
+        String origin,
+        String requestedWith,
+        int sessionTtlDays
+    ) {
+        String idToken = googleAuthorizationCodeExchanger.exchangeForIdToken(code, redirectUri, origin, requestedWith);
+        return loginWithGoogle(idToken, sessionTtlDays);
     }
 
     @Transactional(readOnly = true)

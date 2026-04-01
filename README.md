@@ -6,7 +6,7 @@
 
 - 국가별 카테고리 조회
 - 국가/카테고리별 인기 영상 조회
-- Google ID 토큰 기반 로그인
+- Google OAuth authorization code 기반 로그인
 - 사용자별 스트리머 즐겨찾기
 - 영상별 댓글 조회/생성
 - STOMP WebSocket 기반 실시간 댓글 브로드캐스트
@@ -38,6 +38,7 @@ cd youtube-atlas-backend
 
 ```bash
 GOOGLE_CLIENT_ID=your_google_oauth_client_id
+GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
 YOUTUBE_API_KEY=your_youtube_api_key
 ```
 
@@ -59,6 +60,7 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `DB_*`를 비워 두면 로컬에서는 H2 인메모리 DB로 실행됩니다.
 - `ALLOWED_ORIGINS` 기본값에는 로컬 개발 주소와 Vercel 배포 주소 패턴이 포함됩니다.
 - `GOOGLE_CLIENT_ID` 는 프론트의 Google OAuth Client ID와 동일해야 합니다.
+- `GOOGLE_CLIENT_SECRET` 는 같은 Google OAuth Web Client의 secret 이어야 합니다.
 - `TRENDING_SYNC_MAX_PAGES_PER_SOURCE` 는 급상승 동기화 시 소스 카테고리별로 몇 페이지까지 수집할지 결정합니다.
 
 ## API 요약
@@ -81,14 +83,23 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 
 ### `POST /api/auth/google`
 
-프론트에서 Google 로그인 성공 후 받은 `idToken` 을 전달하면, 백엔드가 Google에 토큰 검증을 요청한 뒤 자체 세션 토큰을 발급합니다.
+프론트에서 Google OAuth popup으로 받은 authorization `code` 와 현재 페이지 `redirectUri` 를 전달하면, 백엔드가 Google token endpoint와 코드를 교환한 뒤 자체 세션 토큰을 발급합니다.
 
 요청 본문:
 
 ```json
 {
-  "idToken": "google-id-token-from-frontend"
+  "code": "google-authorization-code-from-frontend",
+  "redirectUri": "https://youtube-atlas.vercel.app"
 }
+```
+
+요청 헤더:
+
+```text
+Content-Type: application/json
+X-Requested-With: XmlHttpRequest
+Origin: https://youtube-atlas.vercel.app
 ```
 
 응답 예시:

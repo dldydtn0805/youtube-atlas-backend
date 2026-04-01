@@ -25,6 +25,7 @@ class AuthServiceTest {
 
     private AppUserRepository appUserRepository;
     private AuthSessionRepository authSessionRepository;
+    private GoogleAuthorizationCodeExchanger googleAuthorizationCodeExchanger;
     private GoogleTokenVerifier googleTokenVerifier;
     private AuthService authService;
     private final Map<String, AuthSession> sessionsByHash = new HashMap<>();
@@ -33,9 +34,16 @@ class AuthServiceTest {
     void setUp() {
         appUserRepository = org.mockito.Mockito.mock(AppUserRepository.class);
         authSessionRepository = org.mockito.Mockito.mock(AuthSessionRepository.class);
+        googleAuthorizationCodeExchanger = org.mockito.Mockito.mock(GoogleAuthorizationCodeExchanger.class);
         googleTokenVerifier = org.mockito.Mockito.mock(GoogleTokenVerifier.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-01T06:00:00Z"), ZoneOffset.UTC);
-        authService = new AuthService(appUserRepository, authSessionRepository, googleTokenVerifier, fixedClock);
+        authService = new AuthService(
+            appUserRepository,
+            authSessionRepository,
+            googleAuthorizationCodeExchanger,
+            googleTokenVerifier,
+            fixedClock
+        );
 
         when(appUserRepository.findByGoogleSubject(anyString())).thenReturn(Optional.empty());
         when(appUserRepository.save(any(AppUser.class))).thenAnswer(invocation -> {
@@ -130,5 +138,34 @@ class AuthServiceTest {
         assertThat(user.id()).isEqualTo(7L);
         assertThat(user.email()).isEqualTo("atlas@example.com");
         assertThat(user.displayName()).isEqualTo("Atlas User");
+    }
+
+    @Test
+    void loginWithGoogleAuthorizationCodeExchangesCodeBeforeCreatingSession() {
+        when(googleAuthorizationCodeExchanger.exchangeForIdToken(
+            "google-auth-code",
+            "https://youtube-atlas.vercel.app",
+            "https://youtube-atlas.vercel.app",
+            "XmlHttpRequest"
+        )).thenReturn("google-id-token");
+        when(googleTokenVerifier.verify("google-id-token")).thenReturn(
+            new GoogleIdentity("google-subject-1", "atlas@example.com", "Atlas User", null)
+        );
+
+        AuthSessionResponse response = authService.loginWithGoogleAuthorizationCode(
+            "google-auth-code",
+            "https://youtube-atlas.vercel.app",
+            "https://youtube-atlas.vercel.app",
+            "XmlHttpRequest",
+            30
+        );
+
+        assertThat(response.accessToken()).isNotBlank();
+        verify(googleAuthorizationCodeExchanger).exchangeForIdToken(
+            "google-auth-code",
+            "https://youtube-atlas.vercel.app",
+            "https://youtube-atlas.vercel.app",
+            "XmlHttpRequest"
+        );
     }
 }

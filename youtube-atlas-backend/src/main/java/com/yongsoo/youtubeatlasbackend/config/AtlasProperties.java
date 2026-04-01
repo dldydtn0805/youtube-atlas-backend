@@ -188,6 +188,8 @@ public class AtlasProperties {
 
     public static class Auth {
         private String googleClientId = "";
+        private String googleClientSecret = "";
+        private String googleTokenUrl = "https://oauth2.googleapis.com/token";
         private String googleTokenInfoUrl = "https://oauth2.googleapis.com/tokeninfo";
         private int sessionTtlDays = 30;
 
@@ -197,6 +199,22 @@ public class AtlasProperties {
 
         public void setGoogleClientId(String googleClientId) {
             this.googleClientId = googleClientId;
+        }
+
+        public String getGoogleClientSecret() {
+            return googleClientSecret;
+        }
+
+        public void setGoogleClientSecret(String googleClientSecret) {
+            this.googleClientSecret = googleClientSecret;
+        }
+
+        public String getGoogleTokenUrl() {
+            return googleTokenUrl;
+        }
+
+        public void setGoogleTokenUrl(String googleTokenUrl) {
+            this.googleTokenUrl = googleTokenUrl;
         }
 
         public String getGoogleTokenInfoUrl() {
