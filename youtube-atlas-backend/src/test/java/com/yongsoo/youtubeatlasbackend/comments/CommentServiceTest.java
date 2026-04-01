@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.comments.api.ChatMessageResponse;
 import com.yongsoo.youtubeatlasbackend.comments.api.CreateCommentRequest;
 
@@ -81,5 +82,30 @@ class CommentServiceTest {
 
         verify(commentRepository, never()).save(any(Comment.class));
         verify(messagingTemplate, never()).convertAndSend(any(String.class), any(Object.class));
+    }
+
+    @Test
+    void createCommentUsesAuthenticatedUserDisplayName() {
+        when(commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc("video-1", "client-1"))
+            .thenReturn(Optional.empty());
+        when(commentRepository.existsByVideoIdAndClientIdAndContentAndCreatedAtAfter(
+            eq("video-1"),
+            eq("client-1"),
+            eq("로그인한 사용자입니다"),
+            any(Instant.class)
+        )).thenReturn(false);
+        when(commentRepository.save(any(Comment.class))).thenAnswer(invocation -> {
+            Comment comment = invocation.getArgument(0, Comment.class);
+            ReflectionTestUtils.setField(comment, "id", 2L);
+            return comment;
+        });
+
+        ChatMessageResponse response = commentService.createComment(
+            "video-1",
+            new CreateCommentRequest("익명", "로그인한 사용자입니다", "client-1"),
+            new AuthenticatedUser(7L, "atlas@example.com", "Atlas User", null)
+        );
+
+        assertThat(response.author()).isEqualTo("Atlas User");
     }
 }

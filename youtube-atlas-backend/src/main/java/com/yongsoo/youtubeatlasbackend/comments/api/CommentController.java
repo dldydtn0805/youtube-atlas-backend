@@ -8,9 +8,11 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.yongsoo.youtubeatlasbackend.auth.AuthService;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 
 @RestController
@@ -18,9 +20,11 @@ import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 public class CommentController {
 
     private final CommentService commentService;
+    private final AuthService authService;
 
-    public CommentController(CommentService commentService) {
+    public CommentController(CommentService commentService, AuthService authService) {
         this.commentService = commentService;
+        this.authService = authService;
     }
 
     @GetMapping
@@ -31,8 +35,9 @@ public class CommentController {
     @PostMapping
     public ChatMessageResponse createComment(
         @PathVariable String videoId,
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
         @Valid @RequestBody CreateCommentRequest request
     ) {
-        return commentService.createComment(videoId, request);
+        return commentService.createComment(videoId, request, authService.getCurrentUserOrNull(authorizationHeader));
     }
 }

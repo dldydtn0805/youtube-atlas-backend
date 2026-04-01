@@ -1,11 +1,12 @@
 # youtube-atlas-backend
 
-`World-Best-YouTube`의 YouTube 조회, 실시간 댓글, 급상승 스냅샷 기능을 Spring Boot로 제공하는 백엔드입니다.
+`World-Best-YouTube`의 YouTube 조회, Google 로그인, 실시간 댓글, 급상승 스냅샷 기능을 Spring Boot로 제공하는 백엔드입니다.
 
 ## 현재 구현 범위
 
 - 국가별 카테고리 조회
 - 국가/카테고리별 인기 영상 조회
+- Google ID 토큰 기반 로그인
 - 영상별 댓글 조회/생성
 - STOMP WebSocket 기반 실시간 댓글 브로드캐스트
 - 급상승 스냅샷 동기화
@@ -35,6 +36,7 @@ cd youtube-atlas-backend
 필수:
 
 ```bash
+GOOGLE_CLIENT_ID=your_google_oauth_client_id
 YOUTUBE_API_KEY=your_youtube_api_key
 ```
 
@@ -47,6 +49,7 @@ DB_USERNAME=postgres
 DB_PASSWORD=postgres
 ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 YOUTUBE_CATEGORY_LANGUAGE=ko
+AUTH_SESSION_TTL_DAYS=30
 TRENDING_SCHEDULER_ENABLED=false
 TRENDING_SYNC_CRON=0 0 * * * *
 TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
@@ -54,17 +57,72 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 
 - `DB_*`를 비워 두면 로컬에서는 H2 인메모리 DB로 실행됩니다.
 - `ALLOWED_ORIGINS` 기본값에는 로컬 개발 주소와 Vercel 배포 주소 패턴이 포함됩니다.
+- `GOOGLE_CLIENT_ID` 는 프론트의 Google OAuth Client ID와 동일해야 합니다.
 - `TRENDING_SYNC_MAX_PAGES_PER_SOURCE` 는 급상승 동기화 시 소스 카테고리별로 몇 페이지까지 수집할지 결정합니다.
 
 ## API 요약
 
 - `GET /api/catalog/regions/{regionCode}/categories`
 - `GET /api/catalog/regions/{regionCode}/categories/{categoryId}/videos?pageToken=...`
+- `POST /api/auth/google`
+- `GET /api/auth/me`
+- `DELETE /api/auth/session`
 - `GET /api/videos/{videoId}/comments`
 - `POST /api/videos/{videoId}/comments`
 - `GET /api/trending/signals?regionCode=KR&categoryId=0&videoIds=abc&videoIds=def`
 - `GET /api/trending/realtime-surging?regionCode=KR`
 - `POST /api/trending/sync`
+
+## 로그인 API
+
+### `POST /api/auth/google`
+
+프론트에서 Google 로그인 성공 후 받은 `idToken` 을 전달하면, 백엔드가 Google에 토큰 검증을 요청한 뒤 자체 세션 토큰을 발급합니다.
+
+요청 본문:
+
+```json
+{
+  "idToken": "google-id-token-from-frontend"
+}
+```
+
+응답 예시:
+
+```json
+{
+  "accessToken": "our-session-token",
+  "tokenType": "Bearer",
+  "expiresAt": "2026-05-01T06:00:00Z",
+  "user": {
+    "id": 1,
+    "email": "atlas@example.com",
+    "displayName": "Atlas User",
+    "pictureUrl": "https://lh3.googleusercontent.com/...",
+    "lastLoginAt": "2026-04-01T06:00:00Z"
+  }
+}
+```
+
+### `GET /api/auth/me`
+
+헤더:
+
+```text
+Authorization: Bearer {accessToken}
+```
+
+현재 로그인한 사용자 정보를 반환합니다.
+
+### `DELETE /api/auth/session`
+
+헤더:
+
+```text
+Authorization: Bearer {accessToken}
+```
+
+현재 세션을 로그아웃합니다.
 
 ## 카테고리 API
 
@@ -169,6 +227,7 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 ```
 
 - `author` 가 비어 있으면 `"익명"` 으로 저장됩니다.
+- `Authorization: Bearer {accessToken}` 헤더가 있으면 댓글 작성자는 로그인 사용자 이름으로 고정됩니다.
 - 같은 `clientId` 기준으로 5초 쿨다운이 있습니다.
 - 같은 `clientId` 가 같은 메시지를 30초 안에 다시 보내면 중복으로 막습니다.
 - 댓글 응답 JSON은 `snake_case` 입니다.

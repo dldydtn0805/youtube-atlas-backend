@@ -1,5 +1,6 @@
 package com.yongsoo.youtubeatlasbackend.common;
 
+import com.yongsoo.youtubeatlasbackend.auth.AuthException;
 import com.yongsoo.youtubeatlasbackend.comments.CommentPolicyViolationException;
 import com.yongsoo.youtubeatlasbackend.comments.CommentValidationException;
 import com.yongsoo.youtubeatlasbackend.youtube.ResourceNotFoundException;
@@ -39,5 +40,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleExternalServiceFailure(ExternalServiceException exception) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
             .body(new ApiErrorResponse("external_service_error", exception.getMessage(), null));
+    }
+
+    @ExceptionHandler(AuthException.class)
+    public ResponseEntity<ApiErrorResponse> handleAuthFailure(AuthException exception) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+            .body(new ApiErrorResponse(exception.getCode(), exception.getMessage(), null));
     }
 }

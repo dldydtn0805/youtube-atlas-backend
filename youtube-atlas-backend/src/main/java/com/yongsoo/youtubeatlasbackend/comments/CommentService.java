@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.comments.api.ChatMessageResponse;
 import com.yongsoo.youtubeatlasbackend.comments.api.CreateCommentRequest;
 
@@ -42,10 +43,15 @@ public class CommentService {
 
     @Transactional
     public ChatMessageResponse createComment(String videoId, CreateCommentRequest request) {
+        return createComment(videoId, request, null);
+    }
+
+    @Transactional
+    public ChatMessageResponse createComment(String videoId, CreateCommentRequest request, AuthenticatedUser authenticatedUser) {
         String normalizedVideoId = normalizeRequired(videoId, "videoId는 필수입니다.");
         String clientId = normalizeRequired(request.clientId(), "clientId는 필수입니다.");
         String content = normalizeContent(request.content());
-        String author = StringUtils.hasText(request.author()) ? request.author().trim() : "익명";
+        String author = resolveAuthor(request.author(), authenticatedUser);
         Instant now = Instant.now(clock);
 
         commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc(normalizedVideoId, clientId)
@@ -88,6 +94,14 @@ public class CommentService {
         ChatMessageResponse response = toResponse(commentRepository.save(comment));
         messagingTemplate.convertAndSend("/topic/videos/" + normalizedVideoId + "/comments", response);
         return response;
+    }
+
+    private String resolveAuthor(String requestedAuthor, AuthenticatedUser authenticatedUser) {
+        if (authenticatedUser != null && StringUtils.hasText(authenticatedUser.displayName())) {
+            return authenticatedUser.displayName().trim();
+        }
+
+        return StringUtils.hasText(requestedAuthor) ? requestedAuthor.trim() : "익명";
     }
 
     private ChatMessageResponse toResponse(Comment comment) {

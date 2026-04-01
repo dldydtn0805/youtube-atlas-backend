@@ -11,6 +11,7 @@ public class AtlasProperties {
     private final Youtube youtube = new Youtube();
     private final Realtime realtime = new Realtime();
     private final Trending trending = new Trending();
+    private final Auth auth = new Auth();
 
     public Youtube getYoutube() {
         return youtube;
@@ -22,6 +23,10 @@ public class AtlasProperties {
 
     public Trending getTrending() {
         return trending;
+    }
+
+    public Auth getAuth() {
+        return auth;
     }
 
     public static class Youtube {
@@ -178,6 +183,36 @@ public class AtlasProperties {
 
         public void setJobs(List<SyncJob> jobs) {
             this.jobs = jobs;
+        }
+    }
+
+    public static class Auth {
+        private String googleClientId = "";
+        private String googleTokenInfoUrl = "https://oauth2.googleapis.com/tokeninfo";
+        private int sessionTtlDays = 30;
+
+        public String getGoogleClientId() {
+            return googleClientId;
+        }
+
+        public void setGoogleClientId(String googleClientId) {
+            this.googleClientId = googleClientId;
+        }
+
+        public String getGoogleTokenInfoUrl() {
+            return googleTokenInfoUrl;
+        }
+
+        public void setGoogleTokenInfoUrl(String googleTokenInfoUrl) {
+            this.googleTokenInfoUrl = googleTokenInfoUrl;
+        }
+
+        public int getSessionTtlDays() {
+            return sessionTtlDays;
+        }
+
+        public void setSessionTtlDays(int sessionTtlDays) {
+            this.sessionTtlDays = sessionTtlDays;
         }
     }
 
