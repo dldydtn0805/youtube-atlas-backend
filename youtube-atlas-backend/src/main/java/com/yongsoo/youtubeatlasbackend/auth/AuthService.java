@@ -15,6 +15,8 @@ import org.springframework.util.StringUtils;
 
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthSessionResponse;
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthUserResponse;
+import com.yongsoo.youtubeatlasbackend.playback.PlaybackProgressService;
+import com.yongsoo.youtubeatlasbackend.playback.api.PlaybackProgressResponse;
 
 @Service
 public class AuthService {
@@ -23,6 +25,7 @@ public class AuthService {
     private final AuthSessionRepository authSessionRepository;
     private final GoogleAuthorizationCodeExchanger googleAuthorizationCodeExchanger;
     private final GoogleTokenVerifier googleTokenVerifier;
+    private final PlaybackProgressService playbackProgressService;
     private final Clock clock;
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -31,12 +34,14 @@ public class AuthService {
         AuthSessionRepository authSessionRepository,
         GoogleAuthorizationCodeExchanger googleAuthorizationCodeExchanger,
         GoogleTokenVerifier googleTokenVerifier,
+        PlaybackProgressService playbackProgressService,
         Clock clock
     ) {
         this.appUserRepository = appUserRepository;
         this.authSessionRepository = authSessionRepository;
         this.googleAuthorizationCodeExchanger = googleAuthorizationCodeExchanger;
         this.googleTokenVerifier = googleTokenVerifier;
+        this.playbackProgressService = playbackProgressService;
         this.clock = clock;
     }
 
@@ -168,12 +173,16 @@ public class AuthService {
     }
 
     private AuthUserResponse toUserResponse(AppUser user) {
+        PlaybackProgressResponse lastPlaybackProgress = playbackProgressService.getCurrentProgressForUserId(user.getId())
+            .orElse(null);
+
         return new AuthUserResponse(
             user.getId(),
             user.getEmail(),
             user.getDisplayName(),
             user.getPictureUrl(),
-            user.getLastLoginAt()
+            user.getLastLoginAt(),
+            lastPlaybackProgress
         );
     }
 

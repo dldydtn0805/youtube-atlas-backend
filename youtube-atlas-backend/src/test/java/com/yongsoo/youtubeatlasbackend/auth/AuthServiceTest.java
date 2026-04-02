@@ -20,6 +20,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthSessionResponse;
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthUserResponse;
+import com.yongsoo.youtubeatlasbackend.playback.PlaybackProgressService;
+import com.yongsoo.youtubeatlasbackend.playback.api.PlaybackProgressResponse;
 
 class AuthServiceTest {
 
@@ -27,6 +29,7 @@ class AuthServiceTest {
     private AuthSessionRepository authSessionRepository;
     private GoogleAuthorizationCodeExchanger googleAuthorizationCodeExchanger;
     private GoogleTokenVerifier googleTokenVerifier;
+    private PlaybackProgressService playbackProgressService;
     private AuthService authService;
     private final Map<String, AuthSession> sessionsByHash = new HashMap<>();
 
@@ -36,12 +39,14 @@ class AuthServiceTest {
         authSessionRepository = org.mockito.Mockito.mock(AuthSessionRepository.class);
         googleAuthorizationCodeExchanger = org.mockito.Mockito.mock(GoogleAuthorizationCodeExchanger.class);
         googleTokenVerifier = org.mockito.Mockito.mock(GoogleTokenVerifier.class);
+        playbackProgressService = org.mockito.Mockito.mock(PlaybackProgressService.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-01T06:00:00Z"), ZoneOffset.UTC);
         authService = new AuthService(
             appUserRepository,
             authSessionRepository,
             googleAuthorizationCodeExchanger,
             googleTokenVerifier,
+            playbackProgressService,
             fixedClock
         );
 
@@ -60,6 +65,7 @@ class AuthServiceTest {
         when(authSessionRepository.findByTokenHash(anyString())).thenAnswer(invocation ->
             Optional.ofNullable(sessionsByHash.get(invocation.getArgument(0, String.class)))
         );
+        when(playbackProgressService.getCurrentProgressForUserId(any())).thenReturn(Optional.empty());
     }
 
     @Test
@@ -89,6 +95,30 @@ class AuthServiceTest {
         assertThat(me.id()).isEqualTo(7L);
         assertThat(me.email()).isEqualTo("atlas@example.com");
         assertThat(me.displayName()).isEqualTo("Atlas User");
+    }
+
+    @Test
+    void getCurrentUserIncludesLastPlaybackProgressWhenPresent() {
+        when(googleTokenVerifier.verify("google-id-token")).thenReturn(
+            new GoogleIdentity("google-subject-1", "atlas@example.com", "Atlas User", null)
+        );
+        when(playbackProgressService.getCurrentProgressForUserId(7L)).thenReturn(Optional.of(
+            new PlaybackProgressResponse(
+                "abc123",
+                "Sample title",
+                "Sample channel",
+                "https://example.com/thumb.jpg",
+                184L,
+                Instant.parse("2026-04-01T05:50:00Z")
+            )
+        ));
+
+        AuthSessionResponse sessionResponse = authService.loginWithGoogle("google-id-token", 30);
+        AuthUserResponse me = authService.getCurrentUser("Bearer " + sessionResponse.accessToken());
+
+        assertThat(me.lastPlaybackProgress()).isNotNull();
+        assertThat(me.lastPlaybackProgress().videoId()).isEqualTo("abc123");
+        assertThat(me.lastPlaybackProgress().positionSeconds()).isEqualTo(184L);
     }
 
     @Test

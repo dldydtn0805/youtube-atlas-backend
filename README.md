@@ -70,6 +70,8 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `POST /api/auth/google`
 - `GET /api/auth/me`
 - `DELETE /api/auth/session`
+- `GET /api/me/playback-progress`
+- `POST /api/me/playback-progress`
 - `GET /api/me/favorite-streamers`
 - `POST /api/me/favorite-streamers`
 - `DELETE /api/me/favorite-streamers/{channelId}`
@@ -114,7 +116,15 @@ Origin: https://youtube-atlas.vercel.app
     "email": "atlas@example.com",
     "displayName": "Atlas User",
     "pictureUrl": "https://lh3.googleusercontent.com/...",
-    "lastLoginAt": "2026-04-01T06:00:00Z"
+    "lastLoginAt": "2026-04-01T06:00:00Z",
+    "lastPlaybackProgress": {
+      "videoId": "abc123",
+      "videoTitle": "Sample title",
+      "channelTitle": "Sample channel",
+      "thumbnailUrl": "https://example.com/thumb.jpg",
+      "positionSeconds": 184,
+      "updatedAt": "2026-04-01T05:50:00Z"
+    }
   }
 }
 ```
@@ -128,6 +138,7 @@ Authorization: Bearer {accessToken}
 ```
 
 현재 로그인한 사용자 정보를 반환합니다.
+- 마지막으로 저장된 재생 위치가 있으면 `user.lastPlaybackProgress` 에 함께 내려옵니다.
 
 ### `DELETE /api/auth/session`
 
@@ -138,6 +149,39 @@ Authorization: Bearer {accessToken}
 ```
 
 현재 세션을 로그아웃합니다.
+
+## 최근 재생 위치 API
+
+모든 최근 재생 위치 API는 아래 헤더가 필요합니다.
+
+```text
+Authorization: Bearer {accessToken}
+```
+
+### `GET /api/me/playback-progress`
+
+현재 로그인한 사용자의 마지막 재생 위치를 반환합니다.
+
+- 저장된 재생 위치가 있으면 `200 OK`
+- 아직 없으면 `204 No Content`
+
+### `POST /api/me/playback-progress`
+
+요청 본문:
+
+```json
+{
+  "videoId": "abc123",
+  "videoTitle": "Sample title",
+  "channelTitle": "Sample channel",
+  "thumbnailUrl": "https://example.com/thumb.jpg",
+  "positionSeconds": 184
+}
+```
+
+- 같은 사용자는 마지막 재생 위치 1건만 유지합니다.
+- 프론트에서 재생 중 주기적으로 호출하면 마지막 시청 위치를 계속 갱신할 수 있습니다.
+- 로그인 직후 `POST /api/auth/google` 또는 `GET /api/auth/me` 의 `user.lastPlaybackProgress` 를 읽어서 해당 영상/시점으로 바로 이동할 수 있습니다.
 
 ## 카테고리 API
 
