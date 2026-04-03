@@ -2,9 +2,13 @@ package com.yongsoo.youtubeatlasbackend.trending;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -16,6 +20,8 @@ import com.yongsoo.youtubeatlasbackend.trending.api.RealtimeSurgingResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.SyncTrendingRequest;
 import com.yongsoo.youtubeatlasbackend.trending.api.SyncTrendingResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.TrendSignalResponse;
+import com.yongsoo.youtubeatlasbackend.trending.api.VideoRankHistoryPointResponse;
+import com.yongsoo.youtubeatlasbackend.trending.api.VideoRankHistoryResponse;
 import com.yongsoo.youtubeatlasbackend.youtube.CategoryCatalog;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeCatalogService;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasThumbnail;
@@ -91,6 +97,85 @@ public class TrendingService {
             items.size(),
             capturedAt,
             items
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public VideoRankHistoryResponse getVideoHistory(String regionCode, String videoId) {
+        String normalizedRegionCode = regionCode.trim().toUpperCase();
+        String normalizedVideoId = normalizeVideoId(videoId);
+        List<TrendSnapshot> snapshots = trendSnapshotRepository.findByRegionCodeAndCategoryIdAndVideoIdOrderByRun_IdAsc(
+            normalizedRegionCode,
+            TRENDING_CATEGORY_ID,
+            normalizedVideoId
+        );
+
+        if (snapshots.isEmpty()) {
+            throw new IllegalArgumentException("해당 영상의 랭킹 기록을 찾을 수 없습니다.");
+        }
+
+        TrendRun latestRun = trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc(
+            normalizedRegionCode,
+            TRENDING_CATEGORY_ID
+        ).orElse(null);
+        TrendSnapshot firstSnapshot = snapshots.getFirst();
+        TrendSnapshot lastSnapshot = snapshots.getLast();
+        long endRunId = latestRun != null ? latestRun.getId() : lastSnapshot.getRun().getId();
+        List<TrendRun> runs = trendRunRepository.findByRegionCodeAndCategoryIdAndIdBetweenOrderByIdAsc(
+            normalizedRegionCode,
+            TRENDING_CATEGORY_ID,
+            firstSnapshot.getRun().getId(),
+            endRunId
+        );
+        Map<Long, TrendSnapshot> snapshotsByRunId = snapshots.stream()
+            .collect(Collectors.toMap(snapshot -> snapshot.getRun().getId(), Function.identity()));
+        TrendSignal currentSignal = trendSignalRepository.findById(
+            new TrendSignalId(normalizedRegionCode, TRENDING_CATEGORY_ID, normalizedVideoId)
+        ).orElse(null);
+
+        List<VideoRankHistoryPointResponse> points = runs.stream()
+            .map(run -> {
+                TrendSnapshot snapshot = snapshotsByRunId.get(run.getId());
+
+                return new VideoRankHistoryPointResponse(
+                    run.getId(),
+                    run.getCapturedAt(),
+                    snapshot != null ? snapshot.getRank() : null,
+                    snapshot != null ? snapshot.getViewCount() : null,
+                    snapshot == null
+                );
+            })
+            .toList();
+
+        Instant latestCapturedAt = currentSignal != null
+            ? currentSignal.getCapturedAt()
+            : latestRun != null
+                ? latestRun.getCapturedAt()
+                : lastSnapshot.getRun().getCapturedAt();
+        Integer latestRank = currentSignal != null ? currentSignal.getCurrentRank() : null;
+        boolean latestChartOut = currentSignal == null;
+
+        if (currentSignal == null && latestRun == null) {
+            latestRank = lastSnapshot.getRank();
+            latestChartOut = false;
+        }
+
+        TrendSnapshot displaySnapshot = currentSignal == null
+            ? snapshots.stream().max(Comparator.comparing(snapshot -> snapshot.getRun().getId())).orElse(lastSnapshot)
+            : null;
+
+        return new VideoRankHistoryResponse(
+            normalizedRegionCode,
+            TRENDING_CATEGORY_ID,
+            TRENDING_CATEGORY_LABEL,
+            normalizedVideoId,
+            currentSignal != null ? currentSignal.getTitle() : displaySnapshot.getTitle(),
+            currentSignal != null ? currentSignal.getChannelTitle() : displaySnapshot.getChannelTitle(),
+            currentSignal != null ? currentSignal.getThumbnailUrl() : displaySnapshot.getThumbnailUrl(),
+            latestRank,
+            latestChartOut,
+            latestCapturedAt,
+            points
         );
     }
 
@@ -266,5 +351,13 @@ public class TrendingService {
                         : thumbnails.defaultThumbnail();
 
         return thumbnail != null ? thumbnail.url() : "";
+    }
+
+    private String normalizeVideoId(String videoId) {
+        if (!StringUtils.hasText(videoId)) {
+            throw new IllegalArgumentException("videoId는 비어 있을 수 없습니다.");
+        }
+
+        return videoId.trim();
     }
 }

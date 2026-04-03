@@ -117,6 +117,31 @@ class TrendingServiceTest {
     }
 
     @Test
+    void getVideoHistoryReturnsObservedHistoryAndCurrentChartOut() {
+        TrendRun firstRun = trendRun(11L, Instant.parse("2026-04-01T05:00:00Z"));
+        TrendRun latestRun = trendRun(12L, Instant.parse("2026-04-01T06:00:00Z"));
+        TrendSnapshot snapshot = snapshot(firstRun, "video-1", 23);
+
+        when(trendSnapshotRepository.findByRegionCodeAndCategoryIdAndVideoIdOrderByRun_IdAsc("KR", "0", "video-1"))
+            .thenReturn(List.of(snapshot));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0"))
+            .thenReturn(Optional.of(latestRun));
+        when(trendRunRepository.findByRegionCodeAndCategoryIdAndIdBetweenOrderByIdAsc("KR", "0", 11L, 12L))
+            .thenReturn(List.of(firstRun, latestRun));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1")))
+            .thenReturn(Optional.empty());
+
+        var response = trendingService.getVideoHistory("kr", "video-1");
+
+        assertThat(response.videoId()).isEqualTo("video-1");
+        assertThat(response.latestRank()).isNull();
+        assertThat(response.latestChartOut()).isTrue();
+        assertThat(response.points()).hasSize(2);
+        assertThat(response.points().getFirst().rank()).isEqualTo(23);
+        assertThat(response.points().getLast().chartOut()).isTrue();
+    }
+
+    @Test
     void syncAlwaysUsesAllCategoryDefaults() {
         when(trendRunRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(youTubeCatalogService.fetchMergedCategoryVideos("KR", List.of(), 3))
@@ -184,5 +209,33 @@ class TrendingServiceTest {
         signal.setCapturedAt(capturedAt);
         signal.setUpdatedAt(capturedAt);
         return signal;
+    }
+
+    private TrendRun trendRun(Long id, Instant capturedAt) {
+        TrendRun run = new TrendRun();
+        org.springframework.test.util.ReflectionTestUtils.setField(run, "id", id);
+        run.setRegionCode("KR");
+        run.setCategoryId("0");
+        run.setCategoryLabel("전체");
+        run.setSourceCategoryIds(List.of());
+        run.setSource("youtube-mostPopular");
+        run.setCapturedAt(capturedAt);
+        return run;
+    }
+
+    private TrendSnapshot snapshot(TrendRun run, String videoId, int rank) {
+        TrendSnapshot snapshot = new TrendSnapshot();
+        snapshot.setRun(run);
+        snapshot.setRegionCode("KR");
+        snapshot.setCategoryId("0");
+        snapshot.setVideoId(videoId);
+        snapshot.setRank(rank);
+        snapshot.setTitle("Title");
+        snapshot.setChannelTitle("Channel");
+        snapshot.setChannelId("channel-1");
+        snapshot.setThumbnailUrl("https://example.com/thumb.jpg");
+        snapshot.setViewCount(100L);
+        snapshot.setCreatedAt(run.getCapturedAt());
+        return snapshot;
     }
 }

@@ -37,6 +37,14 @@ public class TrendingController {
         return trendingService.getRealtimeSurging(regionCode);
     }
 
+    @GetMapping("/videos/{videoId}/history")
+    public VideoRankHistoryResponse getVideoHistory(
+        @RequestParam String regionCode,
+        @org.springframework.web.bind.annotation.PathVariable String videoId
+    ) {
+        return trendingService.getVideoHistory(regionCode, videoId);
+    }
+
     @PostMapping("/sync")
     public SyncTrendingResponse sync(@Valid @RequestBody SyncTrendingRequest request) {
         return trendingService.sync(request);
