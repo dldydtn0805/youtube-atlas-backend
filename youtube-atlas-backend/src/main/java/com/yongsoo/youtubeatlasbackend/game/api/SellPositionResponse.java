@@ -9,6 +9,7 @@ public record SellPositionResponse(
     Integer sellRank,
     Integer rankDiff,
     Long stakePoints,
+    Long sellPricePoints,
     Long pnlPoints,
     Long settledPoints,
     Long balancePoints,

@@ -34,7 +34,6 @@ import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotRepository;
 public class GameService {
 
     private static final String TRENDING_CATEGORY_ID = "0";
-    private static final long STAKE_UNIT_POINTS = 1_000L;
     private static final int DEFAULT_FALLBACK_RANK = 201;
 
     private final GameSeasonRepository gameSeasonRepository;
@@ -98,13 +97,14 @@ public class GameService {
             season.getRegionCode(),
             TRENDING_CATEGORY_ID
         ).stream().map(signal -> {
+            long currentPricePoints = GamePointCalculator.calculatePricePoints(signal.getCurrentRank());
             boolean alreadyOwned = gamePositionRepository.existsBySeasonIdAndUserIdAndVideoIdAndStatus(
                 season.getId(),
                 authenticatedUser.id(),
                 signal.getId().getVideoId(),
                 PositionStatus.OPEN
             );
-            String blockedReason = resolveBuyBlockedReason(wallet, signal.getId().getVideoId(), alreadyOwned, maxOpenReached);
+            String blockedReason = resolveBuyBlockedReason(wallet, currentPricePoints, alreadyOwned, maxOpenReached);
 
             return new MarketVideoResponse(
                 signal.getId().getVideoId(),
@@ -114,6 +114,7 @@ public class GameService {
                 signal.getCurrentRank(),
                 signal.getPreviousRank(),
                 signal.getRankChange(),
+                currentPricePoints,
                 signal.getCurrentViewCount(),
                 signal.getViewCountDelta(),
                 signal.isNew(),
@@ -158,15 +159,11 @@ public class GameService {
         String regionCode = normalizeRequired(request.regionCode(), "regionCode는 필수입니다.").toUpperCase();
         String categoryId = normalizeRequired(request.categoryId(), "categoryId는 필수입니다.");
         String videoId = normalizeRequired(request.videoId(), "videoId는 필수입니다.");
-        long stakePoints = normalizeStakePoints(request.stakePoints());
+        long quotedPricePoints = normalizeStakePoints(request.stakePoints());
         Instant now = Instant.now(clock);
 
         if (!season.getRegionCode().equalsIgnoreCase(regionCode)) {
             throw new IllegalArgumentException("현재 시즌에서 지원하지 않는 regionCode입니다.");
-        }
-
-        if (wallet.getBalancePoints() < stakePoints) {
-            throw new IllegalArgumentException("보유 포인트가 부족합니다.");
         }
 
         long openPositionCount = gamePositionRepository.countBySeasonIdAndUserIdAndStatus(
@@ -188,6 +185,15 @@ public class GameService {
         }
 
         TrendSignal signal = requireTrendSignal(regionCode, categoryId, videoId);
+        long currentPricePoints = GamePointCalculator.calculatePricePoints(signal.getCurrentRank());
+        if (quotedPricePoints != currentPricePoints) {
+            throw new IllegalArgumentException("현재 가격이 변경되었습니다. 최신 시세로 다시 시도해 주세요.");
+        }
+
+        if (wallet.getBalancePoints() < currentPricePoints) {
+            throw new IllegalArgumentException("보유 포인트가 부족합니다.");
+        }
+
         AppUser user = requireUser(authenticatedUser.id());
 
         GamePosition position = new GamePosition();
@@ -202,17 +208,17 @@ public class GameService {
         position.setBuyRunId(signal.getCurrentRunId());
         position.setBuyRank(signal.getCurrentRank());
         position.setBuyCapturedAt(signal.getCapturedAt());
-        position.setStakePoints(stakePoints);
+        position.setStakePoints(currentPricePoints);
         position.setStatus(PositionStatus.OPEN);
         position.setCreatedAt(now);
         GamePosition savedPosition = gamePositionRepository.save(position);
 
-        wallet.setBalancePoints(wallet.getBalancePoints() - stakePoints);
-        wallet.setReservedPoints(wallet.getReservedPoints() + stakePoints);
+        wallet.setBalancePoints(wallet.getBalancePoints() - currentPricePoints);
+        wallet.setReservedPoints(wallet.getReservedPoints() + currentPricePoints);
         wallet.setUpdatedAt(now);
         gameWalletRepository.save(wallet);
 
-        saveLedger(season, user, savedPosition, LedgerType.BUY_LOCK, -stakePoints, wallet.getBalancePoints(), now);
+        saveLedger(season, user, savedPosition, LedgerType.BUY_LOCK, -currentPricePoints, wallet.getBalancePoints(), now);
 
         return toOpenPositionResponse(savedPosition, signal);
     }
@@ -252,12 +258,9 @@ public class GameService {
         GameWallet wallet = gameWalletRepository.findBySeasonIdAndUserId(position.getSeason().getId(), authenticatedUser.id())
             .orElseThrow(() -> new IllegalArgumentException("지갑 정보를 찾을 수 없습니다."));
         int rankDiff = position.getBuyRank() - sellSnapshot.rank();
-        long pnlPoints = GamePointCalculator.calculateProfitPoints(
-            position.getStakePoints(),
-            position.getSeason().getRankPointMultiplier(),
-            rankDiff
-        );
-        long settledPoints = GamePointCalculator.calculateSettledPoints(position.getStakePoints(), pnlPoints);
+        long sellPricePoints = GamePointCalculator.calculatePricePoints(sellSnapshot.rank());
+        long pnlPoints = GamePointCalculator.calculateProfitPoints(position.getStakePoints(), sellPricePoints);
+        long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
 
         position.setSellRunId(sellSnapshot.runId());
         position.setSellRank(sellSnapshot.rank());
@@ -292,6 +295,7 @@ public class GameService {
             position.getSellRank(),
             position.getRankDiff(),
             position.getStakePoints(),
+            settledPoints,
             position.getPnlPoints(),
             position.getSettledPoints(),
             wallet.getBalancePoints(),
@@ -343,6 +347,7 @@ public class GameService {
             position.getSellRank(),
             position.getRankDiff(),
             position.getStakePoints(),
+            position.getSettledPoints(),
             position.getPnlPoints(),
             false,
             position.getStatus().name(),
@@ -361,11 +366,8 @@ public class GameService {
 
     private PositionResponse toOpenPositionResponse(GamePosition position, OpenPositionSnapshot snapshot) {
         int rankDiff = position.getBuyRank() - snapshot.currentRank();
-        long profitPoints = GamePointCalculator.calculateProfitPoints(
-            position.getStakePoints(),
-            position.getSeason().getRankPointMultiplier(),
-            rankDiff
-        );
+        long currentPricePoints = GamePointCalculator.calculatePricePoints(snapshot.currentRank());
+        long profitPoints = GamePointCalculator.calculateProfitPoints(position.getStakePoints(), currentPricePoints);
 
         return new PositionResponse(
             position.getId(),
@@ -377,6 +379,7 @@ public class GameService {
             snapshot.currentRank(),
             rankDiff,
             position.getStakePoints(),
+            currentPricePoints,
             profitPoints,
             snapshot.chartOut(),
             position.getStatus().name(),
@@ -391,15 +394,15 @@ public class GameService {
             .orElseThrow(() -> new IllegalArgumentException("활성화된 게임 시즌이 없습니다."));
     }
 
-    private String resolveBuyBlockedReason(GameWallet wallet, String videoId, boolean alreadyOwned, boolean maxOpenReached) {
+    private String resolveBuyBlockedReason(GameWallet wallet, long currentPricePoints, boolean alreadyOwned, boolean maxOpenReached) {
         if (alreadyOwned) {
             return "이미 보유 중인 영상입니다.";
         }
         if (maxOpenReached) {
             return "동시 보유 가능 포지션 수를 초과했습니다.";
         }
-        if (wallet.getBalancePoints() < STAKE_UNIT_POINTS) {
-            return "최소 매수 포인트가 부족합니다.";
+        if (wallet.getBalancePoints() < currentPricePoints) {
+            return "현재 가격 기준 보유 포인트가 부족합니다.";
         }
         return null;
     }
@@ -422,13 +425,12 @@ public class GameService {
             long markedValue = position.getStakePoints();
 
             if (signal != null) {
-                int rankDiff = position.getBuyRank() - signal.getCurrentRank();
-                long profitPoints = GamePointCalculator.calculateProfitPoints(
-                    position.getStakePoints(),
-                    position.getSeason().getRankPointMultiplier(),
-                    rankDiff
-                );
-                markedValue = GamePointCalculator.calculateSettledPoints(position.getStakePoints(), profitPoints);
+                markedValue = GamePointCalculator.calculatePricePoints(signal.getCurrentRank());
+            } else {
+                OpenPositionSnapshot snapshot = resolveOpenPositionSnapshot(position);
+                if (snapshot != null) {
+                    markedValue = GamePointCalculator.calculatePricePoints(snapshot.currentRank());
+                }
             }
 
             markedOpenPositionPoints += markedValue;
@@ -607,12 +609,12 @@ public class GameService {
     }
 
     private long normalizeStakePoints(Long stakePoints) {
-        if (stakePoints == null || stakePoints < STAKE_UNIT_POINTS) {
-            throw new IllegalArgumentException("stakePoints는 1000 이상이어야 합니다.");
+        if (stakePoints == null) {
+            throw new IllegalArgumentException("stakePoints는 필수입니다.");
         }
 
-        if (stakePoints % STAKE_UNIT_POINTS != 0L) {
-            throw new IllegalArgumentException("stakePoints는 1000 포인트 단위여야 합니다.");
+        if (stakePoints < 0L) {
+            throw new IllegalArgumentException("stakePoints는 0 이상이어야 합니다.");
         }
 
         return stakePoints;

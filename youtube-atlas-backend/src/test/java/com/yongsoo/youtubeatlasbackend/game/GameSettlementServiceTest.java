@@ -54,9 +54,12 @@ class GameSettlementServiceTest {
     void settleEndedSeasonsAutoClosesOpenPositionsAndEndsSeason() {
         GameSeason season = activeSeasonEndingNow();
         AppUser appUser = user(7L);
-        GamePosition position = openPosition(season, appUser, "video-1", 20, 2_000L);
-        GameWallet wallet = wallet(season, appUser, 8_000L, 2_000L, 0L);
-        TrendSignal signal = signal("video-1", 8);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(120);
+        long sellPricePoints = GamePointCalculator.calculatePricePoints(100);
+        long pnlPoints = GamePointCalculator.calculateProfitPoints(buyPricePoints, sellPricePoints);
+        GamePosition position = openPosition(season, appUser, "video-1", 120, buyPricePoints);
+        GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
+        TrendSignal signal = signal("video-1", 100);
 
         when(gameSeasonRepository.findByStatusAndEndAtLessThanEqual(SeasonStatus.ACTIVE, Instant.parse("2026-04-08T00:01:00Z")))
             .thenReturn(List.of(season));
@@ -73,13 +76,13 @@ class GameSettlementServiceTest {
         gameSettlementService.settleEndedSeasons();
 
         assertThat(position.getStatus()).isEqualTo(PositionStatus.AUTO_CLOSED);
-        assertThat(position.getSellRank()).isEqualTo(8);
-        assertThat(position.getRankDiff()).isEqualTo(12);
-        assertThat(position.getPnlPoints()).isEqualTo(2_400L);
-        assertThat(position.getSettledPoints()).isEqualTo(4_400L);
-        assertThat(wallet.getBalancePoints()).isEqualTo(12_400L);
+        assertThat(position.getSellRank()).isEqualTo(100);
+        assertThat(position.getRankDiff()).isEqualTo(20);
+        assertThat(position.getPnlPoints()).isEqualTo(pnlPoints);
+        assertThat(position.getSettledPoints()).isEqualTo(sellPricePoints);
+        assertThat(wallet.getBalancePoints()).isEqualTo(10_000L + pnlPoints);
         assertThat(wallet.getReservedPoints()).isZero();
-        assertThat(wallet.getRealizedPnlPoints()).isEqualTo(2_400L);
+        assertThat(wallet.getRealizedPnlPoints()).isEqualTo(pnlPoints);
         assertThat(season.getStatus()).isEqualTo(SeasonStatus.ENDED);
         verify(gameLedgerRepository).save(any(GameLedger.class));
         verify(gameSeasonRepository).save(season);
@@ -89,8 +92,9 @@ class GameSettlementServiceTest {
     void settleEndedSeasonsUsesFallbackRankWhenVideoDropsOut() {
         GameSeason season = activeSeasonEndingNow();
         AppUser appUser = user(7L);
-        GamePosition position = openPosition(season, appUser, "video-1", 20, 1_000L);
-        GameWallet wallet = wallet(season, appUser, 9_000L, 1_000L, 0L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(150);
+        GamePosition position = openPosition(season, appUser, "video-1", 150, buyPricePoints);
+        GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
         TrendSignal otherSignal = signal("video-2", 200);
 
         when(gameSeasonRepository.findByStatusAndEndAtLessThanEqual(SeasonStatus.ACTIVE, Instant.parse("2026-04-08T00:01:00Z")))
@@ -109,7 +113,7 @@ class GameSettlementServiceTest {
 
         assertThat(position.getStatus()).isEqualTo(PositionStatus.AUTO_CLOSED);
         assertThat(position.getSellRank()).isEqualTo(201);
-        assertThat(position.getRankDiff()).isEqualTo(-181);
+        assertThat(position.getRankDiff()).isEqualTo(-51);
         assertThat(position.getSettledPoints()).isZero();
     }
 

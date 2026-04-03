@@ -8,6 +8,6 @@ public record CreatePositionRequest(
     @NotBlank String regionCode,
     @NotBlank String categoryId,
     @NotBlank String videoId,
-    @NotNull @Min(1000) Long stakePoints
+    @NotNull @Min(0) Long stakePoints
 ) {
 }

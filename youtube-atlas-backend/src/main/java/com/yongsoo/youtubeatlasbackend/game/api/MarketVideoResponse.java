@@ -10,6 +10,7 @@ public record MarketVideoResponse(
     Integer currentRank,
     Integer previousRank,
     Integer rankChange,
+    Long currentPricePoints,
     Long currentViewCount,
     Long viewCountDelta,
     Boolean isNew,

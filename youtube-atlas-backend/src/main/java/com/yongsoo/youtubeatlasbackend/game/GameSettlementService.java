@@ -107,12 +107,9 @@ public class GameSettlementService {
         Long sellRunId = signal != null ? signal.getCurrentRunId() : fallbackRunId;
         Instant sellCapturedAt = signal != null ? signal.getCapturedAt() : fallbackCapturedAt;
         int rankDiff = position.getBuyRank() - sellRank;
-        long pnlPoints = GamePointCalculator.calculateProfitPoints(
-            position.getStakePoints(),
-            position.getSeason().getRankPointMultiplier(),
-            rankDiff
-        );
-        long settledPoints = GamePointCalculator.calculateSettledPoints(position.getStakePoints(), pnlPoints);
+        long sellPricePoints = GamePointCalculator.calculatePricePoints(sellRank);
+        long pnlPoints = GamePointCalculator.calculateProfitPoints(position.getStakePoints(), sellPricePoints);
+        long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
 
         position.setSellRunId(sellRunId);
         position.setSellRank(sellRank);

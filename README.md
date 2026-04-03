@@ -100,7 +100,7 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - 시즌 기반 포인트 게임 도메인 추가
 - 유저별 게임 지갑 자동 생성
 - 실시간 랭킹 기반 영상 매수/매도
-- 랭킹 변동폭 기준 손익 정산
+- 랭킹별 가격 곡선 기반 손익 정산
 - 거래 가능 마켓 목록 조회
 - 실시간 평가손익 반영 리더보드
 - 시즌 종료 시 오픈 포지션 자동 청산 스케줄러
@@ -108,19 +108,21 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 핵심 정산 규칙:
 
 ```text
-rankDiff = buyRank - sellRank
-profitPoints = rankDiff * rankPointMultiplier * (stakePoints / 1000)
-settledPoints = max(0, stakePoints + profitPoints)
+anchorPrices = {200: 3000, 190: 4000, ..., 20: 750000, 10: 1050000, 2: 1333333, 1: 2000000}
+currentPricePoints = anchorPrices 를 기준으로 rank 구간별 기하보간
+buyPricePoints = buy 시점 currentPricePoints
+sellPricePoints = sell 시점 currentPricePoints
+profitPoints = sellPricePoints - buyPricePoints
+settledPoints = max(0, sellPricePoints)
 ```
 
 예시:
 
-- `20위` 매수 -> `8위` 매도
-- `stakePoints = 2000`
-- `rankPointMultiplier = 100`
-- `rankDiff = 12`
-- `profitPoints = 2400`
-- `settledPoints = 4400`
+- `170위` 매수 -> `160위` 매도
+- `buyPricePoints = 7500`
+- `sellPricePoints = 10000`
+- `profitPoints = 2500`
+- `settledPoints = 10000`
 
 ## 프론트 연동 순서
 
@@ -205,13 +207,14 @@ values
     "videoId": "abc123",
     "title": "Sample title",
     "channelTitle": "Sample channel",
-    "thumbnailUrl": "https://example.com/thumb.jpg",
-    "currentRank": 3,
-    "previousRank": 5,
-    "rankChange": 2,
-    "currentViewCount": 123456,
-    "viewCountDelta": 3456,
-    "isNew": false,
+      "thumbnailUrl": "https://example.com/thumb.jpg",
+      "currentRank": 3,
+      "previousRank": 5,
+      "rankChange": 2,
+      "currentPricePoints": 1320000,
+      "currentViewCount": 123456,
+      "viewCountDelta": 3456,
+      "isNew": false,
     "canBuy": true,
     "buyBlockedReason": null,
     "capturedAt": "2026-04-04T00:00:00Z"
@@ -223,7 +226,7 @@ values
 
 - `이미 보유 중인 영상입니다.`
 - `동시 보유 가능 포지션 수를 초과했습니다.`
-- `최소 매수 포인트가 부족합니다.`
+- `현재 가격 기준 보유 포인트가 부족합니다.`
 
 ### `GET /api/game/leaderboard`
 
@@ -231,7 +234,7 @@ values
 
 - 정렬 기준은 `totalAssetPoints desc`
 - `totalAssetPoints = balancePoints + 오픈 포지션 평가금액`
-- 오픈 포지션은 현재 랭킹 기준 평가손익을 반영합니다.
+- 오픈 포지션은 현재 랭킹 기준 가격으로 평가손익을 반영합니다.
 
 응답 예시:
 
@@ -271,11 +274,12 @@ values
     "title": "Sample title",
     "channelTitle": "Sample channel",
     "thumbnailUrl": "https://example.com/thumb.jpg",
-    "buyRank": 18,
-    "currentRank": 9,
-    "rankDiff": 9,
-    "stakePoints": 2000,
-    "profitPoints": 1800,
+    "buyRank": 170,
+    "currentRank": 160,
+    "rankDiff": 10,
+    "stakePoints": 7500,
+    "currentPricePoints": 10000,
+    "profitPoints": 2500,
     "status": "OPEN",
     "buyCapturedAt": "2026-04-04T00:00:00Z",
     "createdAt": "2026-04-04T00:01:00Z",
@@ -295,14 +299,13 @@ values
   "regionCode": "KR",
   "categoryId": "0",
   "videoId": "abc123",
-  "stakePoints": 2000
+  "stakePoints": 7500
 }
 ```
 
 제약:
 
-- `stakePoints` 는 `1000` 이상
-- `stakePoints` 는 `1000` 단위
+- `stakePoints` 는 현재 마켓의 `currentPricePoints` 와 같아야 함
 - 같은 시즌에 동일 영상 중복 보유 불가
 - 시즌의 `maxOpenPositions` 초과 불가
 - 시즌 `regionCode` 와 다른 값으로는 매수 불가
@@ -322,13 +325,14 @@ values
 {
   "positionId": 200,
   "videoId": "abc123",
-  "buyRank": 18,
-  "sellRank": 9,
-  "rankDiff": 9,
-  "stakePoints": 2000,
-  "pnlPoints": 1800,
-  "settledPoints": 3800,
-  "balancePoints": 11800,
+  "buyRank": 170,
+  "sellRank": 160,
+  "rankDiff": 10,
+  "stakePoints": 7500,
+  "sellPricePoints": 10000,
+  "pnlPoints": 2500,
+  "settledPoints": 10000,
+  "balancePoints": 12500,
   "soldAt": "2026-04-04T00:20:00Z"
 }
 ```

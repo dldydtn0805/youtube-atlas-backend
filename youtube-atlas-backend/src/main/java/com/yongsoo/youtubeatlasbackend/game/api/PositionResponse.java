@@ -12,6 +12,7 @@ public record PositionResponse(
     Integer currentRank,
     Integer rankDiff,
     Long stakePoints,
+    Long currentPricePoints,
     Long profitPoints,
     boolean chartOut,
     String status,

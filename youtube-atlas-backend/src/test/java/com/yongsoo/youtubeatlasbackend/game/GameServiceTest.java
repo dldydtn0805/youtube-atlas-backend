@@ -94,7 +94,8 @@ class GameServiceTest {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
-        TrendSignal signal = signal("video-1", 12, 3);
+        TrendSignal signal = signal("video-1", 170, 3);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
 
         when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
@@ -111,23 +112,37 @@ class GameServiceTest {
         when(gameWalletRepository.save(wallet)).thenReturn(wallet);
         when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = gameService.buy(authenticatedUser(), new CreatePositionRequest("KR", "0", "video-1", 2_000L));
+        var response = gameService.buy(
+            authenticatedUser(),
+            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints)
+        );
 
         assertThat(response.id()).isEqualTo(200L);
-        assertThat(response.buyRank()).isEqualTo(12);
-        assertThat(response.currentRank()).isEqualTo(12);
-        assertThat(response.stakePoints()).isEqualTo(2_000L);
-        assertThat(wallet.getBalancePoints()).isEqualTo(8_000L);
-        assertThat(wallet.getReservedPoints()).isEqualTo(2_000L);
+        assertThat(response.buyRank()).isEqualTo(170);
+        assertThat(response.currentRank()).isEqualTo(170);
+        assertThat(response.stakePoints()).isEqualTo(buyPricePoints);
+        assertThat(response.currentPricePoints()).isEqualTo(buyPricePoints);
+        assertThat(wallet.getBalancePoints()).isEqualTo(10_000L - buyPricePoints);
+        assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints);
     }
 
     @Test
-    void sellSettlesProfitBasedOnRankDiff() {
+    void sellSettlesProfitBasedOnRankPrice() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
-        GameWallet wallet = wallet(season, appUser, 8_000L, 2_000L, 0L);
-        GamePosition position = openPosition(season, appUser, "video-1", 20, 2_000L, Instant.parse("2026-04-01T05:45:00Z"));
-        TrendSignal latestSignal = signal("video-1", 8, 5);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        long sellPricePoints = GamePointCalculator.calculatePricePoints(160);
+        long pnlPoints = GamePointCalculator.calculateProfitPoints(buyPricePoints, sellPricePoints);
+        GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            170,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        TrendSignal latestSignal = signal("video-1", 160, 5);
 
         when(gamePositionRepository.findByIdAndUserId(300L, 7L)).thenReturn(Optional.of(position));
         when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
@@ -138,21 +153,32 @@ class GameServiceTest {
 
         var response = gameService.sell(authenticatedUser(), 300L);
 
-        assertThat(response.sellRank()).isEqualTo(8);
-        assertThat(response.rankDiff()).isEqualTo(12);
-        assertThat(response.pnlPoints()).isEqualTo(2_400L);
-        assertThat(response.settledPoints()).isEqualTo(4_400L);
-        assertThat(response.balancePoints()).isEqualTo(12_400L);
+        assertThat(response.sellRank()).isEqualTo(160);
+        assertThat(response.sellPricePoints()).isEqualTo(sellPricePoints);
+        assertThat(response.rankDiff()).isEqualTo(10);
+        assertThat(response.pnlPoints()).isEqualTo(pnlPoints);
+        assertThat(response.settledPoints()).isEqualTo(sellPricePoints);
+        assertThat(response.balancePoints()).isEqualTo(10_000L + pnlPoints);
         assertThat(wallet.getReservedPoints()).isZero();
-        assertThat(wallet.getRealizedPnlPoints()).isEqualTo(2_400L);
+        assertThat(wallet.getRealizedPnlPoints()).isEqualTo(pnlPoints);
     }
 
     @Test
     void sellUsesFallbackRankWhenLatestRunLooksHealthy() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
-        GameWallet wallet = wallet(season, appUser, 8_000L, 2_000L, 0L);
-        GamePosition position = openPosition(season, appUser, "video-1", 20, 2_000L, Instant.parse("2026-04-01T05:45:00Z"));
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        long sellPricePoints = GamePointCalculator.calculatePricePoints(13);
+        long pnlPoints = GamePointCalculator.calculateProfitPoints(buyPricePoints, sellPricePoints);
+        GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            170,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
         TrendRun latestRun = trendRun(55L, Instant.parse("2026-04-01T06:00:00Z"));
         TrendRun previousRun = trendRun(54L, Instant.parse("2026-04-01T05:00:00Z"));
 
@@ -178,18 +204,27 @@ class GameServiceTest {
         var response = gameService.sell(authenticatedUser(), 300L);
 
         assertThat(response.sellRank()).isEqualTo(13);
-        assertThat(response.rankDiff()).isEqualTo(7);
-        assertThat(response.pnlPoints()).isEqualTo(1_400L);
-        assertThat(response.settledPoints()).isEqualTo(3_400L);
-        assertThat(response.balancePoints()).isEqualTo(11_400L);
+        assertThat(response.sellPricePoints()).isEqualTo(sellPricePoints);
+        assertThat(response.rankDiff()).isEqualTo(157);
+        assertThat(response.pnlPoints()).isEqualTo(pnlPoints);
+        assertThat(response.settledPoints()).isEqualTo(sellPricePoints);
+        assertThat(response.balancePoints()).isEqualTo(10_000L + pnlPoints);
     }
 
     @Test
     void sellRejectsWhenLatestRunLooksUnstable() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
-        GameWallet wallet = wallet(season, appUser, 8_000L, 2_000L, 0L);
-        GamePosition position = openPosition(season, appUser, "video-1", 20, 2_000L, Instant.parse("2026-04-01T05:45:00Z"));
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            170,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
         TrendRun latestRun = trendRun(55L, Instant.parse("2026-04-01T06:00:00Z"));
         TrendRun previousRun = trendRun(54L, Instant.parse("2026-04-01T05:00:00Z"));
 
@@ -220,7 +255,14 @@ class GameServiceTest {
     void sellRejectsBeforeMinimumHoldTime() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
-        GamePosition position = openPosition(season, appUser, "video-1", 20, 1_000L, Instant.parse("2026-04-01T05:55:30Z"));
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            170,
+            GamePointCalculator.calculatePricePoints(170),
+            Instant.parse("2026-04-01T05:55:30Z")
+        );
 
         when(gamePositionRepository.findByIdAndUserId(300L, 7L)).thenReturn(Optional.of(position));
 
@@ -236,8 +278,8 @@ class GameServiceTest {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
-        TrendSignal ownedSignal = signal("video-1", 1, 2);
-        TrendSignal openSignal = signal("video-2", 2, 1);
+        TrendSignal ownedSignal = signal("video-1", 170, 2);
+        TrendSignal openSignal = signal("video-2", 180, 1);
 
         when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
@@ -253,9 +295,11 @@ class GameServiceTest {
 
         assertThat(response).hasSize(2);
         assertThat(response.get(0).videoId()).isEqualTo("video-1");
+        assertThat(response.get(0).currentPricePoints()).isEqualTo(GamePointCalculator.calculatePricePoints(170));
         assertThat(response.get(0).canBuy()).isFalse();
         assertThat(response.get(0).buyBlockedReason()).isEqualTo("이미 보유 중인 영상입니다.");
         assertThat(response.get(1).videoId()).isEqualTo("video-2");
+        assertThat(response.get(1).currentPricePoints()).isEqualTo(GamePointCalculator.calculatePricePoints(180));
         assertThat(response.get(1).canBuy()).isTrue();
         assertThat(response.get(1).buyBlockedReason()).isNull();
     }
@@ -265,12 +309,30 @@ class GameServiceTest {
         GameSeason season = activeSeason();
         AppUser me = user(7L, "Atlas User");
         AppUser rival = user(8L, "Rival User");
-        GameWallet myWallet = wallet(season, me, 8_000L, 2_000L, 0L);
-        GameWallet rivalWallet = wallet(season, rival, 7_500L, 2_000L, 1_000L);
-        GamePosition myPosition = openPosition(season, me, "video-1", 20, 2_000L, Instant.parse("2026-04-01T05:45:00Z"));
-        GamePosition rivalPosition = openPosition(season, rival, "video-2", 10, 2_000L, Instant.parse("2026-04-01T05:40:00Z"));
-        TrendSignal mySignal = signal("video-1", 8, 3);
-        TrendSignal rivalSignal = signal("video-2", 14, -4);
+        long myBuyPricePoints = GamePointCalculator.calculatePricePoints(180);
+        long rivalBuyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        long myMarkedPricePoints = GamePointCalculator.calculatePricePoints(170);
+        long rivalMarkedPricePoints = GamePointCalculator.calculatePricePoints(180);
+        GameWallet myWallet = wallet(season, me, 10_000L - myBuyPricePoints, myBuyPricePoints, 0L);
+        GameWallet rivalWallet = wallet(season, rival, 10_000L - rivalBuyPricePoints, rivalBuyPricePoints, 0L);
+        GamePosition myPosition = openPosition(
+            season,
+            me,
+            "video-1",
+            180,
+            myBuyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        GamePosition rivalPosition = openPosition(
+            season,
+            rival,
+            "video-2",
+            170,
+            rivalBuyPricePoints,
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+        TrendSignal mySignal = signal("video-1", 170, 3);
+        TrendSignal rivalSignal = signal("video-2", 180, -4);
 
         when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(myWallet));
@@ -285,13 +347,13 @@ class GameServiceTest {
         assertThat(response).hasSize(2);
         assertThat(response.get(0).userId()).isEqualTo(7L);
         assertThat(response.get(0).rank()).isEqualTo(1);
-        assertThat(response.get(0).totalAssetPoints()).isEqualTo(12_400L);
-        assertThat(response.get(0).unrealizedPnlPoints()).isEqualTo(2_400L);
+        assertThat(response.get(0).totalAssetPoints()).isEqualTo((10_000L - myBuyPricePoints) + myMarkedPricePoints);
+        assertThat(response.get(0).unrealizedPnlPoints()).isEqualTo(myMarkedPricePoints - myBuyPricePoints);
         assertThat(response.get(0).me()).isTrue();
         assertThat(response.get(1).userId()).isEqualTo(8L);
         assertThat(response.get(1).rank()).isEqualTo(2);
-        assertThat(response.get(1).totalAssetPoints()).isEqualTo(8_700L);
-        assertThat(response.get(1).unrealizedPnlPoints()).isEqualTo(-800L);
+        assertThat(response.get(1).totalAssetPoints()).isEqualTo((10_000L - rivalBuyPricePoints) + rivalMarkedPricePoints);
+        assertThat(response.get(1).unrealizedPnlPoints()).isEqualTo(rivalMarkedPricePoints - rivalBuyPricePoints);
         assertThat(response.get(1).me()).isFalse();
     }
 
