@@ -124,6 +124,16 @@ class YouTubeCatalogServiceTest {
     }
 
     @Test
+    void getVideoByIdReturnsFetchedVideo() {
+        when(youTubeApiClient.fetchVideosByIds(List.of("video-1"))).thenReturn(List.of(video("video-1", "10")));
+
+        var response = youTubeCatalogService.getVideoById("video-1");
+
+        assertThat(response.id()).isEqualTo("video-1");
+        assertThat(response.snippet().title()).isEqualTo("Title");
+    }
+
+    @Test
     void getPopularVideosForChannelsFiltersAllCategoryFeedAndAddsTrendSignal() {
         when(youTubeApiClient.fetchMostPopularVideos("KR", null, null)).thenReturn(
             new RemoteVideoPage(List.of(video("video-1", "10"), video("video-2", "10", "channel-9")), null)

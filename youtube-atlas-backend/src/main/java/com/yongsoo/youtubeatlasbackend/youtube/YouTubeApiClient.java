@@ -89,6 +89,40 @@ public class YouTubeApiClient {
         return new RemoteVideoPage(items, result.nextPageToken());
     }
 
+    public List<AtlasVideo> fetchVideosByIds(List<String> videoIds) {
+        if (videoIds == null || videoIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> normalizedVideoIds = videoIds.stream()
+            .filter(StringUtils::hasText)
+            .map(String::trim)
+            .distinct()
+            .toList();
+
+        if (normalizedVideoIds.isEmpty()) {
+            return List.of();
+        }
+
+        String apiKey = requireApiKey();
+        String url = UriComponentsBuilder.fromHttpUrl(atlasProperties.getYoutube().getApiBaseUrl())
+            .path("/videos")
+            .queryParam("part", "snippet,contentDetails,statistics")
+            .queryParam("id", String.join(",", normalizedVideoIds))
+            .queryParam("key", apiKey)
+            .toUriString();
+
+        RemoteVideoListResponse result = get(url, RemoteVideoListResponse.class);
+
+        if (result.items() == null) {
+            return List.of();
+        }
+
+        return result.items().stream()
+            .map(this::toVideo)
+            .toList();
+    }
+
     public boolean isIgnorableCategoryFetchError(RuntimeException exception) {
         String message = exception.getMessage();
         return message != null && (

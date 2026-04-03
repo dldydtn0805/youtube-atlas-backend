@@ -62,6 +62,15 @@ public class YouTubeCatalogService {
         return attachTrendSignals(normalizedRegionCode, categoryId, section);
     }
 
+    public VideoItemResponse getVideoById(String videoId) {
+        String normalizedVideoId = normalizeVideoId(videoId);
+
+        return youTubeApiClient.fetchVideosByIds(List.of(normalizedVideoId)).stream()
+            .findFirst()
+            .map(this::toVideoResponse)
+            .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 영상입니다: " + normalizedVideoId));
+    }
+
     public VideoCategorySectionResponse getPopularVideosForChannels(
         String regionCode,
         List<String> channelIds,
@@ -400,6 +409,14 @@ public class YouTubeCatalogService {
         }
 
         return regionCode.trim().toUpperCase();
+    }
+
+    private String normalizeVideoId(String videoId) {
+        if (!StringUtils.hasText(videoId)) {
+            throw new IllegalArgumentException("videoId는 비어 있을 수 없습니다.");
+        }
+
+        return videoId.trim();
     }
 
     private Set<String> normalizeChannelIds(List<String> channelIds) {

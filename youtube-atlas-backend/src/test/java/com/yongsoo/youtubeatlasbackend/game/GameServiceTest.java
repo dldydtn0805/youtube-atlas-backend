@@ -357,6 +357,99 @@ class GameServiceTest {
         assertThat(response.get(1).me()).isFalse();
     }
 
+    @Test
+    void getPositionRankHistoryReturnsObservedRunsBetweenBuyAndSell() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            170,
+            GamePointCalculator.calculatePricePoints(170),
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        TrendRun buyRun = trendRun(11L, Instant.parse("2026-04-01T05:40:00Z"));
+        TrendRun middleRun = trendRun(12L, Instant.parse("2026-04-01T05:50:00Z"));
+        TrendRun sellRun = trendRun(13L, Instant.parse("2026-04-01T06:00:00Z"));
+
+        position.setStatus(PositionStatus.CLOSED);
+        position.setSellRunId(13L);
+        position.setSellRank(150);
+        position.setSellCapturedAt(sellRun.getCapturedAt());
+        position.setClosedAt(Instant.parse("2026-04-01T06:01:00Z"));
+
+        when(gamePositionRepository.findByIdAndUserId(300L, 7L)).thenReturn(Optional.of(position));
+        when(trendRunRepository.findByRegionCodeAndCategoryIdAndIdBetweenOrderByIdAsc("KR", "0", 11L, 13L))
+            .thenReturn(List.of(buyRun, middleRun, sellRun));
+        when(trendSnapshotRepository.findByRegionCodeAndCategoryIdAndVideoIdAndRun_IdBetweenOrderByRun_IdAsc(
+            "KR",
+            "0",
+            "video-1",
+            11L,
+            13L
+        )).thenReturn(List.of(
+            snapshot(buyRun, "video-1", 170),
+            snapshot(middleRun, "video-1", 161),
+            snapshot(sellRun, "video-1", 150)
+        ));
+
+        var response = gameService.getPositionRankHistory(authenticatedUser(), 300L);
+
+        assertThat(response.positionId()).isEqualTo(300L);
+        assertThat(response.latestRank()).isEqualTo(150);
+        assertThat(response.latestChartOut()).isFalse();
+        assertThat(response.points()).hasSize(3);
+        assertThat(response.points().get(0).buyPoint()).isTrue();
+        assertThat(response.points().get(1).rank()).isEqualTo(161);
+        assertThat(response.points().get(2).sellPoint()).isTrue();
+        assertThat(response.points().get(2).chartOut()).isFalse();
+    }
+
+    @Test
+    void getPositionRankHistoryMarksMissingRunsAsChartOut() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            170,
+            GamePointCalculator.calculatePricePoints(170),
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        TrendRun buyRun = trendRun(11L, Instant.parse("2026-04-01T05:40:00Z"));
+        TrendRun latestRun = trendRun(12L, Instant.parse("2026-04-01T06:00:00Z"));
+
+        when(gamePositionRepository.findByIdAndUserId(300L, 7L)).thenReturn(Optional.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.empty());
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0")).thenReturn(Optional.of(latestRun));
+        when(trendSnapshotRepository.findByRunId(12L)).thenReturn(List.of(
+            snapshot(latestRun, "video-2", 8),
+            snapshot(latestRun, "video-3", 12)
+        ));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc("KR", "0", 12L))
+            .thenReturn(Optional.empty());
+        when(trendRunRepository.findByRegionCodeAndCategoryIdAndIdBetweenOrderByIdAsc("KR", "0", 11L, 12L))
+            .thenReturn(List.of(buyRun, latestRun));
+        when(trendSnapshotRepository.findByRegionCodeAndCategoryIdAndVideoIdAndRun_IdBetweenOrderByRun_IdAsc(
+            "KR",
+            "0",
+            "video-1",
+            11L,
+            12L
+        )).thenReturn(List.of(snapshot(buyRun, "video-1", 170)));
+
+        var response = gameService.getPositionRankHistory(authenticatedUser(), 300L);
+
+        assertThat(response.latestRank()).isEqualTo(13);
+        assertThat(response.latestChartOut()).isTrue();
+        assertThat(response.points()).hasSize(2);
+        assertThat(response.points().get(0).rank()).isEqualTo(170);
+        assertThat(response.points().get(1).rank()).isNull();
+        assertThat(response.points().get(1).chartOut()).isTrue();
+    }
+
     private AuthenticatedUser authenticatedUser() {
         return new AuthenticatedUser(7L, "atlas@example.com", "Atlas User", null);
     }

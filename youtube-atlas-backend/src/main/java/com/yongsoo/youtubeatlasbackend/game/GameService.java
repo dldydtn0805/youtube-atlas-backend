@@ -19,6 +19,8 @@ import com.yongsoo.youtubeatlasbackend.game.api.CreatePositionRequest;
 import com.yongsoo.youtubeatlasbackend.game.api.CurrentSeasonResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.LeaderboardEntryResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.MarketVideoResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.PositionRankHistoryPointResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.PositionRankHistoryResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPositionResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.WalletResponse;
@@ -239,6 +241,79 @@ public class GameService {
             .toList();
     }
 
+    @Transactional(readOnly = true)
+    public PositionRankHistoryResponse getPositionRankHistory(AuthenticatedUser authenticatedUser, Long positionId) {
+        GamePosition position = gamePositionRepository.findByIdAndUserId(positionId, authenticatedUser.id())
+            .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 포지션입니다."));
+
+        PositionHistoryWindow historyWindow = resolvePositionHistoryWindow(position);
+        List<TrendRun> runs = trendRunRepository.findByRegionCodeAndCategoryIdAndIdBetweenOrderByIdAsc(
+            position.getRegionCode(),
+            position.getCategoryId(),
+            historyWindow.startRunId(),
+            historyWindow.endRunId()
+        );
+        Map<Long, TrendSnapshot> snapshotByRunId = trendSnapshotRepository
+            .findByRegionCodeAndCategoryIdAndVideoIdAndRun_IdBetweenOrderByRun_IdAsc(
+                position.getRegionCode(),
+                position.getCategoryId(),
+                position.getVideoId(),
+                historyWindow.startRunId(),
+                historyWindow.endRunId()
+            )
+            .stream()
+            .collect(Collectors.toMap(snapshot -> snapshot.getRun().getId(), Function.identity()));
+
+        List<PositionRankHistoryPointResponse> points = runs.stream()
+            .map(run -> {
+                TrendSnapshot snapshot = snapshotByRunId.get(run.getId());
+
+                return new PositionRankHistoryPointResponse(
+                    run.getId(),
+                    run.getCapturedAt(),
+                    snapshot != null ? snapshot.getRank() : null,
+                    snapshot != null ? snapshot.getViewCount() : null,
+                    snapshot == null,
+                    run.getId().equals(position.getBuyRunId()),
+                    position.getSellRunId() != null && run.getId().equals(position.getSellRunId())
+                );
+            })
+            .toList();
+
+        if (points.isEmpty()) {
+            points = List.of(
+                new PositionRankHistoryPointResponse(
+                    position.getBuyRunId(),
+                    position.getBuyCapturedAt(),
+                    position.getBuyRank(),
+                    null,
+                    false,
+                    true,
+                    position.getSellRunId() != null && position.getSellRunId().equals(position.getBuyRunId())
+                )
+            );
+        }
+
+        PositionRankHistoryPointResponse latestPoint = points.get(points.size() - 1);
+
+        return new PositionRankHistoryResponse(
+            position.getId(),
+            position.getVideoId(),
+            position.getTitle(),
+            position.getChannelTitle(),
+            position.getThumbnailUrl(),
+            position.getStatus().name(),
+            position.getBuyRank(),
+            historyWindow.latestRank(),
+            position.getSellRank(),
+            latestPoint.chartOut(),
+            position.getBuyCapturedAt(),
+            historyWindow.latestCapturedAt(),
+            position.getClosedAt(),
+            points
+        );
+    }
+
     @Transactional
     public SellPositionResponse sell(AuthenticatedUser authenticatedUser, Long positionId) {
         GamePosition position = gamePositionRepository.findByIdAndUserId(positionId, authenticatedUser.id())
@@ -386,6 +461,46 @@ public class GameService {
             position.getBuyCapturedAt(),
             position.getCreatedAt(),
             position.getClosedAt()
+        );
+    }
+
+    private PositionHistoryWindow resolvePositionHistoryWindow(GamePosition position) {
+        if (position.getStatus() != PositionStatus.OPEN) {
+            return new PositionHistoryWindow(
+                position.getBuyRunId(),
+                position.getSellRunId() != null ? position.getSellRunId() : position.getBuyRunId(),
+                position.getSellRank(),
+                position.getSellCapturedAt() != null ? position.getSellCapturedAt() : position.getBuyCapturedAt()
+            );
+        }
+
+        TrendSignalId signalId = new TrendSignalId(position.getRegionCode(), position.getCategoryId(), position.getVideoId());
+        TrendSignal signal = trendSignalRepository.findById(signalId).orElse(null);
+        if (signal != null) {
+            return new PositionHistoryWindow(
+                position.getBuyRunId(),
+                signal.getCurrentRunId(),
+                signal.getCurrentRank(),
+                signal.getCapturedAt()
+            );
+        }
+
+        LatestTrendRun latestTrendRun = getLatestTrendRun(position.getRegionCode(), position.getCategoryId());
+        if (latestTrendRun == null) {
+            return new PositionHistoryWindow(
+                position.getBuyRunId(),
+                position.getBuyRunId(),
+                position.getBuyRank(),
+                position.getBuyCapturedAt()
+            );
+        }
+
+        OpenPositionSnapshot openPositionSnapshot = resolveOpenPositionSnapshot(position);
+        return new PositionHistoryWindow(
+            position.getBuyRunId(),
+            latestTrendRun.run().getId(),
+            openPositionSnapshot != null ? openPositionSnapshot.currentRank() : position.getBuyRank(),
+            openPositionSnapshot != null ? openPositionSnapshot.capturedAt() : latestTrendRun.run().getCapturedAt()
         );
     }
 
@@ -676,5 +791,8 @@ public class GameService {
     }
 
     private record LatestTrendRun(TrendRun run, List<TrendSnapshot> snapshots) {
+    }
+
+    private record PositionHistoryWindow(Long startRunId, Long endRunId, Integer latestRank, Instant latestCapturedAt) {
     }
 }

@@ -56,6 +56,14 @@ public class GameController {
         return gameService.getMyPositions(authService.requireCurrentUser(authorizationHeader), status);
     }
 
+    @GetMapping("/positions/{positionId}/rank-history")
+    public PositionRankHistoryResponse getPositionRankHistory(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @PathVariable Long positionId
+    ) {
+        return gameService.getPositionRankHistory(authService.requireCurrentUser(authorizationHeader), positionId);
+    }
+
     @PostMapping("/positions")
     public PositionResponse buy(
         @RequestHeader("Authorization") String authorizationHeader,

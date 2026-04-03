@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeCatalogService;
 
 @RestController
-@RequestMapping("/api/catalog/regions/{regionCode}")
+@RequestMapping("/api/catalog")
 public class YouTubeCatalogController {
 
     private final YouTubeCatalogService youTubeCatalogService;
@@ -20,17 +20,22 @@ public class YouTubeCatalogController {
         this.youTubeCatalogService = youTubeCatalogService;
     }
 
-    @GetMapping("/categories")
+    @GetMapping("/regions/{regionCode}/categories")
     public List<VideoCategoryResponse> getCategories(@PathVariable String regionCode) {
         return youTubeCatalogService.getCategories(regionCode);
     }
 
-    @GetMapping("/categories/{categoryId}/videos")
+    @GetMapping("/regions/{regionCode}/categories/{categoryId}/videos")
     public VideoCategorySectionResponse getPopularVideosByCategory(
         @PathVariable String regionCode,
         @PathVariable String categoryId,
         @RequestParam(required = false) String pageToken
     ) {
         return youTubeCatalogService.getPopularVideosByCategory(regionCode, categoryId, pageToken);
+    }
+
+    @GetMapping("/videos/{videoId}")
+    public VideoItemResponse getVideoById(@PathVariable String videoId) {
+        return youTubeCatalogService.getVideoById(videoId);
     }
 }
