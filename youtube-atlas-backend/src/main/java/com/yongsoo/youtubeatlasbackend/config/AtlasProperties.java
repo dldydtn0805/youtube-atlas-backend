@@ -11,6 +11,7 @@ public class AtlasProperties {
     private final Youtube youtube = new Youtube();
     private final Realtime realtime = new Realtime();
     private final Trending trending = new Trending();
+    private final Game game = new Game();
     private final Auth auth = new Auth();
 
     public Youtube getYoutube() {
@@ -23,6 +24,10 @@ public class AtlasProperties {
 
     public Trending getTrending() {
         return trending;
+    }
+
+    public Game getGame() {
+        return game;
     }
 
     public Auth getAuth() {
@@ -231,6 +236,27 @@ public class AtlasProperties {
 
         public void setSessionTtlDays(int sessionTtlDays) {
             this.sessionTtlDays = sessionTtlDays;
+        }
+    }
+
+    public static class Game {
+        private boolean schedulerEnabled;
+        private String cron = "0 */5 * * * *";
+
+        public boolean isSchedulerEnabled() {
+            return schedulerEnabled;
+        }
+
+        public void setSchedulerEnabled(boolean schedulerEnabled) {
+            this.schedulerEnabled = schedulerEnabled;
+        }
+
+        public String getCron() {
+            return cron;
+        }
+
+        public void setCron(String cron) {
+            this.cron = cron;
         }
     }
 

@@ -1,6 +1,6 @@
 # youtube-atlas-backend
 
-`World-Best-YouTube`의 YouTube 조회, Google 로그인, 실시간 댓글, 급상승 스냅샷 기능을 Spring Boot로 제공하는 백엔드입니다.
+`World-Best-YouTube`의 YouTube 조회, Google 로그인, 실시간 댓글, 급상승 스냅샷, 랭킹 기반 포인트 게임 기능을 Spring Boot로 제공하는 백엔드입니다.
 
 ## 현재 구현 범위
 
@@ -12,6 +12,8 @@
 - STOMP WebSocket 기반 실시간 댓글 브로드캐스트
 - 급상승 스냅샷 동기화
 - 급상승 시그널 조회
+- 랭킹 기반 포인트 게임 시즌/지갑/매수/매도/리더보드
+- 시즌 종료 시 오픈 포지션 자동 청산
 - H2 로컬 실행 + PostgreSQL 전환 가능한 기본 설정
 
 ## 실행
@@ -52,6 +54,8 @@ DB_PASSWORD=postgres
 ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 YOUTUBE_CATEGORY_LANGUAGE=ko
 AUTH_SESSION_TTL_DAYS=30
+GAME_SCHEDULER_ENABLED=false
+GAME_SETTLEMENT_CRON=0 */5 * * * *
 TRENDING_SCHEDULER_ENABLED=false
 TRENDING_SYNC_CRON=0 0 * * * *
 TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
@@ -61,6 +65,7 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `ALLOWED_ORIGINS` 기본값에는 로컬 개발 주소와 Vercel 배포 주소 패턴이 포함됩니다.
 - `GOOGLE_CLIENT_ID` 는 프론트의 Google OAuth Client ID와 동일해야 합니다.
 - `GOOGLE_CLIENT_SECRET` 는 같은 Google OAuth Web Client의 secret 이어야 합니다.
+- `GAME_SCHEDULER_ENABLED=true` 로 두면 종료 시간이 지난 시즌의 오픈 포지션을 자동 청산합니다.
 - `TRENDING_SYNC_MAX_PAGES_PER_SOURCE` 는 급상승 동기화 시 소스 카테고리별로 몇 페이지까지 수집할지 결정합니다.
 
 ## API 요약
@@ -80,6 +85,270 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `GET /api/trending/signals?regionCode=KR&categoryId=0&videoIds=abc&videoIds=def`
 - `GET /api/trending/realtime-surging?regionCode=KR`
 - `POST /api/trending/sync`
+- `GET /api/game/seasons/current`
+- `GET /api/game/wallet`
+- `GET /api/game/market`
+- `GET /api/game/leaderboard`
+- `GET /api/game/positions/me?status=OPEN`
+- `POST /api/game/positions`
+- `POST /api/game/positions/{positionId}/sell`
+
+## 게임 기능 변경점
+
+이번 변경으로 아래 기능이 추가되었습니다.
+
+- 시즌 기반 포인트 게임 도메인 추가
+- 유저별 게임 지갑 자동 생성
+- 실시간 랭킹 기반 영상 매수/매도
+- 랭킹 변동폭 기준 손익 정산
+- 거래 가능 마켓 목록 조회
+- 실시간 평가손익 반영 리더보드
+- 시즌 종료 시 오픈 포지션 자동 청산 스케줄러
+
+핵심 정산 규칙:
+
+```text
+rankDiff = buyRank - sellRank
+profitPoints = rankDiff * rankPointMultiplier * (stakePoints / 1000)
+settledPoints = max(0, stakePoints + profitPoints)
+```
+
+예시:
+
+- `20위` 매수 -> `8위` 매도
+- `stakePoints = 2000`
+- `rankPointMultiplier = 100`
+- `rankDiff = 12`
+- `profitPoints = 2400`
+- `settledPoints = 4400`
+
+## 프론트 연동 순서
+
+게임 화면 MVP는 아래 순서로 붙이면 됩니다.
+
+1. 로그인 후 `GET /api/game/seasons/current` 호출
+2. `GET /api/game/market` 으로 거래 가능 영상 목록 조회
+3. `GET /api/game/positions/me?status=OPEN` 으로 내 보유 포지션 조회
+4. `GET /api/game/leaderboard` 로 랭킹 조회
+5. 매수 시 `POST /api/game/positions`
+6. 매도 시 `POST /api/game/positions/{positionId}/sell`
+
+모든 게임 API는 아래 헤더가 필요합니다.
+
+```text
+Authorization: Bearer {accessToken}
+```
+
+## 게임 시즌 준비
+
+게임 API를 실제로 사용하려면 `ACTIVE` 시즌이 최소 1개 필요합니다.
+
+예시 SQL:
+
+```sql
+insert into game_seasons
+(name, status, region_code, start_at, end_at, starting_balance_points, min_hold_seconds, max_open_positions, rank_point_multiplier, created_at)
+values
+('KR Daily Season', 'ACTIVE', 'KR', now(), now() + interval '7 day', 10000, 600, 5, 100, now());
+```
+
+권장 기본값:
+
+- `starting_balance_points = 10000`
+- `min_hold_seconds = 600`
+- `max_open_positions = 5`
+- `rank_point_multiplier = 100`
+
+## 게임 API 명세
+
+### `GET /api/game/seasons/current`
+
+현재 활성 시즌과 내 지갑 정보를 반환합니다. 지갑이 아직 없으면 첫 호출 시 자동 생성됩니다.
+
+응답 예시:
+
+```json
+{
+  "seasonId": 1,
+  "seasonName": "KR Daily Season",
+  "status": "ACTIVE",
+  "regionCode": "KR",
+  "startAt": "2026-04-01T00:00:00Z",
+  "endAt": "2026-04-08T00:00:00Z",
+  "startingBalancePoints": 10000,
+  "minHoldSeconds": 600,
+  "maxOpenPositions": 5,
+  "rankPointMultiplier": 100,
+  "wallet": {
+    "seasonId": 1,
+    "balancePoints": 10000,
+    "reservedPoints": 0,
+    "realizedPnlPoints": 0,
+    "totalAssetPoints": 10000
+  }
+}
+```
+
+### `GET /api/game/wallet`
+
+현재 시즌 기준 내 게임 지갑 정보를 반환합니다.
+
+### `GET /api/game/market`
+
+현재 거래 가능한 영상 목록을 반환합니다. 각 항목에는 현재 매수 가능 여부와 차단 사유가 포함됩니다.
+
+응답 예시:
+
+```json
+[
+  {
+    "videoId": "abc123",
+    "title": "Sample title",
+    "channelTitle": "Sample channel",
+    "thumbnailUrl": "https://example.com/thumb.jpg",
+    "currentRank": 3,
+    "previousRank": 5,
+    "rankChange": 2,
+    "currentViewCount": 123456,
+    "viewCountDelta": 3456,
+    "isNew": false,
+    "canBuy": true,
+    "buyBlockedReason": null,
+    "capturedAt": "2026-04-04T00:00:00Z"
+  }
+]
+```
+
+`buyBlockedReason` 예시:
+
+- `이미 보유 중인 영상입니다.`
+- `동시 보유 가능 포지션 수를 초과했습니다.`
+- `최소 매수 포인트가 부족합니다.`
+
+### `GET /api/game/leaderboard`
+
+현재 시즌 리더보드를 반환합니다.
+
+- 정렬 기준은 `totalAssetPoints desc`
+- `totalAssetPoints = balancePoints + 오픈 포지션 평가금액`
+- 오픈 포지션은 현재 랭킹 기준 평가손익을 반영합니다.
+
+응답 예시:
+
+```json
+[
+  {
+    "rank": 1,
+    "userId": 7,
+    "displayName": "Atlas User",
+    "pictureUrl": "https://lh3.googleusercontent.com/...",
+    "totalAssetPoints": 12400,
+    "balancePoints": 8000,
+    "reservedPoints": 2000,
+    "realizedPnlPoints": 0,
+    "unrealizedPnlPoints": 2400,
+    "openPositionCount": 1,
+    "me": true
+  }
+]
+```
+
+### `GET /api/game/positions/me?status=OPEN`
+
+내 포지션 목록을 반환합니다.
+
+- `status` 는 선택값입니다.
+- 사용 가능 값: `OPEN`, `CLOSED`, `AUTO_CLOSED`
+- `status` 를 생략하면 현재 시즌의 전체 포지션을 반환합니다.
+
+응답 예시:
+
+```json
+[
+  {
+    "id": 200,
+    "videoId": "abc123",
+    "title": "Sample title",
+    "channelTitle": "Sample channel",
+    "thumbnailUrl": "https://example.com/thumb.jpg",
+    "buyRank": 18,
+    "currentRank": 9,
+    "rankDiff": 9,
+    "stakePoints": 2000,
+    "profitPoints": 1800,
+    "status": "OPEN",
+    "buyCapturedAt": "2026-04-04T00:00:00Z",
+    "createdAt": "2026-04-04T00:01:00Z",
+    "closedAt": null
+  }
+]
+```
+
+### `POST /api/game/positions`
+
+영상 매수 API입니다.
+
+요청 본문:
+
+```json
+{
+  "regionCode": "KR",
+  "categoryId": "0",
+  "videoId": "abc123",
+  "stakePoints": 2000
+}
+```
+
+제약:
+
+- `stakePoints` 는 `1000` 이상
+- `stakePoints` 는 `1000` 단위
+- 같은 시즌에 동일 영상 중복 보유 불가
+- 시즌의 `maxOpenPositions` 초과 불가
+- 시즌 `regionCode` 와 다른 값으로는 매수 불가
+
+응답은 `PositionResponse` 형식입니다.
+
+### `POST /api/game/positions/{positionId}/sell`
+
+영상 매도 API입니다.
+
+- 최소 보유 시간(`minHoldSeconds`) 이전에는 매도할 수 없습니다.
+- 매도 시 최신 랭킹 기준으로 손익이 확정됩니다.
+
+응답 예시:
+
+```json
+{
+  "positionId": 200,
+  "videoId": "abc123",
+  "buyRank": 18,
+  "sellRank": 9,
+  "rankDiff": 9,
+  "stakePoints": 2000,
+  "pnlPoints": 1800,
+  "settledPoints": 3800,
+  "balancePoints": 11800,
+  "soldAt": "2026-04-04T00:20:00Z"
+}
+```
+
+## 시즌 종료 자동 청산
+
+`GAME_SCHEDULER_ENABLED=true` 일 때 종료 시간이 지난 `ACTIVE` 시즌을 주기적으로 정리합니다.
+
+동작 방식:
+
+- `endAt <= now` 인 `ACTIVE` 시즌 조회
+- 해당 시즌의 `OPEN` 포지션을 모두 `AUTO_CLOSED` 처리
+- 현재 랭킹이 남아 있으면 해당 랭킹으로 정산
+- 랭킹에서 이미 사라진 영상이면 마지막 랭킹 뒤 번호(`maxRank + 1`)로 패널티 정산
+- 시즌 상태를 `ENDED` 로 변경
+
+프론트에서 유의할 점:
+
+- `AUTO_CLOSED` 도 종료 포지션 상태로 표시해야 합니다.
+- 시즌 종료 직후에는 `GET /api/game/seasons/current` 가 실패할 수 있으니, 다음 시즌이 아직 없으면 “다음 시즌 준비 중” 상태를 표시하는 게 좋습니다.
 
 ## 로그인 API
 
