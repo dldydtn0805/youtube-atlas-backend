@@ -22,15 +22,20 @@ import com.yongsoo.youtubeatlasbackend.game.api.MarketVideoResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPositionResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.WalletResponse;
+import com.yongsoo.youtubeatlasbackend.trending.TrendRun;
+import com.yongsoo.youtubeatlasbackend.trending.TrendRunRepository;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalId;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshot;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotRepository;
 
 @Service
 public class GameService {
 
     private static final String TRENDING_CATEGORY_ID = "0";
     private static final long STAKE_UNIT_POINTS = 1_000L;
+    private static final int DEFAULT_FALLBACK_RANK = 201;
 
     private final GameSeasonRepository gameSeasonRepository;
     private final GameWalletRepository gameWalletRepository;
@@ -38,6 +43,8 @@ public class GameService {
     private final GameLedgerRepository gameLedgerRepository;
     private final AppUserRepository appUserRepository;
     private final TrendSignalRepository trendSignalRepository;
+    private final TrendRunRepository trendRunRepository;
+    private final TrendSnapshotRepository trendSnapshotRepository;
     private final Clock clock;
 
     public GameService(
@@ -47,6 +54,8 @@ public class GameService {
         GameLedgerRepository gameLedgerRepository,
         AppUserRepository appUserRepository,
         TrendSignalRepository trendSignalRepository,
+        TrendRunRepository trendRunRepository,
+        TrendSnapshotRepository trendSnapshotRepository,
         Clock clock
     ) {
         this.gameSeasonRepository = gameSeasonRepository;
@@ -55,6 +64,8 @@ public class GameService {
         this.gameLedgerRepository = gameLedgerRepository;
         this.appUserRepository = appUserRepository;
         this.trendSignalRepository = trendSignalRepository;
+        this.trendRunRepository = trendRunRepository;
+        this.trendSnapshotRepository = trendSnapshotRepository;
         this.clock = clock;
     }
 
@@ -237,10 +248,10 @@ public class GameService {
             throw new IllegalArgumentException("최소 보유 시간이 지나야 매도할 수 있습니다.");
         }
 
-        TrendSignal signal = requireTrendSignal(position.getRegionCode(), position.getCategoryId(), position.getVideoId());
+        SellSnapshot sellSnapshot = resolveSellSnapshot(position);
         GameWallet wallet = gameWalletRepository.findBySeasonIdAndUserId(position.getSeason().getId(), authenticatedUser.id())
             .orElseThrow(() -> new IllegalArgumentException("지갑 정보를 찾을 수 없습니다."));
-        int rankDiff = position.getBuyRank() - signal.getCurrentRank();
+        int rankDiff = position.getBuyRank() - sellSnapshot.rank();
         long pnlPoints = GamePointCalculator.calculateProfitPoints(
             position.getStakePoints(),
             position.getSeason().getRankPointMultiplier(),
@@ -248,9 +259,9 @@ public class GameService {
         );
         long settledPoints = GamePointCalculator.calculateSettledPoints(position.getStakePoints(), pnlPoints);
 
-        position.setSellRunId(signal.getCurrentRunId());
-        position.setSellRank(signal.getCurrentRank());
-        position.setSellCapturedAt(signal.getCapturedAt());
+        position.setSellRunId(sellSnapshot.runId());
+        position.setSellRank(sellSnapshot.rank());
+        position.setSellCapturedAt(sellSnapshot.capturedAt());
         position.setRankDiff(rankDiff);
         position.setPnlPoints(pnlPoints);
         position.setSettledPoints(settledPoints);
@@ -316,12 +327,9 @@ public class GameService {
 
     private PositionResponse toPositionResponse(GamePosition position) {
         if (position.getStatus() == PositionStatus.OPEN) {
-            TrendSignal signal = trendSignalRepository.findById(
-                new TrendSignalId(position.getRegionCode(), position.getCategoryId(), position.getVideoId())
-            ).orElse(null);
-
-            if (signal != null) {
-                return toOpenPositionResponse(position, signal);
+            OpenPositionSnapshot snapshot = resolveOpenPositionSnapshot(position);
+            if (snapshot != null) {
+                return toOpenPositionResponse(position, snapshot);
             }
         }
 
@@ -336,6 +344,7 @@ public class GameService {
             position.getRankDiff(),
             position.getStakePoints(),
             position.getPnlPoints(),
+            false,
             position.getStatus().name(),
             position.getBuyCapturedAt(),
             position.getCreatedAt(),
@@ -344,7 +353,14 @@ public class GameService {
     }
 
     private PositionResponse toOpenPositionResponse(GamePosition position, TrendSignal signal) {
-        int rankDiff = position.getBuyRank() - signal.getCurrentRank();
+        return toOpenPositionResponse(
+            position,
+            new OpenPositionSnapshot(signal.getCurrentRank(), signal.getCapturedAt(), false)
+        );
+    }
+
+    private PositionResponse toOpenPositionResponse(GamePosition position, OpenPositionSnapshot snapshot) {
+        int rankDiff = position.getBuyRank() - snapshot.currentRank();
         long profitPoints = GamePointCalculator.calculateProfitPoints(
             position.getStakePoints(),
             position.getSeason().getRankPointMultiplier(),
@@ -358,10 +374,11 @@ public class GameService {
             position.getChannelTitle(),
             position.getThumbnailUrl(),
             position.getBuyRank(),
-            signal.getCurrentRank(),
+            snapshot.currentRank(),
             rankDiff,
             position.getStakePoints(),
             profitPoints,
+            snapshot.chartOut(),
             position.getStatus().name(),
             position.getBuyCapturedAt(),
             position.getCreatedAt(),
@@ -479,6 +496,116 @@ public class GameService {
             .orElseThrow(() -> new IllegalArgumentException("현재 거래 가능한 랭킹 정보를 찾을 수 없습니다."));
     }
 
+    private SellSnapshot resolveSellSnapshot(GamePosition position) {
+        TrendSignalId signalId = new TrendSignalId(position.getRegionCode(), position.getCategoryId(), position.getVideoId());
+        TrendSignal signal = trendSignalRepository.findById(signalId).orElse(null);
+        if (signal != null) {
+            return new SellSnapshot(signal.getCurrentRunId(), signal.getCurrentRank(), signal.getCapturedAt());
+        }
+
+        LatestTrendRun latestTrendRun = getLatestTrendRun(position.getRegionCode(), position.getCategoryId());
+        if (latestTrendRun == null) {
+            throw manualSellUnavailable();
+        }
+
+        TrendSnapshot latestSnapshot = latestTrendRun.snapshots().stream()
+            .filter(snapshot -> snapshot.getVideoId().equals(position.getVideoId()))
+            .findFirst()
+            .orElse(null);
+        if (latestSnapshot != null) {
+            return new SellSnapshot(latestTrendRun.run().getId(), latestSnapshot.getRank(), latestTrendRun.run().getCapturedAt());
+        }
+
+        ensureLatestRunLooksHealthy(
+            position.getRegionCode(),
+            position.getCategoryId(),
+            latestTrendRun.run().getId(),
+            latestTrendRun.snapshots().size()
+        );
+
+        int fallbackRank = latestTrendRun.snapshots().stream()
+            .map(TrendSnapshot::getRank)
+            .max(Integer::compareTo)
+            .map(rank -> rank + 1)
+            .orElse(DEFAULT_FALLBACK_RANK);
+        return new SellSnapshot(latestTrendRun.run().getId(), fallbackRank, latestTrendRun.run().getCapturedAt());
+    }
+
+    private OpenPositionSnapshot resolveOpenPositionSnapshot(GamePosition position) {
+        TrendSignalId signalId = new TrendSignalId(position.getRegionCode(), position.getCategoryId(), position.getVideoId());
+        TrendSignal signal = trendSignalRepository.findById(signalId).orElse(null);
+        if (signal != null) {
+            return new OpenPositionSnapshot(signal.getCurrentRank(), signal.getCapturedAt(), false);
+        }
+
+        LatestTrendRun latestTrendRun = getLatestTrendRun(position.getRegionCode(), position.getCategoryId());
+        if (latestTrendRun == null) {
+            return null;
+        }
+
+        TrendSnapshot latestSnapshot = latestTrendRun.snapshots().stream()
+            .filter(snapshot -> snapshot.getVideoId().equals(position.getVideoId()))
+            .findFirst()
+            .orElse(null);
+        if (latestSnapshot != null) {
+            return new OpenPositionSnapshot(latestSnapshot.getRank(), latestTrendRun.run().getCapturedAt(), false);
+        }
+
+        if (!latestRunLooksHealthy(
+            position.getRegionCode(),
+            position.getCategoryId(),
+            latestTrendRun.run().getId(),
+            latestTrendRun.snapshots().size()
+        )) {
+            return null;
+        }
+
+        int fallbackRank = latestTrendRun.snapshots().stream()
+            .map(TrendSnapshot::getRank)
+            .max(Integer::compareTo)
+            .map(rank -> rank + 1)
+            .orElse(DEFAULT_FALLBACK_RANK);
+        return new OpenPositionSnapshot(fallbackRank, latestTrendRun.run().getCapturedAt(), true);
+    }
+
+    private LatestTrendRun getLatestTrendRun(String regionCode, String categoryId) {
+        TrendRun latestRun = trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc(regionCode, categoryId).orElse(null);
+        if (latestRun == null) {
+            return null;
+        }
+
+        List<TrendSnapshot> latestSnapshots = trendSnapshotRepository.findByRunId(latestRun.getId());
+        if (latestSnapshots.isEmpty()) {
+            return null;
+        }
+
+        return new LatestTrendRun(latestRun, latestSnapshots);
+    }
+
+    private void ensureLatestRunLooksHealthy(String regionCode, String categoryId, Long latestRunId, int latestSnapshotCount) {
+        if (!latestRunLooksHealthy(regionCode, categoryId, latestRunId, latestSnapshotCount)) {
+            throw manualSellUnavailable();
+        }
+    }
+
+    private boolean latestRunLooksHealthy(String regionCode, String categoryId, Long latestRunId, int latestSnapshotCount) {
+        TrendRun previousRun = trendRunRepository.findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc(
+            regionCode,
+            categoryId,
+            latestRunId
+        ).orElse(null);
+        if (previousRun == null) {
+            return true;
+        }
+
+        int previousSnapshotCount = trendSnapshotRepository.findByRunId(previousRun.getId()).size();
+        return previousSnapshotCount <= 0 || latestSnapshotCount * 2 >= previousSnapshotCount;
+    }
+
+    private IllegalArgumentException manualSellUnavailable() {
+        return new IllegalArgumentException("현재 랭킹 동기화 상태를 확인할 수 없어 수동 매도할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+    }
+
     private long normalizeStakePoints(Long stakePoints) {
         if (stakePoints == null || stakePoints < STAKE_UNIT_POINTS) {
             throw new IllegalArgumentException("stakePoints는 1000 이상이어야 합니다.");
@@ -538,5 +665,14 @@ public class GameService {
         Long unrealizedPnlPoints,
         Integer openPositionCount
     ) {
+    }
+
+    private record SellSnapshot(Long runId, int rank, Instant capturedAt) {
+    }
+
+    private record OpenPositionSnapshot(int currentRank, Instant capturedAt, boolean chartOut) {
+    }
+
+    private record LatestTrendRun(TrendRun run, List<TrendSnapshot> snapshots) {
     }
 }

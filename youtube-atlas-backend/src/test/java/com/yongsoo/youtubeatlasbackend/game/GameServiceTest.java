@@ -21,9 +21,13 @@ import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.game.api.CreatePositionRequest;
+import com.yongsoo.youtubeatlasbackend.trending.TrendRun;
+import com.yongsoo.youtubeatlasbackend.trending.TrendRunRepository;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalId;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshot;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotRepository;
 
 class GameServiceTest {
 
@@ -33,6 +37,8 @@ class GameServiceTest {
     private GameLedgerRepository gameLedgerRepository;
     private AppUserRepository appUserRepository;
     private TrendSignalRepository trendSignalRepository;
+    private TrendRunRepository trendRunRepository;
+    private TrendSnapshotRepository trendSnapshotRepository;
     private GameService gameService;
 
     @BeforeEach
@@ -43,6 +49,8 @@ class GameServiceTest {
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
         appUserRepository = org.mockito.Mockito.mock(AppUserRepository.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
+        trendRunRepository = org.mockito.Mockito.mock(TrendRunRepository.class);
+        trendSnapshotRepository = org.mockito.Mockito.mock(TrendSnapshotRepository.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-01T06:00:00Z"), ZoneOffset.UTC);
 
         gameService = new GameService(
@@ -52,6 +60,8 @@ class GameServiceTest {
             gameLedgerRepository,
             appUserRepository,
             trendSignalRepository,
+            trendRunRepository,
+            trendSnapshotRepository,
             fixedClock
         );
     }
@@ -135,6 +145,75 @@ class GameServiceTest {
         assertThat(response.balancePoints()).isEqualTo(12_400L);
         assertThat(wallet.getReservedPoints()).isZero();
         assertThat(wallet.getRealizedPnlPoints()).isEqualTo(2_400L);
+    }
+
+    @Test
+    void sellUsesFallbackRankWhenLatestRunLooksHealthy() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 8_000L, 2_000L, 0L);
+        GamePosition position = openPosition(season, appUser, "video-1", 20, 2_000L, Instant.parse("2026-04-01T05:45:00Z"));
+        TrendRun latestRun = trendRun(55L, Instant.parse("2026-04-01T06:00:00Z"));
+        TrendRun previousRun = trendRun(54L, Instant.parse("2026-04-01T05:00:00Z"));
+
+        when(gamePositionRepository.findByIdAndUserId(300L, 7L)).thenReturn(Optional.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.empty());
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0")).thenReturn(Optional.of(latestRun));
+        when(trendSnapshotRepository.findByRunId(55L)).thenReturn(List.of(
+            snapshot(latestRun, "video-2", 8),
+            snapshot(latestRun, "video-3", 12)
+        ));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc("KR", "0", 55L))
+            .thenReturn(Optional.of(previousRun));
+        when(trendSnapshotRepository.findByRunId(54L)).thenReturn(List.of(
+            snapshot(previousRun, "video-1", 19),
+            snapshot(previousRun, "video-2", 7),
+            snapshot(previousRun, "video-3", 11)
+        ));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.save(position)).thenReturn(position);
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = gameService.sell(authenticatedUser(), 300L);
+
+        assertThat(response.sellRank()).isEqualTo(13);
+        assertThat(response.rankDiff()).isEqualTo(7);
+        assertThat(response.pnlPoints()).isEqualTo(1_400L);
+        assertThat(response.settledPoints()).isEqualTo(3_400L);
+        assertThat(response.balancePoints()).isEqualTo(11_400L);
+    }
+
+    @Test
+    void sellRejectsWhenLatestRunLooksUnstable() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 8_000L, 2_000L, 0L);
+        GamePosition position = openPosition(season, appUser, "video-1", 20, 2_000L, Instant.parse("2026-04-01T05:45:00Z"));
+        TrendRun latestRun = trendRun(55L, Instant.parse("2026-04-01T06:00:00Z"));
+        TrendRun previousRun = trendRun(54L, Instant.parse("2026-04-01T05:00:00Z"));
+
+        when(gamePositionRepository.findByIdAndUserId(300L, 7L)).thenReturn(Optional.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.empty());
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0")).thenReturn(Optional.of(latestRun));
+        when(trendSnapshotRepository.findByRunId(55L)).thenReturn(List.of(
+            snapshot(latestRun, "video-2", 8),
+            snapshot(latestRun, "video-3", 12)
+        ));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc("KR", "0", 55L))
+            .thenReturn(Optional.of(previousRun));
+        when(trendSnapshotRepository.findByRunId(54L)).thenReturn(List.of(
+            snapshot(previousRun, "video-1", 19),
+            snapshot(previousRun, "video-2", 7),
+            snapshot(previousRun, "video-3", 11),
+            snapshot(previousRun, "video-4", 15),
+            snapshot(previousRun, "video-5", 16)
+        ));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+
+        assertThatThrownBy(() -> gameService.sell(authenticatedUser(), 300L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("현재 랭킹 동기화 상태를 확인할 수 없어 수동 매도할 수 없습니다. 잠시 후 다시 시도해 주세요.");
     }
 
     @Test
@@ -308,5 +387,33 @@ class GameServiceTest {
         signal.setCapturedAt(Instant.parse("2026-04-01T06:00:00Z"));
         signal.setUpdatedAt(Instant.parse("2026-04-01T06:00:00Z"));
         return signal;
+    }
+
+    private TrendRun trendRun(Long id, Instant capturedAt) {
+        TrendRun run = new TrendRun();
+        ReflectionTestUtils.setField(run, "id", id);
+        run.setRegionCode("KR");
+        run.setCategoryId("0");
+        run.setCategoryLabel("전체");
+        run.setSourceCategoryIds(List.of());
+        run.setSource("youtube-mostPopular");
+        run.setCapturedAt(capturedAt);
+        return run;
+    }
+
+    private TrendSnapshot snapshot(TrendRun run, String videoId, int rank) {
+        TrendSnapshot snapshot = new TrendSnapshot();
+        snapshot.setRun(run);
+        snapshot.setRegionCode("KR");
+        snapshot.setCategoryId("0");
+        snapshot.setVideoId(videoId);
+        snapshot.setRank(rank);
+        snapshot.setTitle("Title " + videoId);
+        snapshot.setChannelTitle("Channel");
+        snapshot.setChannelId("channel-1");
+        snapshot.setThumbnailUrl("https://example.com/" + videoId + ".jpg");
+        snapshot.setViewCount(5_000L);
+        snapshot.setCreatedAt(run.getCapturedAt());
+        return snapshot;
     }
 }

@@ -13,6 +13,7 @@ public record PositionResponse(
     Integer rankDiff,
     Long stakePoints,
     Long profitPoints,
+    boolean chartOut,
     String status,
     Instant buyCapturedAt,
     Instant createdAt,
