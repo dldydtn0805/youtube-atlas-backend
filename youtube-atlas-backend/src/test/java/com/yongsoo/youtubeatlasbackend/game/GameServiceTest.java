@@ -369,6 +369,7 @@ class GameServiceTest {
             GamePointCalculator.calculatePricePoints(170),
             Instant.parse("2026-04-01T05:45:00Z")
         );
+        TrendRun preBuyRun = trendRun(10L, Instant.parse("2026-04-01T05:30:00Z"));
         TrendRun buyRun = trendRun(11L, Instant.parse("2026-04-01T05:40:00Z"));
         TrendRun middleRun = trendRun(12L, Instant.parse("2026-04-01T05:50:00Z"));
         TrendRun sellRun = trendRun(13L, Instant.parse("2026-04-01T06:00:00Z"));
@@ -380,15 +381,18 @@ class GameServiceTest {
         position.setClosedAt(Instant.parse("2026-04-01T06:01:00Z"));
 
         when(gamePositionRepository.findByIdAndUserId(300L, 7L)).thenReturn(Optional.of(position));
-        when(trendRunRepository.findByRegionCodeAndCategoryIdAndIdBetweenOrderByIdAsc("KR", "0", 11L, 13L))
-            .thenReturn(List.of(buyRun, middleRun, sellRun));
+        when(trendSnapshotRepository.findFirstByRegionCodeAndCategoryIdAndVideoIdOrderByRun_IdAsc("KR", "0", "video-1"))
+            .thenReturn(Optional.of(snapshot(preBuyRun, "video-1", 181)));
+        when(trendRunRepository.findByRegionCodeAndCategoryIdAndIdBetweenOrderByIdAsc("KR", "0", 10L, 13L))
+            .thenReturn(List.of(preBuyRun, buyRun, middleRun, sellRun));
         when(trendSnapshotRepository.findByRegionCodeAndCategoryIdAndVideoIdAndRun_IdBetweenOrderByRun_IdAsc(
             "KR",
             "0",
             "video-1",
-            11L,
+            10L,
             13L
         )).thenReturn(List.of(
+            snapshot(preBuyRun, "video-1", 181),
             snapshot(buyRun, "video-1", 170),
             snapshot(middleRun, "video-1", 161),
             snapshot(sellRun, "video-1", 150)
@@ -399,11 +403,13 @@ class GameServiceTest {
         assertThat(response.positionId()).isEqualTo(300L);
         assertThat(response.latestRank()).isEqualTo(150);
         assertThat(response.latestChartOut()).isFalse();
-        assertThat(response.points()).hasSize(3);
-        assertThat(response.points().get(0).buyPoint()).isTrue();
-        assertThat(response.points().get(1).rank()).isEqualTo(161);
-        assertThat(response.points().get(2).sellPoint()).isTrue();
-        assertThat(response.points().get(2).chartOut()).isFalse();
+        assertThat(response.points()).hasSize(4);
+        assertThat(response.points().get(0).buyPoint()).isFalse();
+        assertThat(response.points().get(0).rank()).isEqualTo(181);
+        assertThat(response.points().get(1).buyPoint()).isTrue();
+        assertThat(response.points().get(2).rank()).isEqualTo(161);
+        assertThat(response.points().get(3).sellPoint()).isTrue();
+        assertThat(response.points().get(3).chartOut()).isFalse();
     }
 
     @Test
@@ -422,6 +428,8 @@ class GameServiceTest {
         TrendRun latestRun = trendRun(12L, Instant.parse("2026-04-01T06:00:00Z"));
 
         when(gamePositionRepository.findByIdAndUserId(300L, 7L)).thenReturn(Optional.of(position));
+        when(trendSnapshotRepository.findFirstByRegionCodeAndCategoryIdAndVideoIdOrderByRun_IdAsc("KR", "0", "video-1"))
+            .thenReturn(Optional.of(snapshot(buyRun, "video-1", 170)));
         when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.empty());
         when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0")).thenReturn(Optional.of(latestRun));
         when(trendSnapshotRepository.findByRunId(12L)).thenReturn(List.of(

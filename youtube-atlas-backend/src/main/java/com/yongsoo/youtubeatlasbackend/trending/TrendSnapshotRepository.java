@@ -1,6 +1,7 @@
 package com.yongsoo.youtubeatlasbackend.trending;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -20,5 +21,11 @@ public interface TrendSnapshotRepository extends JpaRepository<TrendSnapshot, Lo
         String videoId,
         Long startRunId,
         Long endRunId
+    );
+
+    Optional<TrendSnapshot> findFirstByRegionCodeAndCategoryIdAndVideoIdOrderByRun_IdAsc(
+        String regionCode,
+        String categoryId,
+        String videoId
     );
 }

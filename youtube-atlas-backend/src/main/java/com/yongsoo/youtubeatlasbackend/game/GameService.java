@@ -465,9 +465,11 @@ public class GameService {
     }
 
     private PositionHistoryWindow resolvePositionHistoryWindow(GamePosition position) {
+        long startRunId = resolvePositionHistoryStartRunId(position);
+
         if (position.getStatus() != PositionStatus.OPEN) {
             return new PositionHistoryWindow(
-                position.getBuyRunId(),
+                startRunId,
                 position.getSellRunId() != null ? position.getSellRunId() : position.getBuyRunId(),
                 position.getSellRank(),
                 position.getSellCapturedAt() != null ? position.getSellCapturedAt() : position.getBuyCapturedAt()
@@ -478,7 +480,7 @@ public class GameService {
         TrendSignal signal = trendSignalRepository.findById(signalId).orElse(null);
         if (signal != null) {
             return new PositionHistoryWindow(
-                position.getBuyRunId(),
+                startRunId,
                 signal.getCurrentRunId(),
                 signal.getCurrentRank(),
                 signal.getCapturedAt()
@@ -488,7 +490,7 @@ public class GameService {
         LatestTrendRun latestTrendRun = getLatestTrendRun(position.getRegionCode(), position.getCategoryId());
         if (latestTrendRun == null) {
             return new PositionHistoryWindow(
-                position.getBuyRunId(),
+                startRunId,
                 position.getBuyRunId(),
                 position.getBuyRank(),
                 position.getBuyCapturedAt()
@@ -497,11 +499,19 @@ public class GameService {
 
         OpenPositionSnapshot openPositionSnapshot = resolveOpenPositionSnapshot(position);
         return new PositionHistoryWindow(
-            position.getBuyRunId(),
+            startRunId,
             latestTrendRun.run().getId(),
             openPositionSnapshot != null ? openPositionSnapshot.currentRank() : position.getBuyRank(),
             openPositionSnapshot != null ? openPositionSnapshot.capturedAt() : latestTrendRun.run().getCapturedAt()
         );
+    }
+
+    private long resolvePositionHistoryStartRunId(GamePosition position) {
+        return trendSnapshotRepository.findFirstByRegionCodeAndCategoryIdAndVideoIdOrderByRun_IdAsc(
+            position.getRegionCode(),
+            position.getCategoryId(),
+            position.getVideoId()
+        ).map(snapshot -> snapshot.getRun().getId()).orElse(position.getBuyRunId());
     }
 
     private GameSeason requireActiveSeason() {
