@@ -37,6 +37,11 @@ public class TrendingController {
         return trendingService.getRealtimeSurging(regionCode);
     }
 
+    @GetMapping("/new-entries")
+    public NewChartEntriesResponse getNewChartEntries(@RequestParam String regionCode) {
+        return trendingService.getNewChartEntries(regionCode);
+    }
+
     @GetMapping("/videos/{videoId}/history")
     public VideoRankHistoryResponse getVideoHistory(
         @RequestParam String regionCode,

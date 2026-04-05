@@ -3,6 +3,7 @@ package com.yongsoo.youtubeatlasbackend.trending;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 public interface TrendSignalRepository extends JpaRepository<TrendSignal, TrendSignalId> {
 
@@ -21,4 +22,14 @@ public interface TrendSignalRepository extends JpaRepository<TrendSignal, TrendS
         String categoryId,
         Integer rankChange
     );
+
+    @Query("""
+        select signal
+        from TrendSignal signal
+        where signal.id.regionCode = :regionCode
+          and signal.id.categoryId = :categoryId
+          and signal.isNew = true
+        order by signal.currentRank asc
+        """)
+    List<TrendSignal> findNewEntriesByRegionCodeAndCategoryId(String regionCode, String categoryId);
 }

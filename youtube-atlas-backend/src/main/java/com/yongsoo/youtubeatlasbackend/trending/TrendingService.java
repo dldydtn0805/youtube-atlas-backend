@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
+import com.yongsoo.youtubeatlasbackend.trending.api.NewChartEntriesResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.RealtimeSurgingResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.SyncTrendingRequest;
 import com.yongsoo.youtubeatlasbackend.trending.api.SyncTrendingResponse;
@@ -81,13 +82,7 @@ public class TrendingService {
             .map(this::toResponse)
             .toList();
 
-        Instant capturedAt = items.stream()
-            .map(TrendSignalResponse::capturedAt)
-            .findFirst()
-            .orElseGet(() -> trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc(
-                normalizedRegionCode,
-                TRENDING_CATEGORY_ID
-            ).map(TrendRun::getCapturedAt).orElse(null));
+        Instant capturedAt = resolveLatestCapturedAt(normalizedRegionCode, items);
 
         return new RealtimeSurgingResponse(
             normalizedRegionCode,
@@ -96,6 +91,26 @@ public class TrendingService {
             rankChangeThreshold,
             items.size(),
             capturedAt,
+            items
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public NewChartEntriesResponse getNewChartEntries(String regionCode) {
+        String normalizedRegionCode = regionCode.trim().toUpperCase();
+        List<TrendSignalResponse> items = trendSignalRepository.findNewEntriesByRegionCodeAndCategoryId(
+            normalizedRegionCode,
+            TRENDING_CATEGORY_ID
+        ).stream()
+            .map(this::toResponse)
+            .toList();
+
+        return new NewChartEntriesResponse(
+            normalizedRegionCode,
+            TRENDING_CATEGORY_ID,
+            TRENDING_CATEGORY_LABEL,
+            items.size(),
+            resolveLatestCapturedAt(normalizedRegionCode, items),
             items
         );
     }
@@ -324,6 +339,16 @@ public class TrendingService {
             signal.getThumbnailUrl(),
             signal.getCapturedAt()
         );
+    }
+
+    private Instant resolveLatestCapturedAt(String regionCode, List<TrendSignalResponse> items) {
+        return items.stream()
+            .map(TrendSignalResponse::capturedAt)
+            .findFirst()
+            .orElseGet(() -> trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc(
+                regionCode,
+                TRENDING_CATEGORY_ID
+            ).map(TrendRun::getCapturedAt).orElse(null));
     }
 
     public SyncTrendingResponse syncAllCategory(String regionCode) {

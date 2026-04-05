@@ -117,6 +117,51 @@ class TrendingServiceTest {
     }
 
     @Test
+    void getNewChartEntriesUsesAllCategoryId() {
+        Instant capturedAt = Instant.parse("2026-04-01T05:30:00Z");
+        TrendSignal signal = trendSignal("KR", "0", "video-2", 7, null, "New entry", capturedAt);
+        signal.setNew(true);
+        signal.setPreviousRank(null);
+
+        when(trendSignalRepository.findNewEntriesByRegionCodeAndCategoryId("KR", "0"))
+            .thenReturn(List.of(signal));
+
+        var response = trendingService.getNewChartEntries("kr");
+
+        verify(trendSignalRepository).findNewEntriesByRegionCodeAndCategoryId("KR", "0");
+        assertThat(response.regionCode()).isEqualTo("KR");
+        assertThat(response.categoryId()).isEqualTo("0");
+        assertThat(response.totalCount()).isEqualTo(1);
+        assertThat(response.capturedAt()).isEqualTo(capturedAt);
+        assertThat(response.items()).singleElement().satisfies(item -> {
+            assertThat(item.videoId()).isEqualTo("video-2");
+            assertThat(item.isNew()).isTrue();
+        });
+    }
+
+    @Test
+    void getNewChartEntriesFallsBackToLatestRunCapturedAtWhenEmpty() {
+        TrendRun latestRun = new TrendRun();
+        latestRun.setRegionCode("KR");
+        latestRun.setCategoryId("0");
+        latestRun.setCategoryLabel("전체");
+        latestRun.setSourceCategoryIds(List.of());
+        latestRun.setSource("youtube-mostPopular");
+        latestRun.setCapturedAt(Instant.parse("2026-04-01T06:00:00Z"));
+
+        when(trendSignalRepository.findNewEntriesByRegionCodeAndCategoryId("KR", "0"))
+            .thenReturn(List.of());
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0"))
+            .thenReturn(Optional.of(latestRun));
+
+        var response = trendingService.getNewChartEntries("KR");
+
+        assertThat(response.items()).isEmpty();
+        assertThat(response.totalCount()).isZero();
+        assertThat(response.capturedAt()).isEqualTo(latestRun.getCapturedAt());
+    }
+
+    @Test
     void getVideoHistoryReturnsObservedHistoryAndCurrentChartOut() {
         TrendRun firstRun = trendRun(11L, Instant.parse("2026-04-01T05:00:00Z"));
         TrendRun latestRun = trendRun(12L, Instant.parse("2026-04-01T06:00:00Z"));
@@ -186,7 +231,7 @@ class TrendingServiceTest {
         String categoryId,
         String videoId,
         int currentRank,
-        int rankChange,
+        Integer rankChange,
         String title,
         Instant capturedAt
     ) {
@@ -196,11 +241,11 @@ class TrendingServiceTest {
         signal.setCurrentRunId(1L);
         signal.setPreviousRunId(2L);
         signal.setCurrentRank(currentRank);
-        signal.setPreviousRank(currentRank + rankChange);
+        signal.setPreviousRank(rankChange != null ? currentRank + rankChange : null);
         signal.setRankChange(rankChange);
         signal.setCurrentViewCount(100L);
-        signal.setPreviousViewCount(90L);
-        signal.setViewCountDelta(10L);
+        signal.setPreviousViewCount(rankChange != null ? 90L : null);
+        signal.setViewCountDelta(rankChange != null ? 10L : null);
         signal.setNew(false);
         signal.setTitle(title);
         signal.setChannelTitle("Channel");
