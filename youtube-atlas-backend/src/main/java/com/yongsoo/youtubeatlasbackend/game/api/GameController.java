@@ -48,6 +48,14 @@ public class GameController {
         return gameService.getLeaderboard(authService.requireCurrentUser(authorizationHeader));
     }
 
+    @GetMapping("/leaderboard/{userId}/positions")
+    public List<PositionResponse> getLeaderboardPositions(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @PathVariable Long userId
+    ) {
+        return gameService.getLeaderboardPositions(authService.requireCurrentUser(authorizationHeader), userId);
+    }
+
     @GetMapping("/positions/me")
     public List<PositionResponse> getMyPositions(
         @RequestHeader("Authorization") String authorizationHeader,

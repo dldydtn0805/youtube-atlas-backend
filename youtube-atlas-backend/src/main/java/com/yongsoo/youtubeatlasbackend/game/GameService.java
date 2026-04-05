@@ -154,6 +154,24 @@ public class GameService {
         return toLeaderboardResponses(snapshots, authenticatedUser.id());
     }
 
+    @Transactional(readOnly = true)
+    public List<PositionResponse> getLeaderboardPositions(AuthenticatedUser authenticatedUser, Long userId) {
+        GameSeason season = requireActiveSeason();
+        getOrCreateWallet(season, authenticatedUser);
+
+        if (userId == null) {
+            throw new IllegalArgumentException("userId는 필수입니다.");
+        }
+
+        return gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(
+            season.getId(),
+            userId,
+            PositionStatus.OPEN
+        ).stream()
+            .map(this::toPositionResponse)
+            .toList();
+    }
+
     @Transactional
     public PositionResponse buy(AuthenticatedUser authenticatedUser, CreatePositionRequest request) {
         GameSeason season = requireActiveSeason();
