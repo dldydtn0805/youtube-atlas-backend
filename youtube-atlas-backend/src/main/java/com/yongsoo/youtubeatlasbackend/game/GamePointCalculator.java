@@ -68,6 +68,26 @@ final class GamePointCalculator {
         return Math.max(0L, currentPricePoints);
     }
 
+    static int estimateRankForPricePoints(long pricePoints) {
+        if (pricePoints <= 0L) {
+            return 201;
+        }
+
+        int closestRank = 1;
+        long closestDifference = Long.MAX_VALUE;
+
+        for (int rank = 1; rank <= 200; rank++) {
+            long candidatePricePoints = calculatePricePoints(rank);
+            long difference = Math.abs(candidatePricePoints - pricePoints);
+            if (difference < closestDifference) {
+                closestDifference = difference;
+                closestRank = rank;
+            }
+        }
+
+        return closestRank;
+    }
+
     private static long interpolateGeometrically(PriceAnchor betterAnchor, PriceAnchor worseAnchor, int rank) {
         if (betterAnchor.rank() == worseAnchor.rank()) {
             return betterAnchor.pricePoints();

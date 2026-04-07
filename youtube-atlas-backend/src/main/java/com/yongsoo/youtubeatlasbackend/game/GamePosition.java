@@ -62,6 +62,9 @@ public class GamePosition {
     @Column(name = "stake_points", nullable = false)
     private Long stakePoints;
 
+    @Column(nullable = false)
+    private Integer quantity;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private PositionStatus status;
@@ -188,6 +191,14 @@ public class GamePosition {
 
     public void setStakePoints(Long stakePoints) {
         this.stakePoints = stakePoints;
+    }
+
+    public Integer getQuantity() {
+        return quantity;
+    }
+
+    public void setQuantity(Integer quantity) {
+        this.quantity = quantity;
     }
 
     public PositionStatus getStatus() {

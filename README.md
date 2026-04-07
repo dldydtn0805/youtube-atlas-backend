@@ -25,6 +25,14 @@ cd youtube-atlas-backend
 ./gradlew bootRun
 ```
 
+로컬 시크릿을 파일로 관리하면서 실행하려면:
+
+```bash
+cp youtube-atlas-backend/.env.local.example youtube-atlas-backend/.env.local
+# .env.local 에 로컬 시크릿 입력
+./scripts/boot-local.sh
+```
+
 테스트:
 
 ```bash
@@ -51,6 +59,7 @@ PORT=8080
 DB_URL=jdbc:postgresql://localhost:5432/youtube_atlas
 DB_USERNAME=postgres
 DB_PASSWORD=postgres
+SPRING_JPA_HIBERNATE_DDL_AUTO=update
 ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 YOUTUBE_CATEGORY_LANGUAGE=ko
 AUTH_SESSION_TTL_DAYS=30
@@ -62,6 +71,7 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 ```
 
 - `DB_*`를 비워 두면 로컬에서는 H2 인메모리 DB로 실행됩니다.
+- 배포 DB에 로컬 앱을 직접 붙일 때는 `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` 또는 `none` 으로 두는 편이 안전합니다.
 - `ALLOWED_ORIGINS` 기본값에는 로컬 개발 주소와 Vercel 배포 주소 패턴이 포함됩니다.
 - `GOOGLE_CLIENT_ID` 는 프론트의 Google OAuth Client ID와 동일해야 합니다.
 - `GOOGLE_CLIENT_SECRET` 는 같은 Google OAuth Web Client의 secret 이어야 합니다.

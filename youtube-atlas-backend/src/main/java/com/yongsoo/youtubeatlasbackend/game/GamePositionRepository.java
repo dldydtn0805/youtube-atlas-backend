@@ -4,7 +4,10 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+
+import jakarta.persistence.LockModeType;
 
 public interface GamePositionRepository extends JpaRepository<GamePosition, Long> {
 
@@ -23,9 +26,35 @@ public interface GamePositionRepository extends JpaRepository<GamePosition, Long
 
     Optional<GamePosition> findByIdAndUserId(Long id, Long userId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        select position
+        from GamePosition position
+        where position.id = :id
+          and position.user.id = :userId
+    """)
+    Optional<GamePosition> findByIdAndUserIdForUpdate(Long id, Long userId);
+
     List<GamePosition> findBySeasonIdAndUserIdOrderByCreatedAtDesc(Long seasonId, Long userId);
 
     List<GamePosition> findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAsc(
+        Long seasonId,
+        Long userId,
+        String videoId,
+        PositionStatus status
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        select position
+        from GamePosition position
+        where position.season.id = :seasonId
+          and position.user.id = :userId
+          and position.videoId = :videoId
+          and position.status = :status
+        order by position.createdAt asc
+    """)
+    List<GamePosition> findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(
         Long seasonId,
         Long userId,
         String videoId,

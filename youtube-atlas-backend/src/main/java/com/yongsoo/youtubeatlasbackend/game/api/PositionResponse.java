@@ -11,6 +11,7 @@ public record PositionResponse(
     Integer buyRank,
     Integer currentRank,
     Integer rankDiff,
+    Integer quantity,
     Long stakePoints,
     Long currentPricePoints,
     Long profitPoints,

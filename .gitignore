@@ -1,3 +1,8 @@
 .DS_Store
 **/.DS_Store
 .idea/
+.env
+.env.local
+.envrc
+youtube-atlas-backend/.env
+youtube-atlas-backend/.env.local

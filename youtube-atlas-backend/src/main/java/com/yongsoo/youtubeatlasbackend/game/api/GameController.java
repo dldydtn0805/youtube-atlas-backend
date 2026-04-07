@@ -59,9 +59,10 @@ public class GameController {
     @GetMapping("/positions/me")
     public List<PositionResponse> getMyPositions(
         @RequestHeader("Authorization") String authorizationHeader,
-        @RequestParam(required = false) String status
+        @RequestParam(required = false) String status,
+        @RequestParam(required = false) Integer limit
     ) {
-        return gameService.getMyPositions(authService.requireCurrentUser(authorizationHeader), status);
+        return gameService.getMyPositions(authService.requireCurrentUser(authorizationHeader), status, limit);
     }
 
     @GetMapping("/positions/{positionId}/rank-history")
