@@ -7,6 +7,7 @@ public record AdminUserSummaryResponse(
     String email,
     String displayName,
     String pictureUrl,
+    boolean admin,
     Instant createdAt,
     Instant lastLoginAt
 ) {

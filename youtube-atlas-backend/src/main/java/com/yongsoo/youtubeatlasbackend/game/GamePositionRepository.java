@@ -1,5 +1,6 @@
 package com.yongsoo.youtubeatlasbackend.game;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -12,6 +13,8 @@ import jakarta.persistence.LockModeType;
 public interface GamePositionRepository extends JpaRepository<GamePosition, Long> {
 
     long countBySeasonIdAndUserIdAndStatus(Long seasonId, Long userId, PositionStatus status);
+
+    long countBySeasonIdAndUserIdAndStatusIn(Long seasonId, Long userId, Collection<PositionStatus> statuses);
 
     long countBySeasonIdAndUserIdAndVideoIdAndStatus(Long seasonId, Long userId, String videoId, PositionStatus status);
 
@@ -64,4 +67,6 @@ public interface GamePositionRepository extends JpaRepository<GamePosition, Long
     List<GamePosition> findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(Long seasonId, Long userId, PositionStatus status);
 
     List<GamePosition> findBySeasonIdAndStatus(Long seasonId, PositionStatus status);
+
+    void deleteByUserId(Long userId);
 }

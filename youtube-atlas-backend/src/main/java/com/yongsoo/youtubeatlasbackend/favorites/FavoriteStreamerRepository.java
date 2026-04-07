@@ -9,7 +9,11 @@ public interface FavoriteStreamerRepository extends JpaRepository<FavoriteStream
 
     List<FavoriteStreamer> findTop8ByOrderByCreatedAtDesc();
 
+    long countByUserId(Long userId);
+
     List<FavoriteStreamer> findByUserIdOrderByCreatedAtDesc(Long userId);
 
     Optional<FavoriteStreamer> findByUserIdAndChannelId(Long userId, String channelId);
+
+    void deleteByUserId(Long userId);
 }

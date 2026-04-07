@@ -1,5 +1,6 @@
 package com.yongsoo.youtubeatlasbackend.admin;
 
+import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -23,15 +24,29 @@ public class AdminAccessService {
 
     public AuthenticatedUser requireAdmin(String authorizationHeader) {
         AuthenticatedUser user = authService.requireCurrentUser(authorizationHeader);
-        Set<String> allowedEmails = atlasProperties.getAdmin().getAllowedEmails().stream()
-            .filter(StringUtils::hasText)
-            .map(email -> email.trim().toLowerCase())
-            .collect(Collectors.toUnmodifiableSet());
-
-        if (!allowedEmails.contains(user.email().trim().toLowerCase())) {
+        if (!isAdminEmail(user.email())) {
             throw new AdminException("forbidden", "관리자 권한이 필요합니다.");
         }
 
         return user;
+    }
+
+    public boolean isAdminEmail(String email) {
+        if (!StringUtils.hasText(email)) {
+            return false;
+        }
+
+        return getAllowedEmails().contains(normalizeEmail(email));
+    }
+
+    private Set<String> getAllowedEmails() {
+        return atlasProperties.getAdmin().getAllowedEmails().stream()
+            .filter(StringUtils::hasText)
+            .map(this::normalizeEmail)
+            .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private String normalizeEmail(String email) {
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 }

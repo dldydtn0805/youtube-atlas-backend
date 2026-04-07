@@ -29,6 +29,7 @@ import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotRepository;
 class AdminDashboardServiceTest {
 
     private AppUserRepository appUserRepository;
+    private AdminAccessService adminAccessService;
     private CommentRepository commentRepository;
     private FavoriteStreamerRepository favoriteStreamerRepository;
     private GameSeasonRepository gameSeasonRepository;
@@ -39,6 +40,7 @@ class AdminDashboardServiceTest {
     @BeforeEach
     void setUp() {
         appUserRepository = org.mockito.Mockito.mock(AppUserRepository.class);
+        adminAccessService = org.mockito.Mockito.mock(AdminAccessService.class);
         commentRepository = org.mockito.Mockito.mock(CommentRepository.class);
         favoriteStreamerRepository = org.mockito.Mockito.mock(FavoriteStreamerRepository.class);
         gameSeasonRepository = org.mockito.Mockito.mock(GameSeasonRepository.class);
@@ -46,6 +48,7 @@ class AdminDashboardServiceTest {
         trendSnapshotRepository = org.mockito.Mockito.mock(TrendSnapshotRepository.class);
         adminDashboardService = new AdminDashboardService(
             appUserRepository,
+            adminAccessService,
             commentRepository,
             favoriteStreamerRepository,
             gameSeasonRepository,
@@ -108,6 +111,7 @@ class AdminDashboardServiceTest {
         when(commentRepository.count()).thenReturn(34L);
         when(favoriteStreamerRepository.count()).thenReturn(5L);
         when(trendRunRepository.count()).thenReturn(7L);
+        when(adminAccessService.isAdminEmail("user@example.com")).thenReturn(false);
         when(appUserRepository.findTop8ByOrderByCreatedAtDesc()).thenReturn(List.of(user));
         when(commentRepository.findTop8ByOrderByCreatedAtDesc()).thenReturn(List.of(comment));
         when(favoriteStreamerRepository.findTop8ByOrderByCreatedAtDesc()).thenReturn(List.of(favorite));

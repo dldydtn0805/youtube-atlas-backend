@@ -63,6 +63,7 @@ SPRING_JPA_HIBERNATE_DDL_AUTO=update
 ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 YOUTUBE_CATEGORY_LANGUAGE=ko
 AUTH_SESSION_TTL_DAYS=30
+ADMIN_ALLOWED_EMAILS=admin@example.com,owner@example.com
 GAME_SCHEDULER_ENABLED=false
 GAME_SETTLEMENT_CRON=0 */5 * * * *
 TRENDING_SCHEDULER_ENABLED=false
@@ -76,6 +77,7 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `GOOGLE_CLIENT_ID` 는 프론트의 Google OAuth Client ID와 동일해야 합니다.
 - `GOOGLE_CLIENT_SECRET` 는 같은 Google OAuth Web Client의 secret 이어야 합니다.
 - `GAME_SCHEDULER_ENABLED=true` 로 두면 종료 시간이 지난 시즌의 오픈 포지션을 자동 청산합니다.
+- `ADMIN_ALLOWED_EMAILS` 에 관리자 이메일을 쉼표로 구분해서 넣으면 `/api/admin/*` 엔드포인트 접근을 허용합니다.
 - `TRENDING_SYNC_MAX_PAGES_PER_SOURCE` 는 급상승 동기화 시 소스 카테고리별로 몇 페이지까지 수집할지 결정합니다.
 
 ## API 요약
@@ -95,6 +97,11 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `GET /api/trending/signals?regionCode=KR&categoryId=0&videoIds=abc&videoIds=def`
 - `GET /api/trending/realtime-surging?regionCode=KR`
 - `POST /api/trending/sync`
+- `GET /api/admin/dashboard`
+- `GET /api/admin/users?q=atlas&limit=20`
+- `GET /api/admin/users/{userId}`
+- `PATCH /api/admin/users/{userId}/wallet`
+- `DELETE /api/admin/users/{userId}`
 - `GET /api/game/seasons/current`
 - `GET /api/game/wallet`
 - `GET /api/game/market`
@@ -122,8 +129,9 @@ anchorPrices = {200: 3000, 190: 4000, ..., 20: 750000, 10: 1050000, 2: 1333333, 
 currentPricePoints = anchorPrices 를 기준으로 rank 구간별 기하보간
 buyPricePoints = buy 시점 currentPricePoints
 sellPricePoints = sell 시점 currentPricePoints
-profitPoints = sellPricePoints - buyPricePoints
-settledPoints = max(0, sellPricePoints)
+sellFeePoints = floor(sellPricePoints * 0.003)
+settledPoints = max(0, sellPricePoints - sellFeePoints)
+profitPoints = settledPoints - buyPricePoints
 ```
 
 예시:
@@ -131,8 +139,9 @@ settledPoints = max(0, sellPricePoints)
 - `170위` 매수 -> `160위` 매도
 - `buyPricePoints = 7500`
 - `sellPricePoints = 10000`
-- `profitPoints = 2500`
-- `settledPoints = 10000`
+- `sellFeePoints = 30`
+- `settledPoints = 9970`
+- `profitPoints = 2470`
 
 ## 프론트 연동 순서
 
@@ -340,9 +349,9 @@ values
   "rankDiff": 10,
   "stakePoints": 7500,
   "sellPricePoints": 10000,
-  "pnlPoints": 2500,
-  "settledPoints": 10000,
-  "balancePoints": 12500,
+  "pnlPoints": 2470,
+  "settledPoints": 9970,
+  "balancePoints": 12470,
   "soldAt": "2026-04-04T00:20:00Z"
 }
 ```
@@ -432,6 +441,126 @@ Authorization: Bearer {accessToken}
 ```
 
 현재 세션을 로그아웃합니다.
+
+## 관리자 API
+
+모든 관리자 API는 아래 헤더가 필요합니다.
+
+```text
+Authorization: Bearer {accessToken}
+```
+
+- 로그인 사용자 이메일이 `ADMIN_ALLOWED_EMAILS` 에 포함되어 있어야 합니다.
+
+### `GET /api/admin/dashboard`
+
+기존 관리자 대시보드 데이터를 반환합니다.
+
+### `GET /api/admin/users`
+
+관리자용 유저 목록을 반환합니다.
+
+쿼리 파라미터:
+
+- `q` 선택값: 이메일 또는 닉네임 부분 검색
+- `limit` 선택값: 기본 `20`, 최대 `100`
+
+응답 예시:
+
+```json
+{
+  "query": "atlas",
+  "limit": 20,
+  "count": 1,
+  "users": [
+    {
+      "id": 1,
+      "email": "atlas@example.com",
+      "displayName": "Atlas User",
+      "pictureUrl": "https://lh3.googleusercontent.com/...",
+      "admin": true,
+      "createdAt": "2026-04-01T06:00:00Z",
+      "lastLoginAt": "2026-04-08T02:00:00Z"
+    }
+  ]
+}
+```
+
+### `GET /api/admin/users/{userId}`
+
+관리자용 유저 상세 정보를 반환합니다.
+
+응답에는 아래 정보가 포함됩니다.
+
+- 기본 프로필
+- 관리자 여부
+- 즐겨찾기 스트리머 개수
+- 마지막 재생 위치
+- 현재 활성 시즌 게임 참여 여부와 지갑/포지션 요약
+
+응답 예시:
+
+```json
+{
+  "id": 1,
+  "email": "atlas@example.com",
+  "displayName": "Atlas User",
+  "pictureUrl": "https://lh3.googleusercontent.com/...",
+  "admin": true,
+  "createdAt": "2026-04-01T06:00:00Z",
+  "lastLoginAt": "2026-04-08T02:00:00Z",
+  "favoriteCount": 4,
+  "lastPlaybackProgress": {
+    "videoId": "abc123",
+    "videoTitle": "Sample title",
+    "channelTitle": "Sample channel",
+    "thumbnailUrl": "https://example.com/thumb.jpg",
+    "positionSeconds": 184,
+    "updatedAt": "2026-04-08T01:50:00Z"
+  },
+  "activeSeasonGame": {
+    "seasonId": 3,
+    "seasonName": "Season 3",
+    "participating": true,
+    "balancePoints": 12000,
+    "reservedPoints": 3000,
+    "realizedPnlPoints": 1500,
+    "totalAssetPoints": 15000,
+    "openPositionCount": 2,
+    "closedPositionCount": 5
+  }
+}
+```
+
+### `PATCH /api/admin/users/{userId}/wallet`
+
+관리자가 활성 시즌 기준으로 해당 유저의 지갑 수치를 직접 수정합니다.
+
+요청 본문:
+
+```json
+{
+  "balancePoints": 12000,
+  "reservedPoints": 3000,
+  "realizedPnlPoints": 1500
+}
+```
+
+- 현재 활성 시즌이 없으면 요청이 실패합니다.
+- 아직 활성 시즌 지갑이 없는 유저여도, 수정 시 관리자 값으로 새 지갑을 생성합니다.
+- `reservedPoints` 는 오픈 포지션과 연결될 수 있으므로 운영 목적에서만 수동 조정해야 합니다.
+
+### `DELETE /api/admin/users/{userId}`
+
+관리자가 특정 유저를 탈퇴 처리합니다.
+
+- 인증 세션
+- 최근 재생 위치
+- 즐겨찾기
+- 게임 지갑/포지션/원장
+
+위 데이터가 함께 삭제된 뒤 유저 계정이 제거됩니다.
+- 현재 댓글은 유저 FK가 아니라 작성자 문자열 기반이라, 기존 댓글 데이터는 유지됩니다.
 
 ## 최근 재생 위치 API
 

@@ -23,4 +23,6 @@ public interface GameWalletRepository extends JpaRepository<GameWallet, Long> {
     Optional<GameWallet> findBySeasonIdAndUserIdForUpdate(Long seasonId, Long userId);
 
     List<GameWallet> findBySeasonId(Long seasonId);
+
+    void deleteByUserId(Long userId);
 }

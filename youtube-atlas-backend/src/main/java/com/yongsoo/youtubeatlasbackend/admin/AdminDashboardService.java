@@ -26,6 +26,7 @@ import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotRepository;
 public class AdminDashboardService {
 
     private final AppUserRepository appUserRepository;
+    private final AdminAccessService adminAccessService;
     private final CommentRepository commentRepository;
     private final FavoriteStreamerRepository favoriteStreamerRepository;
     private final GameSeasonRepository gameSeasonRepository;
@@ -34,6 +35,7 @@ public class AdminDashboardService {
 
     public AdminDashboardService(
         AppUserRepository appUserRepository,
+        AdminAccessService adminAccessService,
         CommentRepository commentRepository,
         FavoriteStreamerRepository favoriteStreamerRepository,
         GameSeasonRepository gameSeasonRepository,
@@ -41,6 +43,7 @@ public class AdminDashboardService {
         TrendSnapshotRepository trendSnapshotRepository
     ) {
         this.appUserRepository = appUserRepository;
+        this.adminAccessService = adminAccessService;
         this.commentRepository = commentRepository;
         this.favoriteStreamerRepository = favoriteStreamerRepository;
         this.gameSeasonRepository = gameSeasonRepository;
@@ -94,6 +97,7 @@ public class AdminDashboardService {
                     user.getEmail(),
                     user.getDisplayName(),
                     user.getPictureUrl(),
+                    adminAccessService.isAdminEmail(user.getEmail()),
                     user.getCreatedAt(),
                     user.getLastLoginAt()
                 ))
