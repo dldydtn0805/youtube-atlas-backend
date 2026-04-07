@@ -214,7 +214,8 @@ class GameServiceTest {
         AppUser appUser = user(7L);
         long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
         long sellPricePoints = GamePointCalculator.calculatePricePoints(160);
-        long pnlPoints = GamePointCalculator.calculateProfitPoints(buyPricePoints, sellPricePoints);
+        long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
+        long pnlPoints = GamePointCalculator.calculateProfitPoints(buyPricePoints, settledPoints);
         GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
         GamePosition position = openPosition(
             season,
@@ -239,8 +240,8 @@ class GameServiceTest {
         assertThat(response.sellPricePoints()).isEqualTo(sellPricePoints);
         assertThat(response.rankDiff()).isEqualTo(10);
         assertThat(response.pnlPoints()).isEqualTo(pnlPoints);
-        assertThat(response.settledPoints()).isEqualTo(sellPricePoints);
-        assertThat(response.balancePoints()).isEqualTo(10_000L + pnlPoints);
+        assertThat(response.settledPoints()).isEqualTo(settledPoints);
+        assertThat(response.balancePoints()).isEqualTo((10_000L - buyPricePoints) + settledPoints);
         assertThat(wallet.getReservedPoints()).isZero();
         assertThat(wallet.getRealizedPnlPoints()).isEqualTo(pnlPoints);
     }
@@ -251,6 +252,7 @@ class GameServiceTest {
         AppUser appUser = user(7L);
         long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
         long sellPricePoints = GamePointCalculator.calculatePricePoints(160);
+        long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
         GameWallet wallet = wallet(season, appUser, 10_000L - (buyPricePoints * 3), buyPricePoints * 3, 0L);
         GamePosition firstPosition = openPosition(
             season,
@@ -299,7 +301,7 @@ class GameServiceTest {
         assertThat(secondPosition.getStatus()).isEqualTo(PositionStatus.CLOSED);
         assertThat(thirdPosition.getStatus()).isEqualTo(PositionStatus.OPEN);
         assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints);
-        assertThat(wallet.getBalancePoints()).isEqualTo((10_000L - (buyPricePoints * 3)) + (sellPricePoints * 2));
+        assertThat(wallet.getBalancePoints()).isEqualTo((10_000L - (buyPricePoints * 3)) + (settledPoints * 2));
     }
 
     @Test
@@ -308,7 +310,8 @@ class GameServiceTest {
         AppUser appUser = user(7L);
         long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
         long sellPricePoints = GamePointCalculator.calculatePricePoints(13);
-        long pnlPoints = GamePointCalculator.calculateProfitPoints(buyPricePoints, sellPricePoints);
+        long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
+        long pnlPoints = GamePointCalculator.calculateProfitPoints(buyPricePoints, settledPoints);
         GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
         GamePosition position = openPosition(
             season,
@@ -346,8 +349,8 @@ class GameServiceTest {
         assertThat(response.sellPricePoints()).isEqualTo(sellPricePoints);
         assertThat(response.rankDiff()).isEqualTo(157);
         assertThat(response.pnlPoints()).isEqualTo(pnlPoints);
-        assertThat(response.settledPoints()).isEqualTo(sellPricePoints);
-        assertThat(response.balancePoints()).isEqualTo(10_000L + pnlPoints);
+        assertThat(response.settledPoints()).isEqualTo(settledPoints);
+        assertThat(response.balancePoints()).isEqualTo((10_000L - buyPricePoints) + settledPoints);
     }
 
     @Test

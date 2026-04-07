@@ -2,6 +2,9 @@ package com.yongsoo.youtubeatlasbackend.game;
 
 final class GamePointCalculator {
 
+    private static final long SELL_FEE_NUMERATOR = 3L;
+    private static final long SELL_FEE_DENOMINATOR = 1_000L;
+
     private static final PriceAnchor[] PRICE_ANCHORS = {
         new PriceAnchor(1, 2_000_000L),
         new PriceAnchor(2, 1_333_333L),
@@ -65,7 +68,15 @@ final class GamePointCalculator {
     }
 
     static long calculateSettledPoints(long currentPricePoints) {
-        return Math.max(0L, currentPricePoints);
+        return Math.max(0L, currentPricePoints - calculateSellFeePoints(currentPricePoints));
+    }
+
+    static long calculateSellFeePoints(long currentPricePoints) {
+        if (currentPricePoints <= 0L) {
+            return 0L;
+        }
+
+        return (currentPricePoints * SELL_FEE_NUMERATOR) / SELL_FEE_DENOMINATOR;
     }
 
     static int estimateRankForPricePoints(long pricePoints) {

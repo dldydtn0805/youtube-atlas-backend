@@ -56,7 +56,8 @@ class GameSettlementServiceTest {
         AppUser appUser = user(7L);
         long buyPricePoints = GamePointCalculator.calculatePricePoints(120);
         long sellPricePoints = GamePointCalculator.calculatePricePoints(100);
-        long pnlPoints = GamePointCalculator.calculateProfitPoints(buyPricePoints, sellPricePoints);
+        long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
+        long pnlPoints = GamePointCalculator.calculateProfitPoints(buyPricePoints, settledPoints);
         GamePosition position = openPosition(season, appUser, "video-1", 120, buyPricePoints);
         GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
         TrendSignal signal = signal("video-1", 100);
@@ -79,8 +80,8 @@ class GameSettlementServiceTest {
         assertThat(position.getSellRank()).isEqualTo(100);
         assertThat(position.getRankDiff()).isEqualTo(20);
         assertThat(position.getPnlPoints()).isEqualTo(pnlPoints);
-        assertThat(position.getSettledPoints()).isEqualTo(sellPricePoints);
-        assertThat(wallet.getBalancePoints()).isEqualTo(10_000L + pnlPoints);
+        assertThat(position.getSettledPoints()).isEqualTo(settledPoints);
+        assertThat(wallet.getBalancePoints()).isEqualTo((10_000L - buyPricePoints) + settledPoints);
         assertThat(wallet.getReservedPoints()).isZero();
         assertThat(wallet.getRealizedPnlPoints()).isEqualTo(pnlPoints);
         assertThat(season.getStatus()).isEqualTo(SeasonStatus.ENDED);

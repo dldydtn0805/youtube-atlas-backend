@@ -814,8 +814,8 @@ public class GameService {
         long unitStakePoints = resolveUnitStakePoints(position);
         long soldStakePoints = Math.multiplyExact(unitStakePoints, sellQuantity);
         long sellPricePoints = Math.multiplyExact(GamePointCalculator.calculatePricePoints(sellSnapshot.rank()), sellQuantity);
-        long pnlPoints = GamePointCalculator.calculateProfitPoints(soldStakePoints, sellPricePoints);
         long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
+        long pnlPoints = GamePointCalculator.calculateProfitPoints(soldStakePoints, settledPoints);
         GamePosition settledPosition;
 
         if (sellQuantity == getPositionQuantity(position)) {

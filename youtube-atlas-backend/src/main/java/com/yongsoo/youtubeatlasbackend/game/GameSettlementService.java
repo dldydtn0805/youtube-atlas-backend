@@ -108,8 +108,8 @@ public class GameSettlementService {
         Instant sellCapturedAt = signal != null ? signal.getCapturedAt() : fallbackCapturedAt;
         int rankDiff = position.getBuyRank() - sellRank;
         long sellPricePoints = GamePointCalculator.calculatePricePoints(sellRank);
-        long pnlPoints = GamePointCalculator.calculateProfitPoints(position.getStakePoints(), sellPricePoints);
         long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
+        long pnlPoints = GamePointCalculator.calculateProfitPoints(position.getStakePoints(), settledPoints);
 
         position.setSellRunId(sellRunId);
         position.setSellRank(sellRank);
