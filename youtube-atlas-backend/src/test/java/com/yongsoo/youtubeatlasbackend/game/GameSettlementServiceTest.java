@@ -23,6 +23,8 @@ import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
 
 class GameSettlementServiceTest {
 
+    private static final int ONE_SHARE = GamePointCalculator.QUANTITY_SCALE;
+
     private GameSeasonRepository gameSeasonRepository;
     private GamePositionRepository gamePositionRepository;
     private GameWalletRepository gameWalletRepository;
@@ -155,6 +157,7 @@ class GameSettlementServiceTest {
         position.setBuyRunId(11L);
         position.setBuyRank(buyRank);
         position.setBuyCapturedAt(Instant.parse("2026-04-07T23:30:00Z"));
+        position.setQuantity(ONE_SHARE);
         position.setStakePoints(stakePoints);
         position.setStatus(PositionStatus.OPEN);
         position.setCreatedAt(Instant.parse("2026-04-07T23:30:00Z"));

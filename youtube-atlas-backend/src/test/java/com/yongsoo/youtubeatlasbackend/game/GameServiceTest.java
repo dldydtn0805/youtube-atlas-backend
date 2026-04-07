@@ -32,6 +32,10 @@ import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotRepository;
 
 class GameServiceTest {
 
+    private static final int ONE_SHARE = GamePointCalculator.QUANTITY_SCALE;
+    private static final int TWO_SHARES = ONE_SHARE * 2;
+    private static final int THREE_SHARES = ONE_SHARE * 3;
+
     private GameSeasonRepository gameSeasonRepository;
     private GameWalletRepository gameWalletRepository;
     private GamePositionRepository gamePositionRepository;
@@ -115,14 +119,14 @@ class GameServiceTest {
 
         var response = gameService.buy(
             authenticatedUser(),
-            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, 1)
+            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, ONE_SHARE)
         );
 
         assertThat(response).hasSize(1);
         assertThat(response.get(0).id()).isEqualTo(200L);
         assertThat(response.get(0).buyRank()).isEqualTo(170);
         assertThat(response.get(0).currentRank()).isEqualTo(170);
-        assertThat(response.get(0).quantity()).isEqualTo(1);
+        assertThat(response.get(0).quantity()).isEqualTo(ONE_SHARE);
         assertThat(response.get(0).stakePoints()).isEqualTo(buyPricePoints);
         assertThat(response.get(0).currentPricePoints()).isEqualTo(buyPricePoints);
         assertThat(wallet.getBalancePoints()).isEqualTo(10_000L - buyPricePoints);
@@ -159,13 +163,13 @@ class GameServiceTest {
 
         var response = gameService.buy(
             authenticatedUser(),
-            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, 1)
+            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, ONE_SHARE)
         );
 
         assertThat(response).hasSize(1);
         assertThat(response.get(0).id()).isEqualTo(201L);
         assertThat(response.get(0).videoId()).isEqualTo("video-1");
-        assertThat(response.get(0).quantity()).isEqualTo(2);
+        assertThat(response.get(0).quantity()).isEqualTo(TWO_SHARES);
         assertThat(response.get(0).stakePoints()).isEqualTo(buyPricePoints * 2);
         assertThat(wallet.getBalancePoints()).isEqualTo(20_000L - buyPricePoints);
         assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints * 2);
@@ -197,12 +201,12 @@ class GameServiceTest {
 
         var response = gameService.buy(
             authenticatedUser(),
-            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, 3)
+            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, THREE_SHARES)
         );
 
         assertThat(response).hasSize(1);
         assertThat(response).extracting(position -> position.videoId()).containsOnly("video-1");
-        assertThat(response.get(0).quantity()).isEqualTo(3);
+        assertThat(response.get(0).quantity()).isEqualTo(THREE_SHARES);
         assertThat(response.get(0).stakePoints()).isEqualTo(buyPricePoints * 3);
         assertThat(wallet.getBalancePoints()).isEqualTo(30_000L - (buyPricePoints * 3));
         assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints * 3);
@@ -293,7 +297,7 @@ class GameServiceTest {
         when(gameWalletRepository.save(wallet)).thenReturn(wallet);
         when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = gameService.sell(authenticatedUser(), new SellPositionsRequest("video-1", 2));
+        var response = gameService.sell(authenticatedUser(), new SellPositionsRequest("video-1", TWO_SHARES));
 
         assertThat(response).hasSize(2);
         assertThat(response).extracting(responseItem -> responseItem.positionId()).containsExactly(301L, 302L);
@@ -474,11 +478,11 @@ class GameServiceTest {
 
         var response = gameService.buy(
             authenticatedUser(),
-            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, 2)
+            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, TWO_SHARES)
         );
 
         assertThat(response).hasSize(1);
-        assertThat(response.get(0).quantity()).isEqualTo(3);
+        assertThat(response.get(0).quantity()).isEqualTo(THREE_SHARES);
         assertThat(wallet.getBalancePoints()).isEqualTo(buyPricePoints);
     }
 
@@ -499,7 +503,7 @@ class GameServiceTest {
 
         assertThatThrownBy(() -> gameService.buy(
             authenticatedUser(),
-            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, 1)
+            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, ONE_SHARE)
         ))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("보유 포인트가 부족합니다.");
@@ -728,7 +732,7 @@ class GameServiceTest {
         position.setBuyRunId(11L);
         position.setBuyRank(buyRank);
         position.setBuyCapturedAt(Instant.parse("2026-04-01T05:40:00Z"));
-        position.setQuantity(1);
+        position.setQuantity(ONE_SHARE);
         position.setStakePoints(stakePoints);
         position.setStatus(PositionStatus.OPEN);
         position.setCreatedAt(createdAt);

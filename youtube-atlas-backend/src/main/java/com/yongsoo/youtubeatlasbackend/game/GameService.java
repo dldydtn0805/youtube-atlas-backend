@@ -215,7 +215,7 @@ public class GameService {
             throw new IllegalArgumentException("현재 가격이 변경되었습니다. 최신 시세로 다시 시도해 주세요.");
         }
 
-        long totalStakePoints = Math.multiplyExact(currentPricePoints, quantity);
+        long totalStakePoints = GamePointCalculator.calculatePositionPoints(currentPricePoints, quantity);
 
         if (wallet.getBalancePoints() < totalStakePoints) {
             throw new IllegalArgumentException("보유 포인트가 부족합니다.");
@@ -449,7 +449,7 @@ public class GameService {
 
     private PositionResponse toOpenPositionResponse(GamePosition position, OpenPositionSnapshot snapshot) {
         int rankDiff = position.getBuyRank() - snapshot.currentRank();
-        long currentPricePoints = Math.multiplyExact(
+        long currentPricePoints = GamePointCalculator.calculatePositionPoints(
             GamePointCalculator.calculatePricePoints(snapshot.currentRank()),
             getPositionQuantity(position)
         );
@@ -533,14 +533,18 @@ public class GameService {
 
     private String resolveBuyBlockedReason(
         GameWallet wallet,
-        long currentPricePoints,
+        long unitPricePoints,
         boolean maxOpenReached,
         boolean alreadyOwned
     ) {
         if (maxOpenReached && !alreadyOwned) {
             return "동시 보유 가능 포지션 수를 초과했습니다.";
         }
-        if (wallet.getBalancePoints() < currentPricePoints) {
+        long minimumBuyPoints = GamePointCalculator.calculatePositionPoints(
+            unitPricePoints,
+            GamePointCalculator.MIN_QUANTITY
+        );
+        if (wallet.getBalancePoints() < minimumBuyPoints) {
             return "현재 가격 기준 보유 포인트가 부족합니다.";
         }
         return null;
@@ -569,14 +573,14 @@ public class GameService {
             long markedValue = position.getStakePoints();
 
             if (signal != null) {
-                markedValue = Math.multiplyExact(
+                markedValue = GamePointCalculator.calculatePositionPoints(
                     GamePointCalculator.calculatePricePoints(signal.getCurrentRank()),
                     getPositionQuantity(position)
                 );
             } else {
                 OpenPositionSnapshot snapshot = resolveOpenPositionSnapshot(position);
                 if (snapshot != null) {
-                    markedValue = Math.multiplyExact(
+                    markedValue = GamePointCalculator.calculatePositionPoints(
                         GamePointCalculator.calculatePricePoints(snapshot.currentRank()),
                         getPositionQuantity(position)
                     );
@@ -693,7 +697,7 @@ public class GameService {
         GamePosition targetPosition = openPositionsForVideo.get(openPositionsForVideo.size() - 1);
         int mergedQuantity = Math.addExact(getPositionQuantity(targetPosition), addedQuantity);
         long mergedStakePoints = Math.addExact(targetPosition.getStakePoints(), addedStakePoints);
-        long averageUnitStakePoints = Math.round((double) mergedStakePoints / mergedQuantity);
+        long averageUnitStakePoints = GamePointCalculator.estimateUnitPricePoints(mergedStakePoints, mergedQuantity);
 
         targetPosition.setTitle(signal.getTitle());
         targetPosition.setChannelTitle(signal.getChannelTitle());
@@ -812,8 +816,11 @@ public class GameService {
     ) {
         int rankDiff = position.getBuyRank() - sellSnapshot.rank();
         long unitStakePoints = resolveUnitStakePoints(position);
-        long soldStakePoints = Math.multiplyExact(unitStakePoints, sellQuantity);
-        long sellPricePoints = Math.multiplyExact(GamePointCalculator.calculatePricePoints(sellSnapshot.rank()), sellQuantity);
+        long soldStakePoints = GamePointCalculator.calculatePositionPoints(unitStakePoints, sellQuantity);
+        long sellPricePoints = GamePointCalculator.calculatePositionPoints(
+            GamePointCalculator.calculatePricePoints(sellSnapshot.rank()),
+            sellQuantity
+        );
         long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
         long pnlPoints = GamePointCalculator.calculateProfitPoints(soldStakePoints, settledPoints);
         GamePosition settledPosition;
@@ -928,8 +935,8 @@ public class GameService {
             throw new IllegalArgumentException("quantity는 필수입니다.");
         }
 
-        if (quantity < 1) {
-            throw new IllegalArgumentException("quantity는 1 이상이어야 합니다.");
+        if (quantity < GamePointCalculator.MIN_QUANTITY) {
+            throw new IllegalArgumentException("quantity는 0.01개 이상이어야 합니다.");
         }
 
         return quantity;
@@ -948,11 +955,13 @@ public class GameService {
     }
 
     private int getPositionQuantity(GamePosition position) {
-        return position.getQuantity() == null || position.getQuantity() < 1 ? 1 : position.getQuantity();
+        return position.getQuantity() == null || position.getQuantity() < GamePointCalculator.MIN_QUANTITY
+            ? GamePointCalculator.QUANTITY_SCALE
+            : position.getQuantity();
     }
 
     private long resolveUnitStakePoints(GamePosition position) {
-        return position.getStakePoints() / getPositionQuantity(position);
+        return GamePointCalculator.estimateUnitPricePoints(position.getStakePoints(), getPositionQuantity(position));
     }
 
     private GamePosition createClosedPosition(
