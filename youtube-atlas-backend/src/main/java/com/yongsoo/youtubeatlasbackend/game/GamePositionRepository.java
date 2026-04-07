@@ -9,11 +9,16 @@ public interface GamePositionRepository extends JpaRepository<GamePosition, Long
 
     long countBySeasonIdAndUserIdAndStatus(Long seasonId, Long userId, PositionStatus status);
 
-    boolean existsBySeasonIdAndUserIdAndVideoIdAndStatus(Long seasonId, Long userId, String videoId, PositionStatus status);
-
     Optional<GamePosition> findByIdAndUserId(Long id, Long userId);
 
     List<GamePosition> findBySeasonIdAndUserIdOrderByCreatedAtDesc(Long seasonId, Long userId);
+
+    List<GamePosition> findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAsc(
+        Long seasonId,
+        Long userId,
+        String videoId,
+        PositionStatus status
+    );
 
     List<GamePosition> findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(Long seasonId, Long userId, PositionStatus status);
 

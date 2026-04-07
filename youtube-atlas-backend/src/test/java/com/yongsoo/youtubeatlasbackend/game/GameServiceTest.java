@@ -21,6 +21,7 @@ import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.game.api.CreatePositionRequest;
+import com.yongsoo.youtubeatlasbackend.game.api.SellPositionsRequest;
 import com.yongsoo.youtubeatlasbackend.trending.TrendRun;
 import com.yongsoo.youtubeatlasbackend.trending.TrendRunRepository;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
@@ -100,8 +101,6 @@ class GameServiceTest {
         when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
         when(gamePositionRepository.countBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(0L);
-        when(gamePositionRepository.existsBySeasonIdAndUserIdAndVideoIdAndStatus(1L, 7L, "video-1", PositionStatus.OPEN))
-            .thenReturn(false);
         when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal));
         when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
         when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> {
@@ -114,16 +113,83 @@ class GameServiceTest {
 
         var response = gameService.buy(
             authenticatedUser(),
-            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints)
+            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, 1)
         );
 
-        assertThat(response.id()).isEqualTo(200L);
-        assertThat(response.buyRank()).isEqualTo(170);
-        assertThat(response.currentRank()).isEqualTo(170);
-        assertThat(response.stakePoints()).isEqualTo(buyPricePoints);
-        assertThat(response.currentPricePoints()).isEqualTo(buyPricePoints);
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).id()).isEqualTo(200L);
+        assertThat(response.get(0).buyRank()).isEqualTo(170);
+        assertThat(response.get(0).currentRank()).isEqualTo(170);
+        assertThat(response.get(0).stakePoints()).isEqualTo(buyPricePoints);
+        assertThat(response.get(0).currentPricePoints()).isEqualTo(buyPricePoints);
         assertThat(wallet.getBalancePoints()).isEqualTo(10_000L - buyPricePoints);
         assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints);
+    }
+
+    @Test
+    void buyAllowsAdditionalOpenPositionForSameVideo() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        GameWallet wallet = wallet(season, appUser, 20_000L, buyPricePoints, 0L);
+        TrendSignal signal = signal("video-1", 170, 3);
+
+        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.countBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(1L);
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal));
+        when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
+        when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> {
+            GamePosition position = invocation.getArgument(0, GamePosition.class);
+            ReflectionTestUtils.setField(position, "id", 201L);
+            return position;
+        });
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = gameService.buy(
+            authenticatedUser(),
+            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, 1)
+        );
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).id()).isEqualTo(201L);
+        assertThat(response.get(0).videoId()).isEqualTo("video-1");
+        assertThat(response.get(0).stakePoints()).isEqualTo(buyPricePoints);
+        assertThat(wallet.getBalancePoints()).isEqualTo(20_000L - buyPricePoints);
+        assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints * 2);
+    }
+
+    @Test
+    void buyCreatesMultiplePositionsWhenQuantityIsProvided() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        GameWallet wallet = wallet(season, appUser, 30_000L, 0L, 0L);
+        TrendSignal signal = signal("video-1", 170, 3);
+
+        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.countBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(0L);
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal));
+        when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
+        when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> {
+            GamePosition position = invocation.getArgument(0, GamePosition.class);
+            ReflectionTestUtils.setField(position, "id", 300L + wallet.getReservedPoints() + position.getStakePoints());
+            return position;
+        });
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = gameService.buy(
+            authenticatedUser(),
+            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, 3)
+        );
+
+        assertThat(response).hasSize(3);
+        assertThat(response).extracting(position -> position.videoId()).containsOnly("video-1");
+        assertThat(wallet.getBalancePoints()).isEqualTo(30_000L - (buyPricePoints * 3));
+        assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints * 3);
     }
 
     @Test
@@ -161,6 +227,63 @@ class GameServiceTest {
         assertThat(response.balancePoints()).isEqualTo(10_000L + pnlPoints);
         assertThat(wallet.getReservedPoints()).isZero();
         assertThat(wallet.getRealizedPnlPoints()).isEqualTo(pnlPoints);
+    }
+
+    @Test
+    void sellByQuantityClosesOldestEligiblePositionsFirst() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        long sellPricePoints = GamePointCalculator.calculatePricePoints(160);
+        GameWallet wallet = wallet(season, appUser, 10_000L - (buyPricePoints * 3), buyPricePoints * 3, 0L);
+        GamePosition firstPosition = openPosition(
+            season,
+            appUser,
+            "video-1",
+            170,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+        GamePosition secondPosition = openPosition(
+            season,
+            appUser,
+            "video-1",
+            170,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        GamePosition thirdPosition = openPosition(
+            season,
+            appUser,
+            "video-1",
+            170,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:50:00Z")
+        );
+        TrendSignal latestSignal = signal("video-1", 160, 5);
+
+        ReflectionTestUtils.setField(firstPosition, "id", 301L);
+        ReflectionTestUtils.setField(secondPosition, "id", 302L);
+        ReflectionTestUtils.setField(thirdPosition, "id", 303L);
+
+        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gamePositionRepository.findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAsc(1L, 7L, "video-1", PositionStatus.OPEN))
+            .thenReturn(List.of(firstPosition, secondPosition, thirdPosition));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = gameService.sell(authenticatedUser(), new SellPositionsRequest("video-1", 2));
+
+        assertThat(response).hasSize(2);
+        assertThat(response).extracting(responseItem -> responseItem.positionId()).containsExactly(301L, 302L);
+        assertThat(firstPosition.getStatus()).isEqualTo(PositionStatus.CLOSED);
+        assertThat(secondPosition.getStatus()).isEqualTo(PositionStatus.CLOSED);
+        assertThat(thirdPosition.getStatus()).isEqualTo(PositionStatus.OPEN);
+        assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints);
+        assertThat(wallet.getBalancePoints()).isEqualTo((10_000L - (buyPricePoints * 3)) + (sellPricePoints * 2));
     }
 
     @Test
@@ -274,7 +397,7 @@ class GameServiceTest {
     }
 
     @Test
-    void getMarketMarksOwnedVideoAsNotBuyable() {
+    void getMarketKeepsOwnedVideoBuyableWhenSlotsRemain() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
@@ -286,18 +409,14 @@ class GameServiceTest {
         when(gamePositionRepository.countBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(1L);
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
             .thenReturn(List.of(ownedSignal, openSignal));
-        when(gamePositionRepository.existsBySeasonIdAndUserIdAndVideoIdAndStatus(1L, 7L, "video-1", PositionStatus.OPEN))
-            .thenReturn(true);
-        when(gamePositionRepository.existsBySeasonIdAndUserIdAndVideoIdAndStatus(1L, 7L, "video-2", PositionStatus.OPEN))
-            .thenReturn(false);
 
         var response = gameService.getMarket(authenticatedUser());
 
         assertThat(response).hasSize(2);
         assertThat(response.get(0).videoId()).isEqualTo("video-1");
         assertThat(response.get(0).currentPricePoints()).isEqualTo(GamePointCalculator.calculatePricePoints(170));
-        assertThat(response.get(0).canBuy()).isFalse();
-        assertThat(response.get(0).buyBlockedReason()).isEqualTo("이미 보유 중인 영상입니다.");
+        assertThat(response.get(0).canBuy()).isTrue();
+        assertThat(response.get(0).buyBlockedReason()).isNull();
         assertThat(response.get(1).videoId()).isEqualTo("video-2");
         assertThat(response.get(1).currentPricePoints()).isEqualTo(GamePointCalculator.calculatePricePoints(180));
         assertThat(response.get(1).canBuy()).isTrue();

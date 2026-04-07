@@ -4,11 +4,8 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
-public record CreatePositionRequest(
-    @NotBlank String regionCode,
-    @NotBlank String categoryId,
+public record SellPositionsRequest(
     @NotBlank String videoId,
-    @NotNull @Min(0) Long stakePoints,
     @NotNull @Min(1) Integer quantity
 ) {
 }

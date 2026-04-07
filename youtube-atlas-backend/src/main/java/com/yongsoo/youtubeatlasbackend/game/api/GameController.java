@@ -73,11 +73,19 @@ public class GameController {
     }
 
     @PostMapping("/positions")
-    public PositionResponse buy(
+    public List<PositionResponse> buy(
         @RequestHeader("Authorization") String authorizationHeader,
         @Valid @RequestBody CreatePositionRequest request
     ) {
         return gameService.buy(authService.requireCurrentUser(authorizationHeader), request);
+    }
+
+    @PostMapping("/positions/sell")
+    public List<SellPositionResponse> sell(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @Valid @RequestBody SellPositionsRequest request
+    ) {
+        return gameService.sell(authService.requireCurrentUser(authorizationHeader), request);
     }
 
     @PostMapping("/positions/{positionId}/sell")
