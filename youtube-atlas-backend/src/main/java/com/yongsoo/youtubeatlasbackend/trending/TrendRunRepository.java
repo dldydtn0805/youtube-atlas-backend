@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TrendRunRepository extends JpaRepository<TrendRun, Long> {
 
+    Optional<TrendRun> findTopByOrderByCapturedAtDesc();
+
     Optional<TrendRun> findTopByRegionCodeAndCategoryIdOrderByIdDesc(String regionCode, String categoryId);
 
     Optional<TrendRun> findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc(

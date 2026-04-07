@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CommentRepository extends JpaRepository<Comment, Long> {
 
+    List<Comment> findTop8ByOrderByCreatedAtDesc();
+
     List<Comment> findByVideoIdOrderByCreatedAtAsc(String videoId);
 
     Optional<Comment> findTopByVideoIdAndClientIdOrderByCreatedAtDesc(String videoId, String clientId);

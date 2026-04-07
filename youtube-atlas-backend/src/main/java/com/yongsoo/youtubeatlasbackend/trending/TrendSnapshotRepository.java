@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TrendSnapshotRepository extends JpaRepository<TrendSnapshot, Long> {
 
+    List<TrendSnapshot> findTop8ByRun_IdOrderByRankAsc(Long runId);
+
     List<TrendSnapshot> findByRunId(Long runId);
 
     List<TrendSnapshot> findByRegionCodeAndCategoryIdAndVideoIdOrderByRun_IdAsc(

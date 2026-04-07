@@ -1,6 +1,7 @@
 package com.yongsoo.youtubeatlasbackend.common;
 
 import com.yongsoo.youtubeatlasbackend.auth.AuthException;
+import com.yongsoo.youtubeatlasbackend.admin.AdminException;
 import com.yongsoo.youtubeatlasbackend.comments.CommentPolicyViolationException;
 import com.yongsoo.youtubeatlasbackend.comments.CommentValidationException;
 import com.yongsoo.youtubeatlasbackend.youtube.ResourceNotFoundException;
@@ -45,6 +46,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AuthException.class)
     public ResponseEntity<ApiErrorResponse> handleAuthFailure(AuthException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+            .body(new ApiErrorResponse(exception.getCode(), exception.getMessage(), null));
+    }
+
+    @ExceptionHandler(AdminException.class)
+    public ResponseEntity<ApiErrorResponse> handleAdminFailure(AdminException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
             .body(new ApiErrorResponse(exception.getCode(), exception.getMessage(), null));
     }
 }

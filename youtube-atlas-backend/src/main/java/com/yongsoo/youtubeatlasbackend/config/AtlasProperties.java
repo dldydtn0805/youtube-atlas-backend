@@ -13,6 +13,7 @@ public class AtlasProperties {
     private final Trending trending = new Trending();
     private final Game game = new Game();
     private final Auth auth = new Auth();
+    private final Admin admin = new Admin();
 
     public Youtube getYoutube() {
         return youtube;
@@ -32,6 +33,10 @@ public class AtlasProperties {
 
     public Auth getAuth() {
         return auth;
+    }
+
+    public Admin getAdmin() {
+        return admin;
     }
 
     public static class Youtube {
@@ -257,6 +262,18 @@ public class AtlasProperties {
 
         public void setCron(String cron) {
             this.cron = cron;
+        }
+    }
+
+    public static class Admin {
+        private List<String> allowedEmails = new ArrayList<>();
+
+        public List<String> getAllowedEmails() {
+            return allowedEmails;
+        }
+
+        public void setAllowedEmails(List<String> allowedEmails) {
+            this.allowedEmails = allowedEmails;
         }
     }
 

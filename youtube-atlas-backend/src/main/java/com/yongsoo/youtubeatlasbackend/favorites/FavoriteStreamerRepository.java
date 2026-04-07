@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface FavoriteStreamerRepository extends JpaRepository<FavoriteStreamer, Long> {
 
+    List<FavoriteStreamer> findTop8ByOrderByCreatedAtDesc();
+
     List<FavoriteStreamer> findByUserIdOrderByCreatedAtDesc(Long userId);
 
     Optional<FavoriteStreamer> findByUserIdAndChannelId(Long userId, String channelId);
