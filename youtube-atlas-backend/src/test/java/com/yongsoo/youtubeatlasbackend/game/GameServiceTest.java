@@ -100,7 +100,8 @@ class GameServiceTest {
 
         when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
-        when(gamePositionRepository.countBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(0L);
+        when(gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(0L);
+        when(gamePositionRepository.countBySeasonIdAndUserIdAndVideoIdAndStatus(1L, 7L, "video-1", PositionStatus.OPEN)).thenReturn(0L);
         when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal));
         when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
         when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> {
@@ -136,7 +137,8 @@ class GameServiceTest {
 
         when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
-        when(gamePositionRepository.countBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(1L);
+        when(gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(1L);
+        when(gamePositionRepository.countBySeasonIdAndUserIdAndVideoIdAndStatus(1L, 7L, "video-1", PositionStatus.OPEN)).thenReturn(1L);
         when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal));
         when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
         when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> {
@@ -170,7 +172,8 @@ class GameServiceTest {
 
         when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
-        when(gamePositionRepository.countBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(0L);
+        when(gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(0L);
+        when(gamePositionRepository.countBySeasonIdAndUserIdAndVideoIdAndStatus(1L, 7L, "video-1", PositionStatus.OPEN)).thenReturn(0L);
         when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal));
         when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
         when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> {
@@ -406,7 +409,9 @@ class GameServiceTest {
 
         when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
-        when(gamePositionRepository.countBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(1L);
+        when(gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(1L);
+        when(gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(1L, 7L, PositionStatus.OPEN))
+            .thenReturn(List.of(openPosition(season, appUser, "video-1", 170, GamePointCalculator.calculatePricePoints(170), Instant.parse("2026-04-01T05:45:00Z"))));
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
             .thenReturn(List.of(ownedSignal, openSignal));
 
@@ -421,6 +426,34 @@ class GameServiceTest {
         assertThat(response.get(1).currentPricePoints()).isEqualTo(GamePointCalculator.calculatePricePoints(180));
         assertThat(response.get(1).canBuy()).isTrue();
         assertThat(response.get(1).buyBlockedReason()).isNull();
+    }
+
+    @Test
+    void buyAllowsSameVideoPastDistinctVideoLimitWhenWalletCanCoverIt() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        GameWallet wallet = wallet(season, appUser, buyPricePoints * 3, buyPricePoints, 0L);
+        TrendSignal signal = signal("video-1", 170, 3);
+
+        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN))
+            .thenReturn((long) season.getMaxOpenPositions());
+        when(gamePositionRepository.countBySeasonIdAndUserIdAndVideoIdAndStatus(1L, 7L, "video-1", PositionStatus.OPEN)).thenReturn(1L);
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal));
+        when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
+        when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = gameService.buy(
+            authenticatedUser(),
+            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, 2)
+        );
+
+        assertThat(response).hasSize(2);
+        assertThat(wallet.getBalancePoints()).isEqualTo(buyPricePoints);
     }
 
     @Test

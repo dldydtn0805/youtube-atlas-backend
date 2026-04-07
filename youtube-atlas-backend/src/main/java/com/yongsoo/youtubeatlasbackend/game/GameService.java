@@ -90,19 +90,28 @@ public class GameService {
     public List<MarketVideoResponse> getMarket(AuthenticatedUser authenticatedUser) {
         GameSeason season = requireActiveSeason();
         GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
-        long openPositionCount = gamePositionRepository.countBySeasonIdAndUserIdAndStatus(
+        long openDistinctVideoCount = gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(
             season.getId(),
             authenticatedUser.id(),
             PositionStatus.OPEN
         );
-        boolean maxOpenReached = openPositionCount >= season.getMaxOpenPositions();
+        List<GamePosition> openPositions = gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(
+            season.getId(),
+            authenticatedUser.id(),
+            PositionStatus.OPEN
+        );
+        java.util.Set<String> ownedVideoIds = openPositions.stream()
+            .map(GamePosition::getVideoId)
+            .collect(Collectors.toSet());
+        boolean maxOpenReached = openDistinctVideoCount >= season.getMaxOpenPositions();
 
         return trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
             season.getRegionCode(),
             TRENDING_CATEGORY_ID
         ).stream().map(signal -> {
             long currentPricePoints = GamePointCalculator.calculatePricePoints(signal.getCurrentRank());
-            String blockedReason = resolveBuyBlockedReason(wallet, currentPricePoints, maxOpenReached);
+            boolean alreadyOwned = ownedVideoIds.contains(signal.getId().getVideoId());
+            String blockedReason = resolveBuyBlockedReason(wallet, currentPricePoints, maxOpenReached, alreadyOwned);
 
             return new MarketVideoResponse(
                 signal.getId().getVideoId(),
@@ -183,12 +192,18 @@ public class GameService {
             throw new IllegalArgumentException("현재 시즌에서 지원하지 않는 regionCode입니다.");
         }
 
-        long openPositionCount = gamePositionRepository.countBySeasonIdAndUserIdAndStatus(
+        long openDistinctVideoCount = gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(
             season.getId(),
             authenticatedUser.id(),
             PositionStatus.OPEN
         );
-        if (openPositionCount + quantity > season.getMaxOpenPositions()) {
+        boolean alreadyOwned = gamePositionRepository.countBySeasonIdAndUserIdAndVideoIdAndStatus(
+            season.getId(),
+            authenticatedUser.id(),
+            videoId,
+            PositionStatus.OPEN
+        ) > 0;
+        if (!alreadyOwned && openDistinctVideoCount >= season.getMaxOpenPositions()) {
             throw new IllegalArgumentException("동시 보유 가능 포지션 수를 초과했습니다.");
         }
 
@@ -526,8 +541,13 @@ public class GameService {
             .orElseThrow(() -> new IllegalArgumentException("활성화된 게임 시즌이 없습니다."));
     }
 
-    private String resolveBuyBlockedReason(GameWallet wallet, long currentPricePoints, boolean maxOpenReached) {
-        if (maxOpenReached) {
+    private String resolveBuyBlockedReason(
+        GameWallet wallet,
+        long currentPricePoints,
+        boolean maxOpenReached,
+        boolean alreadyOwned
+    ) {
+        if (maxOpenReached && !alreadyOwned) {
             return "동시 보유 가능 포지션 수를 초과했습니다.";
         }
         if (wallet.getBalancePoints() < currentPricePoints) {
