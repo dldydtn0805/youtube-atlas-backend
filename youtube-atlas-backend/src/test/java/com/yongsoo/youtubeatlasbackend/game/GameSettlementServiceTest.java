@@ -25,6 +25,7 @@ class GameSettlementServiceTest {
 
     private static final int ONE_SHARE = GamePointCalculator.QUANTITY_SCALE;
 
+    private AtlasProperties atlasProperties;
     private GameSeasonRepository gameSeasonRepository;
     private GamePositionRepository gamePositionRepository;
     private GameWalletRepository gameWalletRepository;
@@ -35,6 +36,7 @@ class GameSettlementServiceTest {
 
     @BeforeEach
     void setUp() {
+        atlasProperties = new AtlasProperties();
         gameSeasonRepository = org.mockito.Mockito.mock(GameSeasonRepository.class);
         gamePositionRepository = org.mockito.Mockito.mock(GamePositionRepository.class);
         gameWalletRepository = org.mockito.Mockito.mock(GameWalletRepository.class);
@@ -44,7 +46,7 @@ class GameSettlementServiceTest {
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-08T00:01:00Z"), ZoneOffset.UTC);
 
         gameSettlementService = new GameSettlementService(
-            new AtlasProperties(),
+            atlasProperties,
             gameSeasonRepository,
             gamePositionRepository,
             gameWalletRepository,
@@ -172,6 +174,72 @@ class GameSettlementServiceTest {
         assertThat(position.getSettledPoints()).isZero();
     }
 
+    @Test
+    void settleEndedSeasonsScheduledCreatesNewSeasonForManagedRegionFromLatestTemplate() {
+        atlasProperties.getGame().setSchedulerEnabled(true);
+        atlasProperties.getTrending().setJobs(List.of(syncJob("US")));
+
+        GameSeason latestUsSeason = endedSeason("US");
+
+        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of());
+        when(gameSeasonRepository.findByStatusAndEndAtLessThanEqual(SeasonStatus.ACTIVE, Instant.parse("2026-04-08T00:01:00Z")))
+            .thenReturn(List.of());
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "US"))
+            .thenReturn(Optional.empty());
+        when(gameSeasonRepository.findTopByRegionCodeOrderByStartAtDesc("US"))
+            .thenReturn(Optional.of(latestUsSeason));
+        when(gameSeasonRepository.save(any(GameSeason.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        gameSettlementService.settleEndedSeasonsScheduled();
+
+        org.mockito.ArgumentCaptor<GameSeason> captor = org.mockito.ArgumentCaptor.forClass(GameSeason.class);
+        verify(gameSeasonRepository).save(captor.capture());
+        GameSeason createdSeason = captor.getValue();
+
+        assertThat(createdSeason.getRegionCode()).isEqualTo("US");
+        assertThat(createdSeason.getStatus()).isEqualTo(SeasonStatus.ACTIVE);
+        assertThat(createdSeason.getStartAt()).isEqualTo(Instant.parse("2026-04-08T00:01:00Z"));
+        assertThat(createdSeason.getEndAt()).isEqualTo(Instant.parse("2026-04-15T00:01:00Z"));
+        assertThat(createdSeason.getStartingBalancePoints()).isEqualTo(latestUsSeason.getStartingBalancePoints());
+        assertThat(createdSeason.getMinHoldSeconds()).isEqualTo(latestUsSeason.getMinHoldSeconds());
+        assertThat(createdSeason.getMaxOpenPositions()).isEqualTo(latestUsSeason.getMaxOpenPositions());
+        assertThat(createdSeason.getRankPointMultiplier()).isEqualTo(latestUsSeason.getRankPointMultiplier());
+    }
+
+    @Test
+    void settleEndedSeasonsScheduledCreatesInitialSeasonFromDefaultsWhenNoHistoryExists() {
+        atlasProperties.getGame().setSchedulerEnabled(true);
+        atlasProperties.getGame().setSeasonDurationDays(3);
+        atlasProperties.getGame().setStartingBalancePoints(20_000L);
+        atlasProperties.getGame().setMinHoldSeconds(300);
+        atlasProperties.getGame().setMaxOpenPositions(7);
+        atlasProperties.getGame().setRankPointMultiplier(150);
+        atlasProperties.getTrending().setJobs(List.of(syncJob("BR")));
+
+        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of());
+        when(gameSeasonRepository.findByStatusAndEndAtLessThanEqual(SeasonStatus.ACTIVE, Instant.parse("2026-04-08T00:01:00Z")))
+            .thenReturn(List.of());
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "BR"))
+            .thenReturn(Optional.empty());
+        when(gameSeasonRepository.findTopByRegionCodeOrderByStartAtDesc("BR"))
+            .thenReturn(Optional.empty());
+        when(gameSeasonRepository.save(any(GameSeason.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        gameSettlementService.settleEndedSeasonsScheduled();
+
+        org.mockito.ArgumentCaptor<GameSeason> captor = org.mockito.ArgumentCaptor.forClass(GameSeason.class);
+        verify(gameSeasonRepository).save(captor.capture());
+        GameSeason createdSeason = captor.getValue();
+
+        assertThat(createdSeason.getRegionCode()).isEqualTo("BR");
+        assertThat(createdSeason.getStartAt()).isEqualTo(Instant.parse("2026-04-08T00:01:00Z"));
+        assertThat(createdSeason.getEndAt()).isEqualTo(Instant.parse("2026-04-11T00:01:00Z"));
+        assertThat(createdSeason.getStartingBalancePoints()).isEqualTo(20_000L);
+        assertThat(createdSeason.getMinHoldSeconds()).isEqualTo(300);
+        assertThat(createdSeason.getMaxOpenPositions()).isEqualTo(7);
+        assertThat(createdSeason.getRankPointMultiplier()).isEqualTo(150);
+    }
+
     private GameSeason activeSeasonEndingNow() {
         GameSeason season = new GameSeason();
         ReflectionTestUtils.setField(season, "id", 1L);
@@ -192,6 +260,21 @@ class GameSettlementServiceTest {
         GameSeason season = activeSeasonEndingNow();
         season.setEndAt(Instant.parse("2026-04-09T00:00:00Z"));
         return season;
+    }
+
+    private GameSeason endedSeason(String regionCode) {
+        GameSeason season = activeSeasonEndingNow();
+        season.setRegionCode(regionCode);
+        season.setStatus(SeasonStatus.ENDED);
+        return season;
+    }
+
+    private AtlasProperties.SyncJob syncJob(String regionCode) {
+        AtlasProperties.SyncJob job = new AtlasProperties.SyncJob();
+        job.setRegionCode(regionCode);
+        job.setCategoryId("0");
+        job.setCategoryLabel("전체");
+        return job;
     }
 
     private AppUser user(Long id) {

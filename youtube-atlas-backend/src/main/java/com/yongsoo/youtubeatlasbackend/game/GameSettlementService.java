@@ -1,9 +1,11 @@
 package com.yongsoo.youtubeatlasbackend.game;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -14,6 +16,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
@@ -63,6 +66,7 @@ public class GameSettlementService {
 
         distributeActiveSeasonDividends();
         settleEndedSeasons();
+        ensureManagedActiveSeasons();
     }
 
     @Transactional
@@ -84,6 +88,20 @@ public class GameSettlementService {
 
         for (GameSeason season : endedSeasons) {
             settleSeason(season, now);
+        }
+    }
+
+    @Transactional
+    public void ensureManagedActiveSeasons() {
+        Instant now = Instant.now(clock);
+
+        for (String regionCode : resolveManagedRegionCodes()) {
+            if (gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, regionCode).isPresent()) {
+                continue;
+            }
+
+            GameSeason latestSeason = gameSeasonRepository.findTopByRegionCodeOrderByStartAtDesc(regionCode).orElse(null);
+            gameSeasonRepository.save(createNextSeason(regionCode, latestSeason, now));
         }
     }
 
@@ -261,5 +279,66 @@ public class GameSettlementService {
         ledger.setBalanceAfterPoints(wallet.getBalancePoints());
         ledger.setCreatedAt(now);
         gameLedgerRepository.save(ledger);
+    }
+
+    private List<String> resolveManagedRegionCodes() {
+        Set<String> managedRegions = atlasProperties.getTrending().getJobs().stream()
+            .map(AtlasProperties.SyncJob::getRegionCode)
+            .filter(StringUtils::hasText)
+            .map(regionCode -> regionCode.trim().toUpperCase())
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (managedRegions.isEmpty()) {
+            managedRegions.add("KR");
+        }
+
+        return List.copyOf(managedRegions);
+    }
+
+    private GameSeason createNextSeason(String regionCode, GameSeason latestSeason, Instant now) {
+        Instant startAt = resolveNextSeasonStartAt(latestSeason, now);
+        Duration duration = resolveSeasonDuration(latestSeason);
+
+        GameSeason season = new GameSeason();
+        season.setName(regionCode + " Daily Season");
+        season.setStatus(SeasonStatus.ACTIVE);
+        season.setRegionCode(regionCode);
+        season.setStartAt(startAt);
+        season.setEndAt(startAt.plus(duration));
+        season.setStartingBalancePoints(latestSeason != null
+            ? latestSeason.getStartingBalancePoints()
+            : atlasProperties.getGame().getStartingBalancePoints());
+        season.setMinHoldSeconds(latestSeason != null
+            ? latestSeason.getMinHoldSeconds()
+            : atlasProperties.getGame().getMinHoldSeconds());
+        season.setMaxOpenPositions(latestSeason != null
+            ? latestSeason.getMaxOpenPositions()
+            : atlasProperties.getGame().getMaxOpenPositions());
+        season.setRankPointMultiplier(latestSeason != null
+            ? latestSeason.getRankPointMultiplier()
+            : atlasProperties.getGame().getRankPointMultiplier());
+        season.setCreatedAt(now);
+        return season;
+    }
+
+    private Instant resolveNextSeasonStartAt(GameSeason latestSeason, Instant now) {
+        if (latestSeason == null || latestSeason.getEndAt() == null) {
+            return now;
+        }
+
+        return latestSeason.getEndAt().isAfter(now) ? latestSeason.getEndAt() : now;
+    }
+
+    private Duration resolveSeasonDuration(GameSeason latestSeason) {
+        if (
+            latestSeason != null
+            && latestSeason.getStartAt() != null
+            && latestSeason.getEndAt() != null
+            && latestSeason.getEndAt().isAfter(latestSeason.getStartAt())
+        ) {
+            return Duration.between(latestSeason.getStartAt(), latestSeason.getEndAt());
+        }
+
+        return Duration.ofDays(Math.max(1, atlasProperties.getGame().getSeasonDurationDays()));
     }
 }

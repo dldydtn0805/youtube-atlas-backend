@@ -275,6 +275,11 @@ public class AtlasProperties {
     public static class Game {
         private boolean schedulerEnabled;
         private String cron = "0 */5 * * * *";
+        private int seasonDurationDays = 7;
+        private long startingBalancePoints = 10_000L;
+        private int minHoldSeconds = 600;
+        private int maxOpenPositions = 5;
+        private int rankPointMultiplier = 100;
 
         public boolean isSchedulerEnabled() {
             return schedulerEnabled;
@@ -290,6 +295,46 @@ public class AtlasProperties {
 
         public void setCron(String cron) {
             this.cron = cron;
+        }
+
+        public int getSeasonDurationDays() {
+            return seasonDurationDays;
+        }
+
+        public void setSeasonDurationDays(int seasonDurationDays) {
+            this.seasonDurationDays = seasonDurationDays;
+        }
+
+        public long getStartingBalancePoints() {
+            return startingBalancePoints;
+        }
+
+        public void setStartingBalancePoints(long startingBalancePoints) {
+            this.startingBalancePoints = startingBalancePoints;
+        }
+
+        public int getMinHoldSeconds() {
+            return minHoldSeconds;
+        }
+
+        public void setMinHoldSeconds(int minHoldSeconds) {
+            this.minHoldSeconds = minHoldSeconds;
+        }
+
+        public int getMaxOpenPositions() {
+            return maxOpenPositions;
+        }
+
+        public void setMaxOpenPositions(int maxOpenPositions) {
+            this.maxOpenPositions = maxOpenPositions;
+        }
+
+        public int getRankPointMultiplier() {
+            return rankPointMultiplier;
+        }
+
+        public void setRankPointMultiplier(int rankPointMultiplier) {
+            this.rankPointMultiplier = rankPointMultiplier;
         }
     }
 
