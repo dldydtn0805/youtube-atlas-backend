@@ -10,5 +10,7 @@ public interface GameSeasonRepository extends JpaRepository<GameSeason, Long> {
 
     Optional<GameSeason> findTopByStatusOrderByStartAtDesc(SeasonStatus status);
 
+    List<GameSeason> findByStatus(SeasonStatus status);
+
     List<GameSeason> findByStatusAndEndAtLessThanEqual(SeasonStatus status, Instant endAt);
 }

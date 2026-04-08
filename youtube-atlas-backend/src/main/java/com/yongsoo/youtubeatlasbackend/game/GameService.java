@@ -1073,7 +1073,7 @@ public class GameService {
             : position.getQuantity();
     }
 
-    private int resolveDividendRateBasisPoints(int rank) {
+    static int resolveDividendRateBasisPoints(int rank) {
         if (rank < 1 || rank > DIVIDEND_ELIGIBLE_RANK_CUTOFF) {
             return 0;
         }
@@ -1089,7 +1089,7 @@ public class GameService {
         return basisPoints / 100D;
     }
 
-    private long calculateEstimatedDividendPoints(long currentValuePoints, int dividendRateBasisPoints) {
+    static long calculateEstimatedDividendPoints(long currentValuePoints, int dividendRateBasisPoints) {
         if (currentValuePoints <= 0L || dividendRateBasisPoints <= 0) {
             return 0L;
         }

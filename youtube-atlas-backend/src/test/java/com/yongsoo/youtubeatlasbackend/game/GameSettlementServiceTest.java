@@ -29,6 +29,7 @@ class GameSettlementServiceTest {
     private GamePositionRepository gamePositionRepository;
     private GameWalletRepository gameWalletRepository;
     private GameLedgerRepository gameLedgerRepository;
+    private GameDividendPayoutRepository gameDividendPayoutRepository;
     private TrendSignalRepository trendSignalRepository;
     private GameSettlementService gameSettlementService;
 
@@ -38,6 +39,7 @@ class GameSettlementServiceTest {
         gamePositionRepository = org.mockito.Mockito.mock(GamePositionRepository.class);
         gameWalletRepository = org.mockito.Mockito.mock(GameWalletRepository.class);
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
+        gameDividendPayoutRepository = org.mockito.Mockito.mock(GameDividendPayoutRepository.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-08T00:01:00Z"), ZoneOffset.UTC);
 
@@ -47,9 +49,59 @@ class GameSettlementServiceTest {
             gamePositionRepository,
             gameWalletRepository,
             gameLedgerRepository,
+            gameDividendPayoutRepository,
             trendSignalRepository,
             fixedClock
         );
+    }
+
+    @Test
+    void distributeActiveSeasonDividendsPaysEligibleTopRankPositionOncePerRun() {
+        GameSeason season = activeSeasonStillRunning();
+        AppUser appUser = user(7L);
+        GamePosition position = openPosition(season, appUser, "video-1", 12, GamePointCalculator.calculatePricePoints(12));
+        GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
+        TrendSignal signal = signal("video-1", 5);
+        long currentValuePoints = GamePointCalculator.calculatePricePoints(5);
+        long dividendPoints = Math.round(currentValuePoints * 0.022D);
+
+        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
+            .thenReturn(List.of(signal));
+        when(gameDividendPayoutRepository.findPositionIdsBySeasonIdAndTrendRunId(1L, 55L)).thenReturn(List.of());
+        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(position));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gameDividendPayoutRepository.saveAndFlush(any(GameDividendPayout.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        gameSettlementService.distributeActiveSeasonDividends();
+
+        assertThat(wallet.getBalancePoints()).isEqualTo(10_000L + dividendPoints);
+        verify(gameDividendPayoutRepository).saveAndFlush(any(GameDividendPayout.class));
+        verify(gameLedgerRepository).save(any(GameLedger.class));
+    }
+
+    @Test
+    void distributeActiveSeasonDividendsSkipsPositionAlreadyPaidForCurrentRun() {
+        GameSeason season = activeSeasonStillRunning();
+        AppUser appUser = user(7L);
+        GamePosition position = openPosition(season, appUser, "video-1", 12, GamePointCalculator.calculatePricePoints(12));
+        GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
+        TrendSignal signal = signal("video-1", 5);
+
+        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
+            .thenReturn(List.of(signal));
+        when(gameDividendPayoutRepository.findPositionIdsBySeasonIdAndTrendRunId(1L, 55L)).thenReturn(List.of(300L));
+        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(position));
+
+        gameSettlementService.distributeActiveSeasonDividends();
+
+        assertThat(wallet.getBalancePoints()).isEqualTo(10_000L);
+        verify(gameDividendPayoutRepository, org.mockito.Mockito.never()).saveAndFlush(any(GameDividendPayout.class));
+        verify(gameLedgerRepository, org.mockito.Mockito.never()).save(any(GameLedger.class));
     }
 
     @Test
@@ -133,6 +185,12 @@ class GameSettlementServiceTest {
         season.setMaxOpenPositions(5);
         season.setRankPointMultiplier(100);
         season.setCreatedAt(Instant.parse("2026-04-01T00:00:00Z"));
+        return season;
+    }
+
+    private GameSeason activeSeasonStillRunning() {
+        GameSeason season = activeSeasonEndingNow();
+        season.setEndAt(Instant.parse("2026-04-09T00:00:00Z"));
         return season;
     }
 
