@@ -10,9 +10,8 @@ public record DividendPositionResponse(
     Long currentValuePoints,
     Boolean rankEligible,
     Boolean holdEligible,
-    Integer dividendWeight,
-    Long weightedValuePoints,
-    Double estimatedPoolSharePercent,
+    Double dividendRatePercent,
+    Long estimatedDividendPoints,
     Long nextEligibleInSeconds
 ) {
 }

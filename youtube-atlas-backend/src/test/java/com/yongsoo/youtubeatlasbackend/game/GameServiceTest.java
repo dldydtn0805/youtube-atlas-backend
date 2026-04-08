@@ -566,7 +566,7 @@ class GameServiceTest {
     }
 
     @Test
-    void getDividendOverviewReturnsCurrentEligibleShareAndWarmupPositions() {
+    void getDividendOverviewReturnsFixedEstimatedDividendPointsAndWarmupPositions() {
         GameSeason season = activeSeason();
         AppUser me = user(7L, "Atlas User");
         AppUser rival = user(8L, "Rival User");
@@ -596,10 +596,7 @@ class GameServiceTest {
             Instant.parse("2026-04-01T05:35:00Z")
         );
         long myEligibleValuePoints = GamePointCalculator.calculatePricePoints(5);
-        long rivalEligibleValuePoints = GamePointCalculator.calculatePricePoints(10);
-        long myWeightedValuePoints = myEligibleValuePoints * 16L;
-        long rivalWeightedValuePoints = rivalEligibleValuePoints * 11L;
-        long totalWeightedValuePoints = myWeightedValuePoints + rivalWeightedValuePoints;
+        long myEstimatedDividendPoints = Math.round(myEligibleValuePoints * 0.022D);
 
         ReflectionTestUtils.setField(myEligiblePosition, "id", 501L);
         ReflectionTestUtils.setField(myWarmupPosition, "id", 502L);
@@ -620,26 +617,25 @@ class GameServiceTest {
 
         assertThat(response.eligibleRankCutoff()).isEqualTo(20);
         assertThat(response.minimumHoldSeconds()).isEqualTo(600);
-        assertThat(response.totalWeightedValuePoints()).isEqualTo(totalWeightedValuePoints);
-        assertThat(response.myWeightedValuePoints()).isEqualTo(myWeightedValuePoints);
+        assertThat(response.myEstimatedDividendPoints()).isEqualTo(myEstimatedDividendPoints);
         assertThat(response.myEligiblePositionCount()).isEqualTo(1);
         assertThat(response.myWarmingUpPositionCount()).isEqualTo(1);
-        assertThat(response.myEstimatedPoolSharePercent())
-            .isEqualTo(((double) myWeightedValuePoints * 100D) / (double) totalWeightedValuePoints);
         assertThat(response.ranks()).hasSize(20);
         assertThat(response.ranks().getFirst().rank()).isEqualTo(1);
-        assertThat(response.ranks().getFirst().weight()).isEqualTo(20);
-        assertThat(response.ranks().getFirst().equalValuePoolSharePercent()).isEqualTo((20D * 100D) / 210D);
+        assertThat(response.ranks().getFirst().dividendRatePercent()).isEqualTo(3.0D);
+        assertThat(response.ranks().get(4).dividendRatePercent()).isEqualTo(2.2D);
+        assertThat(response.ranks().get(19).dividendRatePercent()).isEqualTo(0.4D);
         assertThat(response.positions()).hasSize(2);
         assertThat(response.positions().get(0).positionId()).isEqualTo(501L);
         assertThat(response.positions().get(0).rankEligible()).isTrue();
         assertThat(response.positions().get(0).holdEligible()).isTrue();
-        assertThat(response.positions().get(0).dividendWeight()).isEqualTo(16);
-        assertThat(response.positions().get(0).weightedValuePoints()).isEqualTo(myWeightedValuePoints);
+        assertThat(response.positions().get(0).dividendRatePercent()).isEqualTo(2.2D);
+        assertThat(response.positions().get(0).estimatedDividendPoints()).isEqualTo(myEstimatedDividendPoints);
         assertThat(response.positions().get(1).positionId()).isEqualTo(502L);
         assertThat(response.positions().get(1).rankEligible()).isTrue();
         assertThat(response.positions().get(1).holdEligible()).isFalse();
-        assertThat(response.positions().get(1).weightedValuePoints()).isZero();
+        assertThat(response.positions().get(1).dividendRatePercent()).isEqualTo(2.8D);
+        assertThat(response.positions().get(1).estimatedDividendPoints()).isZero();
         assertThat(response.positions().get(1).nextEligibleInSeconds()).isEqualTo(330L);
     }
 

@@ -44,7 +44,12 @@ public class GameService {
     private static final String TRENDING_CATEGORY_ID = "0";
     private static final int DEFAULT_FALLBACK_RANK = 201;
     private static final int DIVIDEND_ELIGIBLE_RANK_CUTOFF = 20;
-    private static final int DIVIDEND_TOTAL_WEIGHT = (DIVIDEND_ELIGIBLE_RANK_CUTOFF * (DIVIDEND_ELIGIBLE_RANK_CUTOFF + 1)) / 2;
+    private static final int[] DIVIDEND_RATE_BASIS_POINTS = {
+        300, 280, 260, 240, 220,
+        200, 180, 160, 150, 140,
+        130, 120, 110, 100, 90,
+        80, 70, 60, 50, 40
+    };
 
     private final GameSeasonRepository gameSeasonRepository;
     private final GameWalletRepository gameWalletRepository;
@@ -181,10 +186,6 @@ public class GameService {
             .map(position -> toDividendPositionCandidate(position, signalByVideoId.get(position.getVideoId()), now))
             .toList();
 
-        long totalWeightedValuePoints = candidates.stream()
-            .mapToLong(DividendPositionCandidate::weightedValuePoints)
-            .sum();
-
         List<DividendPositionCandidate> myCandidates = candidates.stream()
             .filter(candidate -> candidate.position().getUser().getId().equals(authenticatedUser.id()))
             .filter(candidate -> candidate.rankEligible())
@@ -195,21 +196,19 @@ public class GameService {
             )
             .toList();
 
-        long myWeightedValuePoints = myCandidates.stream()
-            .mapToLong(DividendPositionCandidate::weightedValuePoints)
+        long myEstimatedDividendPoints = myCandidates.stream()
+            .mapToLong(DividendPositionCandidate::estimatedDividendPoints)
             .sum();
 
         return new DividendOverviewResponse(
             DIVIDEND_ELIGIBLE_RANK_CUTOFF,
             season.getMinHoldSeconds(),
-            totalWeightedValuePoints,
-            myWeightedValuePoints,
-            calculatePoolSharePercent(myWeightedValuePoints, totalWeightedValuePoints),
+            myEstimatedDividendPoints,
             (int) myCandidates.stream().filter(DividendPositionCandidate::holdEligible).count(),
             (int) myCandidates.stream().filter(candidate -> !candidate.holdEligible()).count(),
             buildDividendRankResponses(),
             myCandidates.stream()
-                .map(candidate -> toDividendPositionResponse(candidate, totalWeightedValuePoints))
+                .map(this::toDividendPositionResponse)
                 .toList()
         );
     }
@@ -467,14 +466,7 @@ public class GameService {
 
     private List<DividendRankResponse> buildDividendRankResponses() {
         return java.util.stream.IntStream.rangeClosed(1, DIVIDEND_ELIGIBLE_RANK_CUTOFF)
-            .mapToObj(rank -> {
-                int weight = resolveDividendWeight(rank);
-                return new DividendRankResponse(
-                    rank,
-                    weight,
-                    calculatePoolSharePercent(weight, DIVIDEND_TOTAL_WEIGHT)
-                );
-            })
+            .mapToObj(rank -> new DividendRankResponse(rank, resolveDividendRatePercent(rank)))
             .toList();
     }
 
@@ -494,9 +486,9 @@ public class GameService {
                 getPositionQuantity(position)
             )
             : null;
-        int dividendWeight = rankEligible ? resolveDividendWeight(currentRank) : 0;
-        long weightedValuePoints = rankEligible && holdEligible && currentValuePoints != null
-            ? Math.multiplyExact(currentValuePoints, dividendWeight)
+        int dividendRateBasisPoints = rankEligible ? resolveDividendRateBasisPoints(currentRank) : 0;
+        long estimatedDividendPoints = rankEligible && holdEligible && currentValuePoints != null
+            ? calculateEstimatedDividendPoints(currentValuePoints, dividendRateBasisPoints)
             : 0L;
         long heldSeconds = Math.max(0L, now.getEpochSecond() - position.getCreatedAt().getEpochSecond());
         Long nextEligibleInSeconds = rankEligible && !holdEligible
@@ -509,16 +501,13 @@ public class GameService {
             currentValuePoints,
             rankEligible,
             holdEligible,
-            dividendWeight,
-            weightedValuePoints,
+            dividendRateBasisPoints,
+            estimatedDividendPoints,
             nextEligibleInSeconds
         );
     }
 
-    private DividendPositionResponse toDividendPositionResponse(
-        DividendPositionCandidate candidate,
-        long totalWeightedValuePoints
-    ) {
+    private DividendPositionResponse toDividendPositionResponse(DividendPositionCandidate candidate) {
         return new DividendPositionResponse(
             candidate.position().getId(),
             candidate.position().getVideoId(),
@@ -529,9 +518,8 @@ public class GameService {
             candidate.currentValuePoints(),
             candidate.rankEligible(),
             candidate.holdEligible(),
-            candidate.dividendWeight(),
-            candidate.weightedValuePoints(),
-            calculatePoolSharePercent(candidate.weightedValuePoints(), totalWeightedValuePoints),
+            basisPointsToPercent(candidate.dividendRateBasisPoints()),
+            candidate.estimatedDividendPoints(),
             candidate.nextEligibleInSeconds()
         );
     }
@@ -1085,16 +1073,28 @@ public class GameService {
             : position.getQuantity();
     }
 
-    private int resolveDividendWeight(int rank) {
-        return (DIVIDEND_ELIGIBLE_RANK_CUTOFF + 1) - rank;
-    }
-
-    private double calculatePoolSharePercent(long numerator, long denominator) {
-        if (numerator <= 0L || denominator <= 0L) {
-            return 0D;
+    private int resolveDividendRateBasisPoints(int rank) {
+        if (rank < 1 || rank > DIVIDEND_ELIGIBLE_RANK_CUTOFF) {
+            return 0;
         }
 
-        return ((double) numerator * 100D) / (double) denominator;
+        return DIVIDEND_RATE_BASIS_POINTS[rank - 1];
+    }
+
+    private double resolveDividendRatePercent(int rank) {
+        return basisPointsToPercent(resolveDividendRateBasisPoints(rank));
+    }
+
+    private double basisPointsToPercent(int basisPoints) {
+        return basisPoints / 100D;
+    }
+
+    private long calculateEstimatedDividendPoints(long currentValuePoints, int dividendRateBasisPoints) {
+        if (currentValuePoints <= 0L || dividendRateBasisPoints <= 0) {
+            return 0L;
+        }
+
+        return Math.round((double) currentValuePoints * dividendRateBasisPoints / 10_000D);
     }
 
     private long resolveUnitStakePoints(GamePosition position) {
@@ -1216,8 +1216,8 @@ public class GameService {
         Long currentValuePoints,
         boolean rankEligible,
         boolean holdEligible,
-        int dividendWeight,
-        long weightedValuePoints,
+        int dividendRateBasisPoints,
+        long estimatedDividendPoints,
         Long nextEligibleInSeconds
     ) {
     }
