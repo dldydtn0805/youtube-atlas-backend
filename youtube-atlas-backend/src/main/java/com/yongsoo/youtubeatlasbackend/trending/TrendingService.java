@@ -3,6 +3,7 @@ package com.yongsoo.youtubeatlasbackend.trending;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,14 @@ import com.yongsoo.youtubeatlasbackend.trending.api.VideoRankHistoryPointRespons
 import com.yongsoo.youtubeatlasbackend.trending.api.VideoRankHistoryResponse;
 import com.yongsoo.youtubeatlasbackend.youtube.CategoryCatalog;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeCatalogService;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategorySectionResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse.ContentDetailsResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse.SnippetResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse.StatisticsResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse.ThumbnailResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse.ThumbnailsResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse.TrendResponse;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasThumbnail;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasThumbnails;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasVideo;
@@ -32,8 +41,11 @@ import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasVideo;
 @Service
 public class TrendingService {
 
+    private static final int TOP_VIDEOS_PAGE_SIZE = 50;
+    private static final int TOP_VIDEOS_MAX_COUNT = 200;
     private static final String TRENDING_CATEGORY_ID = CategoryCatalog.ALL_VIDEO_CATEGORY_ID;
     private static final String TRENDING_CATEGORY_LABEL = "전체";
+    private static final String TRENDING_CATEGORY_DESCRIPTION = "카테고리 구분 없이 현재 국가 전체 인기 영상을 보여줍니다.";
 
     private final AtlasProperties atlasProperties;
     private final YouTubeCatalogService youTubeCatalogService;
@@ -112,6 +124,58 @@ public class TrendingService {
             items.size(),
             resolveLatestCapturedAt(normalizedRegionCode, items),
             items
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public VideoCategorySectionResponse getTopVideos(String regionCode, String pageToken) {
+        String normalizedRegionCode = regionCode.trim().toUpperCase();
+        int startIndex = parseTopVideosPageToken(pageToken);
+        TrendRun latestRun = trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc(
+            normalizedRegionCode,
+            TRENDING_CATEGORY_ID
+        ).orElseThrow(() -> new IllegalArgumentException("최신 트렌드 스냅샷이 없습니다."));
+        List<TrendSnapshot> allSnapshots = trendSnapshotRepository.findByRunIdOrderByRankAsc(latestRun.getId());
+
+        if (allSnapshots.isEmpty()) {
+            throw new IllegalArgumentException("최신 트렌드 스냅샷이 없습니다.");
+        }
+
+        List<TrendSnapshot> limitedSnapshots = allSnapshots.stream()
+            .limit(TOP_VIDEOS_MAX_COUNT)
+            .toList();
+        int endIndex = Math.min(startIndex + TOP_VIDEOS_PAGE_SIZE, limitedSnapshots.size());
+
+        if (startIndex >= limitedSnapshots.size()) {
+            return new VideoCategorySectionResponse(
+                TRENDING_CATEGORY_ID,
+                TRENDING_CATEGORY_LABEL,
+                TRENDING_CATEGORY_DESCRIPTION,
+                List.of(),
+                null
+            );
+        }
+
+        Map<String, TrendSignal> signalsByVideoId = new HashMap<>();
+        for (TrendSignal signal : trendSignalRepository.findByIdRegionCodeAndIdCategoryId(
+            normalizedRegionCode,
+            TRENDING_CATEGORY_ID
+        )) {
+            signalsByVideoId.put(signal.getId().getVideoId(), signal);
+        }
+
+        List<VideoItemResponse> items = limitedSnapshots.subList(startIndex, endIndex).stream()
+            .map(snapshot -> toTopVideoResponse(snapshot, latestRun, signalsByVideoId.get(snapshot.getVideoId())))
+            .toList();
+
+        String nextPageToken = endIndex < limitedSnapshots.size() ? Integer.toString(endIndex) : null;
+
+        return new VideoCategorySectionResponse(
+            TRENDING_CATEGORY_ID,
+            TRENDING_CATEGORY_LABEL,
+            TRENDING_CATEGORY_DESCRIPTION,
+            items,
+            nextPageToken
         );
     }
 
@@ -376,6 +440,69 @@ public class TrendingService {
                         : thumbnails.defaultThumbnail();
 
         return thumbnail != null ? thumbnail.url() : "";
+    }
+
+    private VideoItemResponse toTopVideoResponse(TrendSnapshot snapshot, TrendRun run, TrendSignal signal) {
+        ThumbnailResponse thumbnail = new ThumbnailResponse(snapshot.getThumbnailUrl(), null, null);
+
+        return new VideoItemResponse(
+            snapshot.getVideoId(),
+            new ContentDetailsResponse(""),
+            new SnippetResponse(
+                snapshot.getTitle(),
+                snapshot.getChannelTitle(),
+                snapshot.getChannelId(),
+                snapshot.getCategoryId(),
+                snapshot.getPublishedAt() != null ? snapshot.getPublishedAt().toString() : null,
+                new ThumbnailsResponse(thumbnail, thumbnail, thumbnail, thumbnail, thumbnail)
+            ),
+            new StatisticsResponse(snapshot.getViewCount()),
+            toTrendResponse(snapshot, run, signal)
+        );
+    }
+
+    private TrendResponse toTrendResponse(TrendSnapshot snapshot, TrendRun run, TrendSignal signal) {
+        if (signal != null) {
+            return new TrendResponse(
+                signal.getCategoryLabel(),
+                signal.getCurrentRank(),
+                signal.getPreviousRank(),
+                signal.getRankChange(),
+                signal.getCurrentViewCount(),
+                signal.getPreviousViewCount(),
+                signal.getViewCountDelta(),
+                signal.isNew(),
+                signal.getCapturedAt()
+            );
+        }
+
+        return new TrendResponse(
+            TRENDING_CATEGORY_LABEL,
+            snapshot.getRank(),
+            null,
+            null,
+            snapshot.getViewCount(),
+            null,
+            null,
+            false,
+            run.getCapturedAt()
+        );
+    }
+
+    private int parseTopVideosPageToken(String pageToken) {
+        if (!StringUtils.hasText(pageToken)) {
+            return 0;
+        }
+
+        try {
+            int parsedValue = Integer.parseInt(pageToken.trim());
+            if (parsedValue < 0) {
+                throw new IllegalArgumentException("pageToken은 0 이상이어야 합니다.");
+            }
+            return parsedValue;
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("pageToken 형식이 올바르지 않습니다.");
+        }
     }
 
     private String normalizeVideoId(String videoId) {

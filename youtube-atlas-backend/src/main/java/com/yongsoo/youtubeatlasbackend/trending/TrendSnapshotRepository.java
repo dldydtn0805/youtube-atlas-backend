@@ -11,6 +11,8 @@ public interface TrendSnapshotRepository extends JpaRepository<TrendSnapshot, Lo
 
     List<TrendSnapshot> findByRunId(Long runId);
 
+    List<TrendSnapshot> findByRunIdOrderByRankAsc(Long runId);
+
     List<TrendSnapshot> findByRegionCodeAndCategoryIdAndVideoIdOrderByRun_IdAsc(
         String regionCode,
         String categoryId,

@@ -162,6 +162,54 @@ class TrendingServiceTest {
     }
 
     @Test
+    void getTopVideosReturnsSnapshotBackedPageWithTrendSignal() {
+        TrendRun latestRun = trendRun(21L, Instant.parse("2026-04-02T06:00:00Z"));
+        TrendSnapshot first = snapshot(latestRun, "video-1", 1);
+        TrendSnapshot second = snapshot(latestRun, "video-2", 2);
+        TrendSignal firstSignal = trendSignal("KR", "0", "video-1", 1, 4, "Title", latestRun.getCapturedAt());
+
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0"))
+            .thenReturn(Optional.of(latestRun));
+        when(trendSnapshotRepository.findByRunIdOrderByRankAsc(21L))
+            .thenReturn(List.of(first, second));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryId("KR", "0"))
+            .thenReturn(List.of(firstSignal));
+
+        var response = trendingService.getTopVideos("kr", null);
+
+        assertThat(response.categoryId()).isEqualTo("0");
+        assertThat(response.items()).hasSize(2);
+        assertThat(response.nextPageToken()).isNull();
+        assertThat(response.items().getFirst().id()).isEqualTo("video-1");
+        assertThat(response.items().getFirst().trend()).isNotNull();
+        assertThat(response.items().getFirst().trend().currentRank()).isEqualTo(1);
+        assertThat(response.items().getLast().trend()).isNotNull();
+        assertThat(response.items().getLast().trend().currentRank()).isEqualTo(2);
+        assertThat(response.items().getLast().trend().rankChange()).isNull();
+    }
+
+    @Test
+    void getTopVideosUsesPageTokenOffset() {
+        TrendRun latestRun = trendRun(22L, Instant.parse("2026-04-02T07:00:00Z"));
+        List<TrendSnapshot> snapshots = java.util.stream.IntStream.rangeClosed(1, 55)
+            .mapToObj(index -> snapshot(latestRun, "video-" + index, index))
+            .toList();
+
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0"))
+            .thenReturn(Optional.of(latestRun));
+        when(trendSnapshotRepository.findByRunIdOrderByRankAsc(22L))
+            .thenReturn(snapshots);
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryId("KR", "0"))
+            .thenReturn(List.of());
+
+        var response = trendingService.getTopVideos("KR", "50");
+
+        assertThat(response.items()).hasSize(5);
+        assertThat(response.items().getFirst().id()).isEqualTo("video-51");
+        assertThat(response.nextPageToken()).isNull();
+    }
+
+    @Test
     void getVideoHistoryReturnsObservedHistoryAndCurrentChartOut() {
         TrendRun firstRun = trendRun(11L, Instant.parse("2026-04-01T05:00:00Z"));
         TrendRun latestRun = trendRun(12L, Instant.parse("2026-04-01T06:00:00Z"));

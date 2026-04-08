@@ -95,6 +95,7 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `GET /api/videos/{videoId}/comments`
 - `POST /api/videos/{videoId}/comments`
 - `GET /api/trending/signals?regionCode=KR&categoryId=0&videoIds=abc&videoIds=def`
+- `GET /api/trending/top-videos?regionCode=KR&pageToken=50`
 - `GET /api/trending/realtime-surging?regionCode=KR`
 - `POST /api/trending/sync`
 - `GET /api/admin/dashboard`
@@ -772,6 +773,90 @@ Authorization: Bearer {accessToken}
 
 - 트렌드 시그널은 현재 `전체(0)` 기준으로만 저장하고 조회합니다.
 - 카테고리별 영상 응답에는 트렌드가 붙지 않고, 전체 인기 영상 응답에서만 트렌드가 붙습니다.
+
+### `GET /api/trending/top-videos`
+
+쿼리 파라미터:
+
+- `regionCode`
+- `pageToken` 선택, 50개 단위 오프셋
+
+예시:
+
+```text
+/api/trending/top-videos?regionCode=KR&pageToken=50
+```
+
+- 최신 트렌드 스냅샷 기준 TOP 200 영상을 50개씩 반환합니다.
+- 게임용 메인 차트에서 사용하기 위한 읽기 전용 API입니다.
+- 응답은 `currentRank` 오름차순이며, 각 아이템의 `trend` 에 현재/이전 랭크와 조회수 변동이 함께 포함됩니다.
+
+응답 예시:
+
+```json
+{
+  "categoryId": "0",
+  "label": "전체",
+  "description": "카테고리 구분 없이 현재 국가 전체 인기 영상을 보여줍니다.",
+  "items": [
+    {
+      "id": "abc",
+      "contentDetails": {
+        "duration": ""
+      },
+      "snippet": {
+        "title": "Example",
+        "channelTitle": "Atlas",
+        "channelId": "channel-1",
+        "categoryId": "0",
+        "publishedAt": "2026-04-01T04:50:00Z",
+        "thumbnails": {
+          "default": {
+            "url": "https://example.com/thumb.jpg",
+            "width": null,
+            "height": null
+          },
+          "medium": {
+            "url": "https://example.com/thumb.jpg",
+            "width": null,
+            "height": null
+          },
+          "high": {
+            "url": "https://example.com/thumb.jpg",
+            "width": null,
+            "height": null
+          },
+          "standard": {
+            "url": "https://example.com/thumb.jpg",
+            "width": null,
+            "height": null
+          },
+          "maxres": {
+            "url": "https://example.com/thumb.jpg",
+            "width": null,
+            "height": null
+          }
+        }
+      },
+      "statistics": {
+        "viewCount": 1900000
+      },
+      "trend": {
+        "categoryLabel": "전체",
+        "currentRank": 3,
+        "previousRank": 11,
+        "rankChange": 8,
+        "currentViewCount": 1900000,
+        "previousViewCount": 1700000,
+        "viewCountDelta": 200000,
+        "isNew": false,
+        "capturedAt": "2026-04-01T05:30:00Z"
+      }
+    }
+  ],
+  "nextPageToken": "100"
+}
+```
 
 ### `GET /api/trending/realtime-surging`
 

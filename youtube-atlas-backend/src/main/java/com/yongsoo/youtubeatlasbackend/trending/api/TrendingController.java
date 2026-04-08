@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.yongsoo.youtubeatlasbackend.trending.TrendingService;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategorySectionResponse;
 
 @RestController
 @RequestMapping("/api/trending")
@@ -40,6 +41,14 @@ public class TrendingController {
     @GetMapping("/new-entries")
     public NewChartEntriesResponse getNewChartEntries(@RequestParam String regionCode) {
         return trendingService.getNewChartEntries(regionCode);
+    }
+
+    @GetMapping("/top-videos")
+    public VideoCategorySectionResponse getTopVideos(
+        @RequestParam String regionCode,
+        @RequestParam(required = false) String pageToken
+    ) {
+        return trendingService.getTopVideos(regionCode, pageToken);
     }
 
     @GetMapping("/videos/{videoId}/history")
