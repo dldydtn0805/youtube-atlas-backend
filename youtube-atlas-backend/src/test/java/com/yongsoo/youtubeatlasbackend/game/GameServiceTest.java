@@ -566,6 +566,84 @@ class GameServiceTest {
     }
 
     @Test
+    void getDividendOverviewReturnsCurrentEligibleShareAndWarmupPositions() {
+        GameSeason season = activeSeason();
+        AppUser me = user(7L, "Atlas User");
+        AppUser rival = user(8L, "Rival User");
+        GameWallet wallet = wallet(season, me, 10_000L, 0L, 0L);
+        GamePosition myEligiblePosition = openPosition(
+            season,
+            me,
+            "video-1",
+            12,
+            GamePointCalculator.calculatePricePoints(12),
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+        GamePosition myWarmupPosition = openPosition(
+            season,
+            me,
+            "video-2",
+            6,
+            GamePointCalculator.calculatePricePoints(6),
+            Instant.parse("2026-04-01T05:55:30Z")
+        );
+        GamePosition rivalEligiblePosition = openPosition(
+            season,
+            rival,
+            "video-3",
+            15,
+            GamePointCalculator.calculatePricePoints(15),
+            Instant.parse("2026-04-01T05:35:00Z")
+        );
+        long myEligibleValuePoints = GamePointCalculator.calculatePricePoints(5);
+        long rivalEligibleValuePoints = GamePointCalculator.calculatePricePoints(10);
+        long myWeightedValuePoints = myEligibleValuePoints * 16L;
+        long rivalWeightedValuePoints = rivalEligibleValuePoints * 11L;
+        long totalWeightedValuePoints = myWeightedValuePoints + rivalWeightedValuePoints;
+
+        ReflectionTestUtils.setField(myEligiblePosition, "id", 501L);
+        ReflectionTestUtils.setField(myWarmupPosition, "id", 502L);
+        ReflectionTestUtils.setField(rivalEligiblePosition, "id", 503L);
+
+        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
+            .thenReturn(List.of(
+                signal("video-2", 2, 4),
+                signal("video-1", 5, 7),
+                signal("video-3", 10, 5)
+            ));
+        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN))
+            .thenReturn(List.of(myEligiblePosition, myWarmupPosition, rivalEligiblePosition));
+
+        var response = gameService.getDividendOverview(authenticatedUser());
+
+        assertThat(response.eligibleRankCutoff()).isEqualTo(20);
+        assertThat(response.minimumHoldSeconds()).isEqualTo(600);
+        assertThat(response.totalWeightedValuePoints()).isEqualTo(totalWeightedValuePoints);
+        assertThat(response.myWeightedValuePoints()).isEqualTo(myWeightedValuePoints);
+        assertThat(response.myEligiblePositionCount()).isEqualTo(1);
+        assertThat(response.myWarmingUpPositionCount()).isEqualTo(1);
+        assertThat(response.myEstimatedPoolSharePercent())
+            .isEqualTo(((double) myWeightedValuePoints * 100D) / (double) totalWeightedValuePoints);
+        assertThat(response.ranks()).hasSize(20);
+        assertThat(response.ranks().getFirst().rank()).isEqualTo(1);
+        assertThat(response.ranks().getFirst().weight()).isEqualTo(20);
+        assertThat(response.ranks().getFirst().equalValuePoolSharePercent()).isEqualTo((20D * 100D) / 210D);
+        assertThat(response.positions()).hasSize(2);
+        assertThat(response.positions().get(0).positionId()).isEqualTo(501L);
+        assertThat(response.positions().get(0).rankEligible()).isTrue();
+        assertThat(response.positions().get(0).holdEligible()).isTrue();
+        assertThat(response.positions().get(0).dividendWeight()).isEqualTo(16);
+        assertThat(response.positions().get(0).weightedValuePoints()).isEqualTo(myWeightedValuePoints);
+        assertThat(response.positions().get(1).positionId()).isEqualTo(502L);
+        assertThat(response.positions().get(1).rankEligible()).isTrue();
+        assertThat(response.positions().get(1).holdEligible()).isFalse();
+        assertThat(response.positions().get(1).weightedValuePoints()).isZero();
+        assertThat(response.positions().get(1).nextEligibleInSeconds()).isEqualTo(330L);
+    }
+
+    @Test
     void getPositionRankHistoryReturnsObservedRunsBetweenBuyAndSell() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);

@@ -48,6 +48,11 @@ public class GameController {
         return gameService.getLeaderboard(authService.requireCurrentUser(authorizationHeader));
     }
 
+    @GetMapping("/dividends/overview")
+    public DividendOverviewResponse getDividendOverview(@RequestHeader("Authorization") String authorizationHeader) {
+        return gameService.getDividendOverview(authService.requireCurrentUser(authorizationHeader));
+    }
+
     @GetMapping("/leaderboard/{userId}/positions")
     public List<PositionResponse> getLeaderboardPositions(
         @RequestHeader("Authorization") String authorizationHeader,

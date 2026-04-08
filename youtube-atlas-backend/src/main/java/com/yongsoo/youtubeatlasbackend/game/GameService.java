@@ -19,6 +19,9 @@ import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.game.api.CreatePositionRequest;
 import com.yongsoo.youtubeatlasbackend.game.api.CurrentSeasonResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.DividendOverviewResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.DividendPositionResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.DividendRankResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.LeaderboardEntryResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.MarketVideoResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionRankHistoryPointResponse;
@@ -40,6 +43,8 @@ public class GameService {
 
     private static final String TRENDING_CATEGORY_ID = "0";
     private static final int DEFAULT_FALLBACK_RANK = 201;
+    private static final int DIVIDEND_ELIGIBLE_RANK_CUTOFF = 20;
+    private static final int DIVIDEND_TOTAL_WEIGHT = (DIVIDEND_ELIGIBLE_RANK_CUTOFF * (DIVIDEND_ELIGIBLE_RANK_CUTOFF + 1)) / 2;
 
     private final GameSeasonRepository gameSeasonRepository;
     private final GameWalletRepository gameWalletRepository;
@@ -158,6 +163,55 @@ public class GameService {
             .toList();
 
         return toLeaderboardResponses(snapshots, authenticatedUser.id());
+    }
+
+    @Transactional
+    public DividendOverviewResponse getDividendOverview(AuthenticatedUser authenticatedUser) {
+        GameSeason season = requireActiveSeason();
+        getOrCreateWallet(season, authenticatedUser);
+
+        Map<String, TrendSignal> signalByVideoId = trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
+            season.getRegionCode(),
+            TRENDING_CATEGORY_ID
+        ).stream().collect(Collectors.toMap(signal -> signal.getId().getVideoId(), Function.identity()));
+        Instant now = Instant.now(clock);
+
+        List<DividendPositionCandidate> candidates = gamePositionRepository.findBySeasonIdAndStatus(season.getId(), PositionStatus.OPEN)
+            .stream()
+            .map(position -> toDividendPositionCandidate(position, signalByVideoId.get(position.getVideoId()), now))
+            .toList();
+
+        long totalWeightedValuePoints = candidates.stream()
+            .mapToLong(DividendPositionCandidate::weightedValuePoints)
+            .sum();
+
+        List<DividendPositionCandidate> myCandidates = candidates.stream()
+            .filter(candidate -> candidate.position().getUser().getId().equals(authenticatedUser.id()))
+            .filter(candidate -> candidate.rankEligible())
+            .sorted(
+                Comparator.comparing(DividendPositionCandidate::holdEligible).reversed()
+                    .thenComparing(DividendPositionCandidate::currentRank, Comparator.nullsLast(Integer::compareTo))
+                    .thenComparing((DividendPositionCandidate candidate) -> candidate.position().getCreatedAt())
+            )
+            .toList();
+
+        long myWeightedValuePoints = myCandidates.stream()
+            .mapToLong(DividendPositionCandidate::weightedValuePoints)
+            .sum();
+
+        return new DividendOverviewResponse(
+            DIVIDEND_ELIGIBLE_RANK_CUTOFF,
+            season.getMinHoldSeconds(),
+            totalWeightedValuePoints,
+            myWeightedValuePoints,
+            calculatePoolSharePercent(myWeightedValuePoints, totalWeightedValuePoints),
+            (int) myCandidates.stream().filter(DividendPositionCandidate::holdEligible).count(),
+            (int) myCandidates.stream().filter(candidate -> !candidate.holdEligible()).count(),
+            buildDividendRankResponses(),
+            myCandidates.stream()
+                .map(candidate -> toDividendPositionResponse(candidate, totalWeightedValuePoints))
+                .toList()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -408,6 +462,77 @@ public class GameService {
             wallet.getReservedPoints(),
             wallet.getRealizedPnlPoints(),
             wallet.getBalancePoints() + wallet.getReservedPoints()
+        );
+    }
+
+    private List<DividendRankResponse> buildDividendRankResponses() {
+        return java.util.stream.IntStream.rangeClosed(1, DIVIDEND_ELIGIBLE_RANK_CUTOFF)
+            .mapToObj(rank -> {
+                int weight = resolveDividendWeight(rank);
+                return new DividendRankResponse(
+                    rank,
+                    weight,
+                    calculatePoolSharePercent(weight, DIVIDEND_TOTAL_WEIGHT)
+                );
+            })
+            .toList();
+    }
+
+    private DividendPositionCandidate toDividendPositionCandidate(GamePosition position, TrendSignal signal, Instant now) {
+        OpenPositionSnapshot snapshot = signal != null
+            ? new OpenPositionSnapshot(signal.getCurrentRank(), signal.getCapturedAt(), false)
+            : resolveOpenPositionSnapshot(position);
+        Integer currentRank = snapshot != null ? snapshot.currentRank() : null;
+        boolean rankEligible = currentRank != null
+            && !snapshot.chartOut()
+            && currentRank >= 1
+            && currentRank <= DIVIDEND_ELIGIBLE_RANK_CUTOFF;
+        boolean holdEligible = rankEligible && canSellPosition(position, now);
+        Long currentValuePoints = snapshot != null
+            ? GamePointCalculator.calculatePositionPoints(
+                GamePointCalculator.calculatePricePoints(snapshot.currentRank()),
+                getPositionQuantity(position)
+            )
+            : null;
+        int dividendWeight = rankEligible ? resolveDividendWeight(currentRank) : 0;
+        long weightedValuePoints = rankEligible && holdEligible && currentValuePoints != null
+            ? Math.multiplyExact(currentValuePoints, dividendWeight)
+            : 0L;
+        long heldSeconds = Math.max(0L, now.getEpochSecond() - position.getCreatedAt().getEpochSecond());
+        Long nextEligibleInSeconds = rankEligible && !holdEligible
+            ? Math.max(0L, position.getSeason().getMinHoldSeconds() - heldSeconds)
+            : null;
+
+        return new DividendPositionCandidate(
+            position,
+            currentRank,
+            currentValuePoints,
+            rankEligible,
+            holdEligible,
+            dividendWeight,
+            weightedValuePoints,
+            nextEligibleInSeconds
+        );
+    }
+
+    private DividendPositionResponse toDividendPositionResponse(
+        DividendPositionCandidate candidate,
+        long totalWeightedValuePoints
+    ) {
+        return new DividendPositionResponse(
+            candidate.position().getId(),
+            candidate.position().getVideoId(),
+            candidate.position().getTitle(),
+            candidate.position().getThumbnailUrl(),
+            candidate.currentRank(),
+            getPositionQuantity(candidate.position()),
+            candidate.currentValuePoints(),
+            candidate.rankEligible(),
+            candidate.holdEligible(),
+            candidate.dividendWeight(),
+            candidate.weightedValuePoints(),
+            calculatePoolSharePercent(candidate.weightedValuePoints(), totalWeightedValuePoints),
+            candidate.nextEligibleInSeconds()
         );
     }
 
@@ -960,6 +1085,18 @@ public class GameService {
             : position.getQuantity();
     }
 
+    private int resolveDividendWeight(int rank) {
+        return (DIVIDEND_ELIGIBLE_RANK_CUTOFF + 1) - rank;
+    }
+
+    private double calculatePoolSharePercent(long numerator, long denominator) {
+        if (numerator <= 0L || denominator <= 0L) {
+            return 0D;
+        }
+
+        return ((double) numerator * 100D) / (double) denominator;
+    }
+
     private long resolveUnitStakePoints(GamePosition position) {
         return GamePointCalculator.estimateUnitPricePoints(position.getStakePoints(), getPositionQuantity(position));
     }
@@ -1071,5 +1208,17 @@ public class GameService {
     }
 
     private record PositionHistoryWindow(Long startRunId, Long endRunId, Integer latestRank, Instant latestCapturedAt) {
+    }
+
+    private record DividendPositionCandidate(
+        GamePosition position,
+        Integer currentRank,
+        Long currentValuePoints,
+        boolean rankEligible,
+        boolean holdEligible,
+        int dividendWeight,
+        long weightedValuePoints,
+        Long nextEligibleInSeconds
+    ) {
     }
 }
