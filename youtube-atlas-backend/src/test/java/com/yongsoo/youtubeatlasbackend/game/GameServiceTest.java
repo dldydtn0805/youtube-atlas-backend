@@ -76,7 +76,8 @@ class GameServiceTest {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
 
-        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.empty());
         when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
         when(gameLedgerRepository.sumAmountPointsBySeasonIdAndUserIdAndType(1L, 7L, LedgerType.BONUS)).thenReturn(0L);
@@ -87,7 +88,7 @@ class GameServiceTest {
         });
         when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = gameService.getCurrentSeason(authenticatedUser());
+        var response = gameService.getCurrentSeason(authenticatedUser(), "KR");
 
         assertThat(response.seasonId()).isEqualTo(1L);
         assertThat(response.wallet().balancePoints()).isEqualTo(10_000L);
@@ -104,7 +105,8 @@ class GameServiceTest {
         TrendSignal signal = signal("video-1", 170, 3);
         long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
 
-        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
         when(gamePositionRepository.findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(1L, 7L, "video-1", PositionStatus.OPEN))
             .thenReturn(List.of());
@@ -152,7 +154,8 @@ class GameServiceTest {
         );
         ReflectionTestUtils.setField(existingPosition, "id", 201L);
 
-        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
         when(gamePositionRepository.findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(1L, 7L, "video-1", PositionStatus.OPEN))
             .thenReturn(List.of(existingPosition));
@@ -186,7 +189,8 @@ class GameServiceTest {
         GameWallet wallet = wallet(season, appUser, 30_000L, 0L, 0L);
         TrendSignal signal = signal("video-1", 170, 3);
 
-        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
         when(gamePositionRepository.findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(1L, 7L, "video-1", PositionStatus.OPEN))
             .thenReturn(List.of());
@@ -290,7 +294,8 @@ class GameServiceTest {
         ReflectionTestUtils.setField(secondPosition, "id", 302L);
         ReflectionTestUtils.setField(thirdPosition, "id", 303L);
 
-        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
         when(gamePositionRepository.findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(1L, 7L, "video-1", PositionStatus.OPEN))
             .thenReturn(List.of(firstPosition, secondPosition, thirdPosition));
         when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
@@ -299,7 +304,7 @@ class GameServiceTest {
         when(gameWalletRepository.save(wallet)).thenReturn(wallet);
         when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = gameService.sell(authenticatedUser(), new SellPositionsRequest("video-1", TWO_SHARES));
+        var response = gameService.sell(authenticatedUser(), new SellPositionsRequest("KR", "video-1", TWO_SHARES));
 
         assertThat(response).hasSize(2);
         assertThat(response).extracting(responseItem -> responseItem.positionId()).containsExactly(301L, 302L);
@@ -429,7 +434,8 @@ class GameServiceTest {
         TrendSignal ownedSignal = signal("video-1", 170, 2);
         TrendSignal openSignal = signal("video-2", 180, 1);
 
-        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
         when(gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(1L);
         when(gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(1L, 7L, PositionStatus.OPEN))
@@ -437,7 +443,7 @@ class GameServiceTest {
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
             .thenReturn(List.of(ownedSignal, openSignal));
 
-        var response = gameService.getMarket(authenticatedUser());
+        var response = gameService.getMarket(authenticatedUser(), "KR");
 
         assertThat(response).hasSize(2);
         assertThat(response.get(0).videoId()).isEqualTo("video-1");
@@ -466,7 +472,8 @@ class GameServiceTest {
             Instant.parse("2026-04-01T05:45:00Z")
         );
 
-        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
         when(gamePositionRepository.findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(1L, 7L, "video-1", PositionStatus.OPEN))
             .thenReturn(List.of(existingPosition));
@@ -496,7 +503,8 @@ class GameServiceTest {
         GameWallet wallet = wallet(season, appUser, buyPricePoints - 1, 0L, 0L);
         TrendSignal signal = signal("video-1", 170, 3);
 
-        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
         when(gamePositionRepository.findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(1L, 7L, "video-1", PositionStatus.OPEN))
             .thenReturn(List.of());
@@ -544,7 +552,8 @@ class GameServiceTest {
         TrendSignal mySignal = signal("video-1", 170, 3);
         TrendSignal rivalSignal = signal("video-2", 180, -4);
 
-        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(myWallet));
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
             .thenReturn(List.of(mySignal, rivalSignal));
@@ -552,7 +561,7 @@ class GameServiceTest {
             .thenReturn(List.of(myPosition, rivalPosition));
         when(gameWalletRepository.findBySeasonId(1L)).thenReturn(List.of(myWallet, rivalWallet));
 
-        var response = gameService.getLeaderboard(authenticatedUser());
+        var response = gameService.getLeaderboard(authenticatedUser(), "KR");
 
         assertThat(response).hasSize(2);
         assertThat(response.get(0).userId()).isEqualTo(7L);
@@ -604,7 +613,8 @@ class GameServiceTest {
         ReflectionTestUtils.setField(myWarmupPosition, "id", 502L);
         ReflectionTestUtils.setField(rivalEligiblePosition, "id", 503L);
 
-        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
             .thenReturn(List.of(
@@ -615,7 +625,7 @@ class GameServiceTest {
         when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN))
             .thenReturn(List.of(myEligiblePosition, myWarmupPosition, rivalEligiblePosition));
 
-        var response = gameService.getDividendOverview(authenticatedUser());
+        var response = gameService.getDividendOverview(authenticatedUser(), "KR");
 
         assertThat(response.eligibleRankCutoff()).isEqualTo(20);
         assertThat(response.minimumHoldSeconds()).isEqualTo(600);

@@ -84,22 +84,22 @@ public class GameService {
     }
 
     @Transactional
-    public CurrentSeasonResponse getCurrentSeason(AuthenticatedUser authenticatedUser) {
-        GameSeason season = requireActiveSeason();
+    public CurrentSeasonResponse getCurrentSeason(AuthenticatedUser authenticatedUser, String regionCode) {
+        GameSeason season = requireActiveSeason(regionCode);
         GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
         return toCurrentSeasonResponse(season, wallet);
     }
 
     @Transactional
-    public WalletResponse getWallet(AuthenticatedUser authenticatedUser) {
-        GameSeason season = requireActiveSeason();
+    public WalletResponse getWallet(AuthenticatedUser authenticatedUser, String regionCode) {
+        GameSeason season = requireActiveSeason(regionCode);
         GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
         return toWalletResponse(wallet);
     }
 
     @Transactional
-    public List<MarketVideoResponse> getMarket(AuthenticatedUser authenticatedUser) {
-        GameSeason season = requireActiveSeason();
+    public List<MarketVideoResponse> getMarket(AuthenticatedUser authenticatedUser, String regionCode) {
+        GameSeason season = requireActiveSeason(regionCode);
         GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
         long openDistinctVideoCount = gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(
             season.getId(),
@@ -144,8 +144,8 @@ public class GameService {
     }
 
     @Transactional
-    public List<LeaderboardEntryResponse> getLeaderboard(AuthenticatedUser authenticatedUser) {
-        GameSeason season = requireActiveSeason();
+    public List<LeaderboardEntryResponse> getLeaderboard(AuthenticatedUser authenticatedUser, String regionCode) {
+        GameSeason season = requireActiveSeason(regionCode);
         getOrCreateWallet(season, authenticatedUser);
 
         Map<String, TrendSignal> signalByVideoId = trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
@@ -171,8 +171,8 @@ public class GameService {
     }
 
     @Transactional
-    public DividendOverviewResponse getDividendOverview(AuthenticatedUser authenticatedUser) {
-        GameSeason season = requireActiveSeason();
+    public DividendOverviewResponse getDividendOverview(AuthenticatedUser authenticatedUser, String regionCode) {
+        GameSeason season = requireActiveSeason(regionCode);
         getOrCreateWallet(season, authenticatedUser);
 
         Map<String, TrendSignal> signalByVideoId = trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
@@ -214,8 +214,12 @@ public class GameService {
     }
 
     @Transactional(readOnly = true)
-    public List<PositionResponse> getLeaderboardPositions(AuthenticatedUser authenticatedUser, Long userId) {
-        GameSeason season = requireActiveSeason();
+    public List<PositionResponse> getLeaderboardPositions(
+        AuthenticatedUser authenticatedUser,
+        Long userId,
+        String regionCode
+    ) {
+        GameSeason season = requireActiveSeason(regionCode);
         getOrCreateWallet(season, authenticatedUser);
 
         if (userId == null) {
@@ -233,18 +237,14 @@ public class GameService {
 
     @Transactional
     public List<PositionResponse> buy(AuthenticatedUser authenticatedUser, CreatePositionRequest request) {
-        GameSeason season = requireActiveSeason();
-        GameWallet wallet = getOrCreateWalletForUpdate(season, authenticatedUser);
         String regionCode = normalizeRequired(request.regionCode(), "regionCode는 필수입니다.").toUpperCase();
+        GameSeason season = requireActiveSeason(regionCode);
+        GameWallet wallet = getOrCreateWalletForUpdate(season, authenticatedUser);
         String categoryId = normalizeRequired(request.categoryId(), "categoryId는 필수입니다.");
         String videoId = normalizeRequired(request.videoId(), "videoId는 필수입니다.");
         long quotedPricePoints = normalizeStakePoints(request.stakePoints());
         int quantity = normalizeQuantity(request.quantity());
         Instant now = Instant.now(clock);
-
-        if (!season.getRegionCode().equalsIgnoreCase(regionCode)) {
-            throw new IllegalArgumentException("현재 시즌에서 지원하지 않는 regionCode입니다.");
-        }
 
         List<GamePosition> openPositionsForVideo = gamePositionRepository.findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(
             season.getId(),
@@ -291,8 +291,13 @@ public class GameService {
     }
 
     @Transactional(readOnly = true)
-    public List<PositionResponse> getMyPositions(AuthenticatedUser authenticatedUser, String status, Integer limit) {
-        GameSeason season = requireActiveSeason();
+    public List<PositionResponse> getMyPositions(
+        AuthenticatedUser authenticatedUser,
+        String regionCode,
+        String status,
+        Integer limit
+    ) {
+        GameSeason season = requireActiveSeason(regionCode);
         List<GamePosition> positions = StringUtils.hasText(status)
             ? gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(
                 season.getId(),
@@ -396,7 +401,7 @@ public class GameService {
 
     @Transactional
     public List<SellPositionResponse> sell(AuthenticatedUser authenticatedUser, SellPositionsRequest request) {
-        GameSeason season = requireActiveSeason();
+        GameSeason season = requireActiveSeason(request.regionCode());
         String videoId = normalizeRequired(request.videoId(), "videoId는 필수입니다.");
         int quantity = normalizeQuantity(request.quantity());
         Instant now = Instant.now(clock);
@@ -646,9 +651,13 @@ public class GameService {
         ).map(snapshot -> snapshot.getRun().getId()).orElse(position.getBuyRunId());
     }
 
-    private GameSeason requireActiveSeason() {
-        return gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)
-            .orElseThrow(() -> new IllegalArgumentException("활성화된 게임 시즌이 없습니다."));
+    private GameSeason requireActiveSeason(String regionCode) {
+        String normalizedRegionCode = normalizeRequired(regionCode, "regionCode는 필수입니다.").toUpperCase();
+
+        return gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(
+            SeasonStatus.ACTIVE,
+            normalizedRegionCode
+        ).orElseThrow(() -> new IllegalArgumentException(normalizedRegionCode + " 활성 게임 시즌이 없습니다."));
     }
 
     private String resolveBuyBlockedReason(

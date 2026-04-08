@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 public record SellPositionsRequest(
+    @NotBlank String regionCode,
     @NotBlank String videoId,
     @NotNull @Min(1) Integer quantity
 ) {

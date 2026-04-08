@@ -29,45 +29,62 @@ public class GameController {
     }
 
     @GetMapping("/seasons/current")
-    public CurrentSeasonResponse getCurrentSeason(@RequestHeader("Authorization") String authorizationHeader) {
-        return gameService.getCurrentSeason(authService.requireCurrentUser(authorizationHeader));
+    public CurrentSeasonResponse getCurrentSeason(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode
+    ) {
+        return gameService.getCurrentSeason(authService.requireCurrentUser(authorizationHeader), regionCode);
     }
 
     @GetMapping("/wallet")
-    public WalletResponse getWallet(@RequestHeader("Authorization") String authorizationHeader) {
-        return gameService.getWallet(authService.requireCurrentUser(authorizationHeader));
+    public WalletResponse getWallet(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode
+    ) {
+        return gameService.getWallet(authService.requireCurrentUser(authorizationHeader), regionCode);
     }
 
     @GetMapping("/market")
-    public List<MarketVideoResponse> getMarket(@RequestHeader("Authorization") String authorizationHeader) {
-        return gameService.getMarket(authService.requireCurrentUser(authorizationHeader));
+    public List<MarketVideoResponse> getMarket(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode
+    ) {
+        return gameService.getMarket(authService.requireCurrentUser(authorizationHeader), regionCode);
     }
 
     @GetMapping("/leaderboard")
-    public List<LeaderboardEntryResponse> getLeaderboard(@RequestHeader("Authorization") String authorizationHeader) {
-        return gameService.getLeaderboard(authService.requireCurrentUser(authorizationHeader));
+    public List<LeaderboardEntryResponse> getLeaderboard(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode
+    ) {
+        return gameService.getLeaderboard(authService.requireCurrentUser(authorizationHeader), regionCode);
     }
 
     @GetMapping("/dividends/overview")
-    public DividendOverviewResponse getDividendOverview(@RequestHeader("Authorization") String authorizationHeader) {
-        return gameService.getDividendOverview(authService.requireCurrentUser(authorizationHeader));
+    public DividendOverviewResponse getDividendOverview(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode
+    ) {
+        return gameService.getDividendOverview(authService.requireCurrentUser(authorizationHeader), regionCode);
     }
 
     @GetMapping("/leaderboard/{userId}/positions")
     public List<PositionResponse> getLeaderboardPositions(
         @RequestHeader("Authorization") String authorizationHeader,
-        @PathVariable Long userId
+        @PathVariable Long userId,
+        @RequestParam String regionCode
     ) {
-        return gameService.getLeaderboardPositions(authService.requireCurrentUser(authorizationHeader), userId);
+        return gameService.getLeaderboardPositions(authService.requireCurrentUser(authorizationHeader), userId, regionCode);
     }
 
     @GetMapping("/positions/me")
     public List<PositionResponse> getMyPositions(
         @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode,
         @RequestParam(required = false) String status,
         @RequestParam(required = false) Integer limit
     ) {
-        return gameService.getMyPositions(authService.requireCurrentUser(authorizationHeader), status, limit);
+        return gameService.getMyPositions(authService.requireCurrentUser(authorizationHeader), regionCode, status, limit);
     }
 
     @GetMapping("/positions/{positionId}/rank-history")
