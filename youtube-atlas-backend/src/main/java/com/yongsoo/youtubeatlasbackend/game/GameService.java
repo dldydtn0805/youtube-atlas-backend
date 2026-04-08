@@ -455,11 +455,18 @@ public class GameService {
     }
 
     private WalletResponse toWalletResponse(GameWallet wallet) {
+        long bonusPoints = gameLedgerRepository.sumAmountPointsBySeasonIdAndUserIdAndType(
+            wallet.getSeason().getId(),
+            wallet.getUser().getId(),
+            LedgerType.BONUS
+        );
+
         return new WalletResponse(
             wallet.getSeason().getId(),
             wallet.getBalancePoints(),
             wallet.getReservedPoints(),
             wallet.getRealizedPnlPoints(),
+            bonusPoints,
             wallet.getBalancePoints() + wallet.getReservedPoints()
         );
     }

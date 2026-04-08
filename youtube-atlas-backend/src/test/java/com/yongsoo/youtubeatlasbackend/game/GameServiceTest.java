@@ -79,6 +79,7 @@ class GameServiceTest {
         when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.empty());
         when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
+        when(gameLedgerRepository.sumAmountPointsBySeasonIdAndUserIdAndType(1L, 7L, LedgerType.BONUS)).thenReturn(0L);
         when(gameWalletRepository.saveAndFlush(any(GameWallet.class))).thenAnswer(invocation -> {
             GameWallet wallet = invocation.getArgument(0, GameWallet.class);
             ReflectionTestUtils.setField(wallet, "id", 100L);
@@ -91,6 +92,7 @@ class GameServiceTest {
         assertThat(response.seasonId()).isEqualTo(1L);
         assertThat(response.wallet().balancePoints()).isEqualTo(10_000L);
         assertThat(response.wallet().reservedPoints()).isZero();
+        assertThat(response.wallet().bonusPoints()).isZero();
         verify(gameLedgerRepository).save(any(GameLedger.class));
     }
 
