@@ -1,6 +1,7 @@
 package com.yongsoo.youtubeatlasbackend.trending;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -356,6 +357,8 @@ public class TrendingService {
             trendSignalRepository.save(signal);
         }
 
+        purgeExpiredRuns(regionCode, categoryId, now);
+
         return new SyncTrendingResponse(
             regionCode,
             categoryId,
@@ -382,6 +385,26 @@ public class TrendingService {
         for (String regionCode : scheduledRegions) {
             syncAllCategory(regionCode);
         }
+    }
+
+    private void purgeExpiredRuns(String regionCode, String categoryId, Instant now) {
+        int retentionDays = atlasProperties.getTrending().getRetentionDays();
+        if (retentionDays <= 0) {
+            return;
+        }
+
+        Instant capturedBefore = now.minus(retentionDays, ChronoUnit.DAYS);
+        List<Long> expiredRunIds = trendRunRepository.findIdsByRegionCodeAndCategoryIdAndCapturedAtBefore(
+            regionCode,
+            categoryId,
+            capturedBefore
+        );
+        if (expiredRunIds.isEmpty()) {
+            return;
+        }
+
+        trendSnapshotRepository.deleteByRun_IdIn(expiredRunIds);
+        trendRunRepository.deleteAllByIdInBatch(expiredRunIds);
     }
 
     private TrendSignalResponse toResponse(TrendSignal signal) {

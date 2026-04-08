@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 public interface TrendRunRepository extends JpaRepository<TrendRun, Long> {
 
@@ -22,5 +23,19 @@ public interface TrendRunRepository extends JpaRepository<TrendRun, Long> {
         String categoryId,
         Long startId,
         Long endId
+    );
+
+    @Query("""
+        select run.id
+        from TrendRun run
+        where run.regionCode = :regionCode
+          and run.categoryId = :categoryId
+          and run.capturedAt < :capturedBefore
+        order by run.id asc
+        """)
+    List<Long> findIdsByRegionCodeAndCategoryIdAndCapturedAtBefore(
+        String regionCode,
+        String categoryId,
+        java.time.Instant capturedBefore
     );
 }

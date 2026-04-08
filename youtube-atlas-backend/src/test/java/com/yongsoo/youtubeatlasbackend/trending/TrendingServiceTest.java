@@ -241,6 +241,8 @@ class TrendingServiceTest {
             .thenReturn(List.of(video("video-1")));
         when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc(eq("KR"), eq("0"), any()))
             .thenReturn(Optional.empty());
+        when(trendRunRepository.findIdsByRegionCodeAndCategoryIdAndCapturedAtBefore(eq("KR"), eq("0"), any()))
+            .thenReturn(List.of());
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryId("KR", "0"))
             .thenReturn(List.of());
         when(trendSignalRepository.findById(any())).thenReturn(Optional.empty());
@@ -256,6 +258,25 @@ class TrendingServiceTest {
         verify(youTubeCatalogService).fetchMergedCategoryVideos("KR", List.of(), 3);
         verify(trendSignalRepository).findByIdRegionCodeAndIdCategoryId("KR", "0");
         assertThat(response.categoryId()).isEqualTo("0");
+    }
+
+    @Test
+    void syncPurgesExpiredRunsWhenRetentionIsEnabled() {
+        when(trendRunRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(youTubeCatalogService.fetchMergedCategoryVideos("US", List.of(), 3))
+            .thenReturn(List.of(video("video-1")));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc(eq("US"), eq("0"), any()))
+            .thenReturn(Optional.empty());
+        when(trendRunRepository.findIdsByRegionCodeAndCategoryIdAndCapturedAtBefore(eq("US"), eq("0"), any()))
+            .thenReturn(List.of(4L, 5L));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryId("US", "0"))
+            .thenReturn(List.of());
+        when(trendSignalRepository.findById(any())).thenReturn(Optional.empty());
+
+        trendingService.sync(new SyncTrendingRequest("US", "0", "전체", List.of()));
+
+        verify(trendSnapshotRepository).deleteByRun_IdIn(List.of(4L, 5L));
+        verify(trendRunRepository).deleteAllByIdInBatch(List.of(4L, 5L));
     }
 
     private AtlasVideo video(String id) {

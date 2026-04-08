@@ -152,8 +152,9 @@ public class AtlasProperties {
         private boolean schedulerEnabled;
         private String cron = "0 0 * * * *";
         private int syncMaxPagesPerSource = 4;
+        private int retentionDays = 30;
         private int realtimeSurgingRankChangeThreshold = 5;
-        private List<SyncJob> jobs = new ArrayList<>();
+        private List<SyncJob> jobs = defaultJobs();
 
         public boolean isSchedulerEnabled() {
             return schedulerEnabled;
@@ -179,6 +180,14 @@ public class AtlasProperties {
             this.syncMaxPagesPerSource = syncMaxPagesPerSource;
         }
 
+        public int getRetentionDays() {
+            return retentionDays;
+        }
+
+        public void setRetentionDays(int retentionDays) {
+            this.retentionDays = retentionDays;
+        }
+
         public int getRealtimeSurgingRankChangeThreshold() {
             return realtimeSurgingRankChangeThreshold;
         }
@@ -193,6 +202,25 @@ public class AtlasProperties {
 
         public void setJobs(List<SyncJob> jobs) {
             this.jobs = jobs;
+        }
+
+        private static List<SyncJob> defaultJobs() {
+            return new ArrayList<>(List.of(
+                syncJob("KR"),
+                syncJob("US"),
+                syncJob("JP"),
+                syncJob("BR"),
+                syncJob("ID")
+            ));
+        }
+
+        private static SyncJob syncJob(String regionCode) {
+            SyncJob job = new SyncJob();
+            job.setRegionCode(regionCode);
+            job.setCategoryId("0");
+            job.setCategoryLabel("전체");
+            job.setSourceCategoryIds(List.of());
+            return job;
         }
     }
 
