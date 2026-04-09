@@ -1,5 +1,6 @@
 package com.yongsoo.youtubeatlasbackend.game;
 
+import java.time.Instant;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,9 +12,9 @@ public interface GameCoinPayoutRepository extends JpaRepository<GameCoinPayout, 
         select payout.position.id
         from GameCoinPayout payout
         where payout.season.id = :seasonId
-          and payout.trendRunId = :trendRunId
+          and payout.payoutSlotAt = :payoutSlotAt
     """)
-    List<Long> findPositionIdsBySeasonIdAndTrendRunId(Long seasonId, Long trendRunId);
+    List<Long> findPositionIdsBySeasonIdAndPayoutSlotAt(Long seasonId, Instant payoutSlotAt);
 
     void deleteByUserId(Long userId);
 }

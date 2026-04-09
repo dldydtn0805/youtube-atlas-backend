@@ -2,6 +2,8 @@ package com.yongsoo.youtubeatlasbackend.game;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -10,6 +12,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -46,13 +49,10 @@ public class GameService {
 
     private static final String TRENDING_CATEGORY_ID = "0";
     private static final int DEFAULT_FALLBACK_RANK = 201;
-    private static final int COIN_ELIGIBLE_RANK_CUTOFF = 20;
-    private static final int[] COIN_RATE_BASIS_POINTS = {
-        300, 280, 260, 240, 220,
-        200, 180, 160, 150, 140,
-        130, 120, 110, 100, 90,
-        80, 70, 60, 50, 40
-    };
+    private static final int COIN_ELIGIBLE_RANK_CUTOFF = 200;
+    private static final int TOP_RANK_COIN_RATE_BASIS_POINTS = 300;
+    private static final int LAST_ELIGIBLE_RANK_COIN_RATE_BASIS_POINTS = 1;
+    private static final double COIN_RATE_CURVE_POWER = 1.8D;
 
     private final GameSeasonRepository gameSeasonRepository;
     private final GameWalletRepository gameWalletRepository;
@@ -65,6 +65,7 @@ public class GameService {
     private final TrendRunRepository trendRunRepository;
     private final TrendSnapshotRepository trendSnapshotRepository;
     private final Clock clock;
+    private final CronExpression gameSettlementCron;
 
     public GameService(
         GameSeasonRepository gameSeasonRepository,
@@ -90,6 +91,7 @@ public class GameService {
         this.trendRunRepository = trendRunRepository;
         this.trendSnapshotRepository = trendSnapshotRepository;
         this.clock = clock;
+        this.gameSettlementCron = CronExpression.parse("0 */5 * * * *");
     }
 
     @Transactional
@@ -556,6 +558,9 @@ public class GameService {
         Long nextProductionInSeconds = rankEligible && !productionActive
             ? Math.max(0L, position.getSeason().getMinHoldSeconds() - heldSeconds)
             : null;
+        Long nextPayoutInSeconds = rankEligible && productionActive
+            ? resolveNextPayoutInSeconds(now)
+            : null;
 
         return new CoinPositionCandidate(
             position,
@@ -565,7 +570,8 @@ public class GameService {
             productionActive,
             coinRateBasisPoints,
             estimatedCoinYield,
-            nextProductionInSeconds
+            nextProductionInSeconds,
+            nextPayoutInSeconds
         );
     }
 
@@ -582,8 +588,22 @@ public class GameService {
             candidate.productionActive(),
             basisPointsToPercent(candidate.coinRateBasisPoints()),
             candidate.estimatedCoinYield(),
-            candidate.nextProductionInSeconds()
+            candidate.nextProductionInSeconds(),
+            candidate.nextPayoutInSeconds()
         );
+    }
+
+    private Long resolveNextPayoutInSeconds(Instant now) {
+        ZonedDateTime nextRun = gameSettlementCron.next(now.atZone(resolveClockZone()));
+        if (nextRun == null) {
+            return null;
+        }
+
+        return Math.max(0L, nextRun.toEpochSecond() - now.getEpochSecond());
+    }
+
+    private ZoneId resolveClockZone() {
+        return clock.getZone() != null ? clock.getZone() : ZoneId.of("UTC");
     }
 
     private CoinTierResponse toCoinTierResponse(GameSeasonCoinTier tier) {
@@ -1167,7 +1187,17 @@ public class GameService {
             return 0;
         }
 
-        return COIN_RATE_BASIS_POINTS[rank - 1];
+        if (rank == 1) {
+            return TOP_RANK_COIN_RATE_BASIS_POINTS;
+        }
+
+        double progress = (double) (COIN_ELIGIBLE_RANK_CUTOFF - rank) / (COIN_ELIGIBLE_RANK_CUTOFF - 1);
+        double curvedProgress = Math.pow(progress, COIN_RATE_CURVE_POWER);
+        return (int) Math.round(
+            TOP_RANK_COIN_RATE_BASIS_POINTS
+                * curvedProgress
+                + LAST_ELIGIBLE_RANK_COIN_RATE_BASIS_POINTS * (1D - curvedProgress)
+        );
     }
 
     private double resolveCoinRatePercent(int rank) {
@@ -1307,7 +1337,8 @@ public class GameService {
         boolean productionActive,
         int coinRateBasisPoints,
         long estimatedCoinYield,
-        Long nextProductionInSeconds
+        Long nextProductionInSeconds,
+        Long nextPayoutInSeconds
     ) {
     }
 }

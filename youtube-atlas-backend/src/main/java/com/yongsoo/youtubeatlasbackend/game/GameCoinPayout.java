@@ -21,7 +21,7 @@ import jakarta.persistence.UniqueConstraint;
     uniqueConstraints = {
         @UniqueConstraint(
             name = "uk_game_coin_payouts_season_position_run",
-            columnNames = {"season_id", "position_id", "trend_run_id"}
+            columnNames = {"season_id", "position_id", "payout_slot_at"}
         )
     }
 )
@@ -45,6 +45,9 @@ public class GameCoinPayout {
 
     @Column(name = "trend_run_id", nullable = false)
     private Long trendRunId;
+
+    @Column(name = "payout_slot_at", nullable = false)
+    private Instant payoutSlotAt;
 
     @Column(name = "rank_at_payout", nullable = false)
     private Integer rankAtPayout;
@@ -92,6 +95,14 @@ public class GameCoinPayout {
 
     public void setTrendRunId(Long trendRunId) {
         this.trendRunId = trendRunId;
+    }
+
+    public Instant getPayoutSlotAt() {
+        return payoutSlotAt;
+    }
+
+    public void setPayoutSlotAt(Instant payoutSlotAt) {
+        this.payoutSlotAt = payoutSlotAt;
     }
 
     public Integer getRankAtPayout() {

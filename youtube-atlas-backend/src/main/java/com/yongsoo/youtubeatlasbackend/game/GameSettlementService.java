@@ -141,10 +141,11 @@ public class GameSettlementService {
 
         Long currentRunId = signals.get(0).getCurrentRunId();
         Instant capturedAt = signals.get(0).getCapturedAt();
+        Instant payoutSlotAt = resolvePayoutSlotAt(now);
         Map<String, TrendSignal> signalByVideoId = signals.stream()
             .collect(Collectors.toMap(signal -> signal.getId().getVideoId(), Function.identity()));
         Set<Long> paidPositionIds = new HashSet<>(
-            gameCoinPayoutRepository.findPositionIdsBySeasonIdAndTrendRunId(season.getId(), currentRunId)
+            gameCoinPayoutRepository.findPositionIdsBySeasonIdAndPayoutSlotAt(season.getId(), payoutSlotAt)
         );
         Map<Long, GameWallet> walletByUserId = new HashMap<>();
 
@@ -187,7 +188,7 @@ public class GameSettlementService {
             );
 
             try {
-                saveCoinPayout(position, wallet, currentRunId, rank, coinRateBasisPoints, producedCoins, now);
+                saveCoinPayout(position, wallet, currentRunId, payoutSlotAt, rank, coinRateBasisPoints, producedCoins, now);
                 paidPositionIds.add(position.getId());
             } catch (DataIntegrityViolationException ignored) {
                 // Another scheduler tick or node inserted the payout first.
@@ -199,6 +200,7 @@ public class GameSettlementService {
         GamePosition position,
         GameWallet wallet,
         Long trendRunId,
+        Instant payoutSlotAt,
         int rank,
         int coinRateBasisPoints,
         long producedCoins,
@@ -209,6 +211,7 @@ public class GameSettlementService {
         payout.setUser(position.getUser());
         payout.setPosition(position);
         payout.setTrendRunId(trendRunId);
+        payout.setPayoutSlotAt(payoutSlotAt);
         payout.setRankAtPayout(rank);
         payout.setCoinRateBasisPoints(coinRateBasisPoints);
         payout.setAmountCoins(producedCoins);
@@ -218,6 +221,12 @@ public class GameSettlementService {
         wallet.setCoinBalance(wallet.getCoinBalance() + producedCoins);
         wallet.setUpdatedAt(now);
         gameWalletRepository.save(wallet);
+    }
+
+    private Instant resolvePayoutSlotAt(Instant now) {
+        long slotSeconds = 5L * 60L;
+        long epochSecond = now.getEpochSecond();
+        return Instant.ofEpochSecond(epochSecond - (epochSecond % slotSeconds));
     }
 
     private void settleSeason(GameSeason season, Instant now) {

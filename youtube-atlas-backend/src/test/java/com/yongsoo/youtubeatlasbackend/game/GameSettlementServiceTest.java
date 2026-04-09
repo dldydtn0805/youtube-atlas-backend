@@ -71,12 +71,13 @@ class GameSettlementServiceTest {
         GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
         TrendSignal signal = signal("video-1", 5);
         long currentValuePoints = GamePointCalculator.calculatePricePoints(5);
-        long producedCoins = Math.round(currentValuePoints * 0.022D);
+        long producedCoins = Math.round(currentValuePoints * 0.0289D);
 
         when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
             .thenReturn(List.of(signal));
-        when(gameCoinPayoutRepository.findPositionIdsBySeasonIdAndTrendRunId(1L, 55L)).thenReturn(List.of());
+        when(gameCoinPayoutRepository.findPositionIdsBySeasonIdAndPayoutSlotAt(1L, Instant.parse("2026-04-08T00:00:00Z")))
+            .thenReturn(List.of());
         when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(position));
         when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
         when(gameCoinPayoutRepository.saveAndFlush(any(GameCoinPayout.class)))
@@ -101,7 +102,8 @@ class GameSettlementServiceTest {
         when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
             .thenReturn(List.of(signal));
-        when(gameCoinPayoutRepository.findPositionIdsBySeasonIdAndTrendRunId(1L, 55L)).thenReturn(List.of(300L));
+        when(gameCoinPayoutRepository.findPositionIdsBySeasonIdAndPayoutSlotAt(1L, Instant.parse("2026-04-08T00:00:00Z")))
+            .thenReturn(List.of(300L));
         when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(position));
 
         gameSettlementService.distributeActiveSeasonCoins();
@@ -202,7 +204,7 @@ class GameSettlementServiceTest {
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
         wallet.setCoinBalance(2_500_000L);
-        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", 2_000_000L, 3);
+        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", 1_000_000L, 3);
 
         when(gameSeasonRepository.findByStatusAndEndAtLessThanEqual(SeasonStatus.ACTIVE, Instant.parse("2026-04-08T00:01:00Z")))
             .thenReturn(List.of(season));

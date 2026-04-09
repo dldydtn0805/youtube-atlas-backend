@@ -12,6 +12,7 @@ public record CoinPositionResponse(
     Boolean productionActive,
     Double coinRatePercent,
     Long estimatedCoinYield,
-    Long nextProductionInSeconds
+    Long nextProductionInSeconds,
+    Long nextPayoutInSeconds
 ) {
 }

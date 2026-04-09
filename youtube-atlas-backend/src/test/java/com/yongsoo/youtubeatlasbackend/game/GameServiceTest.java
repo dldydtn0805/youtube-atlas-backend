@@ -612,7 +612,7 @@ class GameServiceTest {
             Instant.parse("2026-04-01T05:35:00Z")
         );
         long myEligibleValuePoints = GamePointCalculator.calculatePricePoints(5);
-        long myEstimatedCoinYield = Math.round(myEligibleValuePoints * 0.022D);
+        long myEstimatedCoinYield = Math.round(myEligibleValuePoints * 0.0289D);
 
         ReflectionTestUtils.setField(myEligiblePosition, "id", 501L);
         ReflectionTestUtils.setField(myWarmupPosition, "id", 502L);
@@ -632,29 +632,32 @@ class GameServiceTest {
 
         var response = gameService.getCoinOverview(authenticatedUser(), "KR");
 
-        assertThat(response.eligibleRankCutoff()).isEqualTo(20);
+        assertThat(response.eligibleRankCutoff()).isEqualTo(200);
         assertThat(response.minimumHoldSeconds()).isEqualTo(600);
         assertThat(response.myCoinBalance()).isZero();
         assertThat(response.myEstimatedCoinYield()).isEqualTo(myEstimatedCoinYield);
         assertThat(response.myActiveProducerCount()).isEqualTo(1);
         assertThat(response.myWarmingUpPositionCount()).isEqualTo(1);
-        assertThat(response.ranks()).hasSize(20);
+        assertThat(response.ranks()).hasSize(200);
         assertThat(response.ranks().getFirst().rank()).isEqualTo(1);
         assertThat(response.ranks().getFirst().coinRatePercent()).isEqualTo(3.0D);
-        assertThat(response.ranks().get(4).coinRatePercent()).isEqualTo(2.2D);
-        assertThat(response.ranks().get(19).coinRatePercent()).isEqualTo(0.4D);
+        assertThat(response.ranks().get(4).coinRatePercent()).isEqualTo(2.89D);
+        assertThat(response.ranks().get(19).coinRatePercent()).isEqualTo(2.51D);
+        assertThat(response.ranks().get(199).coinRatePercent()).isEqualTo(0.01D);
         assertThat(response.positions()).hasSize(2);
         assertThat(response.positions().get(0).positionId()).isEqualTo(501L);
         assertThat(response.positions().get(0).rankEligible()).isTrue();
         assertThat(response.positions().get(0).productionActive()).isTrue();
-        assertThat(response.positions().get(0).coinRatePercent()).isEqualTo(2.2D);
+        assertThat(response.positions().get(0).coinRatePercent()).isEqualTo(2.89D);
         assertThat(response.positions().get(0).estimatedCoinYield()).isEqualTo(myEstimatedCoinYield);
+        assertThat(response.positions().get(0).nextPayoutInSeconds()).isEqualTo(300L);
         assertThat(response.positions().get(1).positionId()).isEqualTo(502L);
         assertThat(response.positions().get(1).rankEligible()).isTrue();
         assertThat(response.positions().get(1).productionActive()).isFalse();
-        assertThat(response.positions().get(1).coinRatePercent()).isEqualTo(2.8D);
+        assertThat(response.positions().get(1).coinRatePercent()).isEqualTo(2.97D);
         assertThat(response.positions().get(1).estimatedCoinYield()).isZero();
         assertThat(response.positions().get(1).nextProductionInSeconds()).isEqualTo(330L);
+        assertThat(response.positions().get(1).nextPayoutInSeconds()).isNull();
     }
 
     @Test
@@ -664,9 +667,9 @@ class GameServiceTest {
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
         wallet.setCoinBalance(2_500_000L);
         GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
-        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 500_000L, 2);
-        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", "골드", 2_000_000L, 3);
-        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 10_000_000L, 4);
+        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 200_000L, 2);
+        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", "골드", 1_000_000L, 3);
+        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 5_000_000L, 4);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
