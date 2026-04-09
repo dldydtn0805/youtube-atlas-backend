@@ -112,6 +112,24 @@ public class GameSettlementService {
         }
     }
 
+    @Transactional
+    public void closeSeason(Long seasonId) {
+        if (seasonId == null) {
+            throw new IllegalArgumentException("seasonId는 필수입니다.");
+        }
+
+        GameSeason season = gameSeasonRepository.findById(seasonId)
+            .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 시즌입니다."));
+
+        if (season.getStatus() != SeasonStatus.ACTIVE) {
+            throw new IllegalArgumentException("ACTIVE 상태인 시즌만 수동 종료할 수 있습니다.");
+        }
+
+        Instant now = Instant.now(clock);
+        settleSeason(season, now);
+        ensureManagedActiveSeasons();
+    }
+
     private void distributeSeasonCoins(GameSeason season, Instant now) {
         List<TrendSignal> signals = trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
             season.getRegionCode(),

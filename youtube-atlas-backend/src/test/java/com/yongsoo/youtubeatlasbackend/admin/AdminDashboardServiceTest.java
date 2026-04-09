@@ -115,7 +115,7 @@ class AdminDashboardServiceTest {
         when(appUserRepository.findTop8ByOrderByCreatedAtDesc()).thenReturn(List.of(user));
         when(commentRepository.findTop8ByOrderByCreatedAtDesc()).thenReturn(List.of(comment));
         when(favoriteStreamerRepository.findTop8ByOrderByCreatedAtDesc()).thenReturn(List.of(favorite));
-        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
         when(trendRunRepository.findTopByOrderByCapturedAtDesc()).thenReturn(Optional.of(trendRun));
         when(trendSnapshotRepository.findTop8ByRun_IdOrderByRankAsc(5L)).thenReturn(List.of(trendSnapshot));
 
@@ -125,6 +125,8 @@ class AdminDashboardServiceTest {
         assertThat(response.metrics().totalComments()).isEqualTo(34L);
         assertThat(response.activeSeason()).isNotNull();
         assertThat(response.activeSeason().name()).isEqualTo("Season 1");
+        assertThat(response.activeSeasons()).hasSize(1);
+        assertThat(response.activeSeasons().get(0).regionCode()).isEqualTo("KR");
         assertThat(response.latestTrendRun()).isNotNull();
         assertThat(response.latestTrendRun().categoryLabel()).isEqualTo("Music");
         assertThat(response.latestTrendRun().topVideos()).hasSize(1);

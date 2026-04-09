@@ -100,6 +100,8 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `GET /api/trending/realtime-surging?regionCode=KR`
 - `POST /api/trending/sync`
 - `GET /api/admin/dashboard`
+- `PATCH /api/admin/seasons/{seasonId}`
+- `POST /api/admin/seasons/{seasonId}/close`
 - `GET /api/admin/users?q=atlas&limit=20`
 - `GET /api/admin/users/{userId}`
 - `PATCH /api/admin/users/{userId}/wallet`
@@ -486,6 +488,75 @@ Authorization: Bearer {accessToken}
 
 기존 관리자 대시보드 데이터를 반환합니다.
 
+- `activeSeason`: 기존 호환용 대표 활성 시즌 1건
+- `activeSeasons`: 현재 활성 시즌 목록 전체
+
+예시:
+
+```json
+{
+  "metrics": {
+    "totalUsers": 12,
+    "totalComments": 34,
+    "totalFavorites": 5,
+    "totalTrendRuns": 7
+  },
+  "activeSeason": {
+    "id": 4,
+    "name": "KR Daily Season",
+    "status": "ACTIVE",
+    "regionCode": "KR",
+    "startAt": "2026-04-01T00:00:00Z",
+    "endAt": "2026-04-10T00:00:00Z",
+    "createdAt": "2026-03-31T00:00:00Z"
+  },
+  "activeSeasons": [
+    {
+      "id": 4,
+      "name": "KR Daily Season",
+      "status": "ACTIVE",
+      "regionCode": "KR",
+      "startAt": "2026-04-01T00:00:00Z",
+      "endAt": "2026-04-10T00:00:00Z",
+      "createdAt": "2026-03-31T00:00:00Z"
+    },
+    {
+      "id": 8,
+      "name": "US Daily Season",
+      "status": "ACTIVE",
+      "regionCode": "US",
+      "startAt": "2026-04-02T00:00:00Z",
+      "endAt": "2026-04-11T00:00:00Z",
+      "createdAt": "2026-04-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+### `PATCH /api/admin/seasons/{seasonId}`
+
+관리자가 활성 시즌의 시작/종료 시각을 수정합니다.
+
+요청 본문:
+
+```json
+{
+  "startAt": "2026-04-09T00:00:00Z",
+  "endAt": "2026-04-12T00:00:00Z"
+}
+```
+
+- `endAt` 은 `startAt` 이후여야 합니다.
+- `ACTIVE` 시즌은 `startAt` 을 미래 시각으로 바꿀 수 없습니다.
+- `ACTIVE` 시즌의 `endAt` 을 현재 시각 이전으로 바꾸려면 수정 대신 수동 종료를 사용해야 합니다.
+
+### `POST /api/admin/seasons/{seasonId}/close`
+
+관리자가 활성 시즌을 즉시 종료합니다.
+
+- 오픈 포지션 자동 정산과 시즌 코인 결과 확정이 바로 수행됩니다.
+- 종료 후 관리 대상 지역에 활성 시즌이 없으면 후속 활성 시즌이 자동 생성됩니다.
+
 ### `GET /api/admin/users`
 
 관리자용 유저 목록을 반환합니다.
@@ -526,7 +597,7 @@ Authorization: Bearer {accessToken}
 - 관리자 여부
 - 즐겨찾기 스트리머 개수
 - 마지막 재생 위치
-- 현재 활성 시즌 게임 참여 여부와 지갑/포지션 요약
+- 현재 활성 시즌별 게임 참여 여부와 지갑/포지션 요약
 
 응답 예시:
 
@@ -551,32 +622,65 @@ Authorization: Bearer {accessToken}
   "activeSeasonGame": {
     "seasonId": 3,
     "seasonName": "Season 3",
+    "regionCode": "KR",
     "participating": true,
     "balancePoints": 12000,
     "reservedPoints": 3000,
     "realizedPnlPoints": 1500,
+    "coinBalance": 900000,
     "totalAssetPoints": 15000,
     "openPositionCount": 2,
     "closedPositionCount": 5
-  }
+  },
+  "activeSeasonGames": [
+    {
+      "seasonId": 3,
+      "seasonName": "Season 3",
+      "regionCode": "KR",
+      "participating": true,
+      "balancePoints": 12000,
+      "reservedPoints": 3000,
+      "realizedPnlPoints": 1500,
+      "coinBalance": 900000,
+      "totalAssetPoints": 15000,
+      "openPositionCount": 2,
+      "closedPositionCount": 5
+    },
+    {
+      "seasonId": 8,
+      "seasonName": "US Season 8",
+      "regionCode": "US",
+      "participating": false,
+      "balancePoints": 10000,
+      "reservedPoints": 0,
+      "realizedPnlPoints": 0,
+      "coinBalance": 0,
+      "totalAssetPoints": 10000,
+      "openPositionCount": 0,
+      "closedPositionCount": 0
+    }
+  ]
 }
 ```
 
 ### `PATCH /api/admin/users/{userId}/wallet`
 
-관리자가 활성 시즌 기준으로 해당 유저의 지갑 수치를 직접 수정합니다.
+관리자가 선택한 활성 시즌 기준으로 해당 유저의 지갑 수치를 직접 수정합니다.
 
 요청 본문:
 
 ```json
 {
+  "seasonId": 3,
   "balancePoints": 12000,
   "reservedPoints": 3000,
-  "realizedPnlPoints": 1500
+  "realizedPnlPoints": 1500,
+  "coinBalance": 900000
 }
 ```
 
-- 현재 활성 시즌이 없으면 요청이 실패합니다.
+- `seasonId` 가 주어지면 해당 시즌이 현재 `ACTIVE` 상태인지 검증합니다.
+- `seasonId` 를 생략하면 가장 최근 활성 시즌 하나를 대상으로 동작합니다.
 - 아직 활성 시즌 지갑이 없는 유저여도, 수정 시 관리자 값으로 새 지갑을 생성합니다.
 - `reservedPoints` 는 오픈 포지션과 연결될 수 있으므로 운영 목적에서만 수동 조정해야 합니다.
 

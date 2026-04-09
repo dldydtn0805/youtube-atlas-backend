@@ -1,5 +1,6 @@
 package com.yongsoo.youtubeatlasbackend.admin;
 
+import java.util.Comparator;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -16,6 +17,7 @@ import com.yongsoo.youtubeatlasbackend.admin.api.AdminUserSummaryResponse;
 import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.comments.CommentRepository;
 import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameSeason;
 import com.yongsoo.youtubeatlasbackend.game.GameSeasonRepository;
 import com.yongsoo.youtubeatlasbackend.game.SeasonStatus;
 import com.yongsoo.youtubeatlasbackend.trending.TrendRun;
@@ -54,6 +56,22 @@ public class AdminDashboardService {
     @Transactional(readOnly = true)
     public AdminDashboardResponse getDashboard() {
         TrendRun latestTrendRun = trendRunRepository.findTopByOrderByCapturedAtDesc().orElse(null);
+        List<AdminSeasonSummaryResponse> activeSeasons = gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE).stream()
+            .sorted(
+                Comparator.comparing(GameSeason::getRegionCode, Comparator.nullsLast(String::compareToIgnoreCase))
+                    .thenComparing(GameSeason::getStartAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(GameSeason::getId)
+            )
+            .map(season -> new AdminSeasonSummaryResponse(
+                season.getId(),
+                season.getName(),
+                season.getStatus().name(),
+                season.getRegionCode(),
+                season.getStartAt(),
+                season.getEndAt(),
+                season.getCreatedAt()
+            ))
+            .toList();
 
         return new AdminDashboardResponse(
             new AdminSummaryMetricsResponse(
@@ -62,17 +80,8 @@ public class AdminDashboardService {
                 favoriteStreamerRepository.count(),
                 trendRunRepository.count()
             ),
-            gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)
-                .map(season -> new AdminSeasonSummaryResponse(
-                    season.getId(),
-                    season.getName(),
-                    season.getStatus().name(),
-                    season.getRegionCode(),
-                    season.getStartAt(),
-                    season.getEndAt(),
-                    season.getCreatedAt()
-                ))
-                .orElse(null),
+            activeSeasons.stream().findFirst().orElse(null),
+            activeSeasons,
             latestTrendRun == null ? null : new AdminTrendRunSummaryResponse(
                 latestTrendRun.getId(),
                 latestTrendRun.getRegionCode(),

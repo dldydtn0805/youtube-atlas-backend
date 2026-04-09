@@ -3,6 +3,7 @@ package com.yongsoo.youtubeatlasbackend.admin.api;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.yongsoo.youtubeatlasbackend.admin.AdminAccessService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminDashboardService;
+import com.yongsoo.youtubeatlasbackend.admin.AdminSeasonService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminUserService;
 
 @RestController
@@ -21,21 +23,43 @@ public class AdminController {
     private final AdminAccessService adminAccessService;
     private final AdminDashboardService adminDashboardService;
     private final AdminUserService adminUserService;
+    private final AdminSeasonService adminSeasonService;
 
     public AdminController(
         AdminAccessService adminAccessService,
         AdminDashboardService adminDashboardService,
-        AdminUserService adminUserService
+        AdminUserService adminUserService,
+        AdminSeasonService adminSeasonService
     ) {
         this.adminAccessService = adminAccessService;
         this.adminDashboardService = adminDashboardService;
         this.adminUserService = adminUserService;
+        this.adminSeasonService = adminSeasonService;
     }
 
     @GetMapping("/dashboard")
     public AdminDashboardResponse getDashboard(@RequestHeader("Authorization") String authorizationHeader) {
         adminAccessService.requireAdmin(authorizationHeader);
         return adminDashboardService.getDashboard();
+    }
+
+    @PatchMapping("/seasons/{seasonId}")
+    public AdminSeasonSummaryResponse updateSeasonSchedule(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @PathVariable Long seasonId,
+        @RequestBody AdminSeasonScheduleUpdateRequest request
+    ) {
+        adminAccessService.requireAdmin(authorizationHeader);
+        return adminSeasonService.updateSeasonSchedule(seasonId, request);
+    }
+
+    @PostMapping("/seasons/{seasonId}/close")
+    public void closeSeason(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @PathVariable Long seasonId
+    ) {
+        adminAccessService.requireAdmin(authorizationHeader);
+        adminSeasonService.closeSeason(seasonId);
     }
 
     @GetMapping("/users")

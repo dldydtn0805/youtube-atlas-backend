@@ -2,6 +2,7 @@ package com.yongsoo.youtubeatlasbackend.admin;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 
 import org.springframework.data.domain.PageRequest;
@@ -118,9 +119,8 @@ public class AdminUserService {
     @Transactional
     public AdminUserDetailResponse updateActiveSeasonWallet(Long userId, AdminWalletUpdateRequest request) {
         AppUser user = requireUser(userId);
-        GameSeason activeSeason = gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)
-            .orElseThrow(() -> new IllegalArgumentException("현재 활성 시즌이 없습니다."));
         validateWalletUpdateRequest(request);
+        GameSeason activeSeason = resolveTargetSeason(request.seasonId());
 
         GameWallet wallet = gameWalletRepository.findBySeasonIdAndUserId(activeSeason.getId(), userId)
             .orElseGet(() -> createWallet(activeSeason, user));
@@ -179,8 +179,16 @@ public class AdminUserService {
         PlaybackProgressResponse lastPlaybackProgress = playbackProgressService.getCurrentProgressForUserId(user.getId())
             .orElse(null);
         long favoriteCount = favoriteStreamerRepository.countByUserId(user.getId());
-        AdminUserGameSummaryResponse activeSeasonGame = gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)
+        List<AdminUserGameSummaryResponse> activeSeasonGames = gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE).stream()
+            .sorted(
+                Comparator.comparing(GameSeason::getRegionCode, Comparator.nullsLast(String::compareToIgnoreCase))
+                    .thenComparing(GameSeason::getStartAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(GameSeason::getId)
+            )
             .map(season -> toGameSummary(user.getId(), season))
+            .toList();
+        AdminUserGameSummaryResponse activeSeasonGame = activeSeasonGames.stream()
+            .findFirst()
             .orElse(null);
 
         return new AdminUserDetailResponse(
@@ -193,7 +201,8 @@ public class AdminUserService {
             user.getLastLoginAt(),
             favoriteCount,
             lastPlaybackProgress,
-            activeSeasonGame
+            activeSeasonGame,
+            activeSeasonGames
         );
     }
 
@@ -219,6 +228,7 @@ public class AdminUserService {
                 return new AdminUserGameSummaryResponse(
                     activeSeason.getId(),
                     activeSeason.getName(),
+                    activeSeason.getRegionCode(),
                     true,
                     wallet.getBalancePoints(),
                     wallet.getReservedPoints(),
@@ -234,6 +244,7 @@ public class AdminUserService {
             .orElseGet(() -> new AdminUserGameSummaryResponse(
                 activeSeason.getId(),
                 activeSeason.getName(),
+                activeSeason.getRegionCode(),
                 false,
                 activeSeason.getStartingBalancePoints(),
                 0L,
@@ -273,6 +284,16 @@ public class AdminUserService {
         validateNonNegative(request.reservedPoints(), "reservedPoints");
         validateNonNegative(request.realizedPnlPoints(), "realizedPnlPoints");
         validateNonNegative(request.coinBalance(), "coinBalance");
+    }
+
+    private GameSeason resolveTargetSeason(Long seasonId) {
+        if (seasonId != null) {
+            return gameSeasonRepository.findByIdAndStatus(seasonId, SeasonStatus.ACTIVE)
+                .orElseThrow(() -> new IllegalArgumentException("선택한 활성 시즌을 찾을 수 없습니다."));
+        }
+
+        return gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)
+            .orElseThrow(() -> new IllegalArgumentException("현재 활성 시즌이 없습니다."));
     }
 
     private void validateNonNegative(Long value, String fieldName) {

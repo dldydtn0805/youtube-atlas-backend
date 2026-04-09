@@ -95,6 +95,7 @@ class AdminUserServiceTest {
         );
         when(gameSeasonCoinTierRepository.findBySeasonIdOrderBySortOrderAsc(3L)).thenReturn(defaultTiers(activeSeason(3L, "Season 3")));
         when(gameSeasonCoinTierRepository.findBySeasonIdOrderBySortOrderAsc(4L)).thenReturn(defaultTiers(activeSeason(4L, "Season 4")));
+        when(gameSeasonCoinTierRepository.findBySeasonIdOrderBySortOrderAsc(5L)).thenReturn(defaultTiers(activeSeason(5L, "Season 5")));
     }
 
     @Test
@@ -124,6 +125,13 @@ class AdminUserServiceTest {
         ReflectionTestUtils.setField(season, "id", 3L);
         season.setName("Season 3");
         season.setStatus(SeasonStatus.ACTIVE);
+        season.setRegionCode("KR");
+
+        GameSeason usSeason = new GameSeason();
+        ReflectionTestUtils.setField(usSeason, "id", 5L);
+        usSeason.setName("Season 5");
+        usSeason.setStatus(SeasonStatus.ACTIVE);
+        usSeason.setRegionCode("US");
 
         GameWallet wallet = new GameWallet();
         wallet.setBalancePoints(12000L);
@@ -144,10 +152,13 @@ class AdminUserServiceTest {
         when(adminAccessService.isAdminEmail("user@example.com")).thenReturn(false);
         when(favoriteStreamerRepository.countByUserId(9L)).thenReturn(4L);
         when(playbackProgressService.getCurrentProgressForUserId(9L)).thenReturn(Optional.of(playbackProgress));
-        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(usSeason, season));
         when(gamePositionRepository.countBySeasonIdAndUserIdAndStatus(3L, 9L, PositionStatus.OPEN)).thenReturn(2L);
         when(gamePositionRepository.countBySeasonIdAndUserIdAndStatusIn(eq(3L), eq(9L), any())).thenReturn(5L);
+        when(gamePositionRepository.countBySeasonIdAndUserIdAndStatus(5L, 9L, PositionStatus.OPEN)).thenReturn(0L);
+        when(gamePositionRepository.countBySeasonIdAndUserIdAndStatusIn(eq(5L), eq(9L), any())).thenReturn(0L);
         when(gameWalletRepository.findBySeasonIdAndUserId(3L, 9L)).thenReturn(Optional.of(wallet));
+        when(gameWalletRepository.findBySeasonIdAndUserId(5L, 9L)).thenReturn(Optional.empty());
 
         var response = adminUserService.getUser(9L);
 
@@ -156,6 +167,10 @@ class AdminUserServiceTest {
         assertThat(response.lastPlaybackProgress()).isEqualTo(playbackProgress);
         assertThat(response.activeSeasonGame()).isNotNull();
         assertThat(response.activeSeasonGame().seasonId()).isEqualTo(3L);
+        assertThat(response.activeSeasonGame().regionCode()).isEqualTo("KR");
+        assertThat(response.activeSeasonGames()).hasSize(2);
+        assertThat(response.activeSeasonGames().get(0).regionCode()).isEqualTo("KR");
+        assertThat(response.activeSeasonGames().get(1).regionCode()).isEqualTo("US");
         assertThat(response.activeSeasonGame().participating()).isTrue();
         assertThat(response.activeSeasonGame().totalAssetPoints()).isEqualTo(15000L);
         assertThat(response.activeSeasonGame().coinBalance()).isEqualTo(900000L);
@@ -185,7 +200,8 @@ class AdminUserServiceTest {
         wallet.setCoinBalance(40L);
 
         when(appUserRepository.findById(11L)).thenReturn(Optional.of(user));
-        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findByIdAndStatus(4L, SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(4L, 11L)).thenReturn(Optional.of(wallet));
         when(gameWalletRepository.save(wallet)).thenReturn(wallet);
         when(adminAccessService.isAdminEmail("wallet@example.com")).thenReturn(false);
@@ -196,7 +212,7 @@ class AdminUserServiceTest {
 
         var response = adminUserService.updateActiveSeasonWallet(
             11L,
-            new AdminWalletUpdateRequest(5000L, 1200L, 700L, 2500000L)
+            new AdminWalletUpdateRequest(4L, 5000L, 1200L, 700L, 2500000L)
         );
 
         assertThat(wallet.getBalancePoints()).isEqualTo(5000L);
@@ -253,7 +269,7 @@ class AdminUserServiceTest {
         when(adminAccessService.isAdminEmail("new@example.com")).thenReturn(false);
         when(favoriteStreamerRepository.countByUserId(15L)).thenReturn(0L);
         when(playbackProgressService.getCurrentProgressForUserId(15L)).thenReturn(Optional.empty());
-        when(gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
         when(gamePositionRepository.countBySeasonIdAndUserIdAndStatus(4L, 15L, PositionStatus.OPEN)).thenReturn(0L);
         when(gamePositionRepository.countBySeasonIdAndUserIdAndStatusIn(eq(4L), eq(15L), any())).thenReturn(0L);
         when(gameWalletRepository.findBySeasonIdAndUserId(4L, 15L)).thenReturn(Optional.empty());
@@ -285,7 +301,9 @@ class AdminUserServiceTest {
         ReflectionTestUtils.setField(season, "id", id);
         season.setName(name);
         season.setStatus(SeasonStatus.ACTIVE);
+        season.setRegionCode("KR");
         season.setStartingBalancePoints(10_000L);
+        season.setStartAt(Instant.parse("2026-04-01T00:00:00Z"));
         return season;
     }
 
