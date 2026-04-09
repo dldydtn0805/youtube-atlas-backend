@@ -60,12 +60,12 @@ public class GameController {
         return gameService.getLeaderboard(authService.requireCurrentUser(authorizationHeader), regionCode);
     }
 
-    @GetMapping("/dividends/overview")
-    public DividendOverviewResponse getDividendOverview(
+    @GetMapping("/coins/overview")
+    public CoinOverviewResponse getCoinOverview(
         @RequestHeader("Authorization") String authorizationHeader,
         @RequestParam String regionCode
     ) {
-        return gameService.getDividendOverview(authService.requireCurrentUser(authorizationHeader), regionCode);
+        return gameService.getCoinOverview(authService.requireCurrentUser(authorizationHeader), regionCode);
     }
 
     @GetMapping("/leaderboard/{userId}/positions")

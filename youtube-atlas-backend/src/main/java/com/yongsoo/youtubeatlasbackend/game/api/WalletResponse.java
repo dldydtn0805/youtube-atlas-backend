@@ -5,7 +5,7 @@ public record WalletResponse(
     Long balancePoints,
     Long reservedPoints,
     Long realizedPnlPoints,
-    Long bonusPoints,
+    Long coinBalance,
     Long totalAssetPoints
 ) {
 }

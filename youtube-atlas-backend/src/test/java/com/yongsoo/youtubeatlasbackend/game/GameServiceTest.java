@@ -80,7 +80,6 @@ class GameServiceTest {
             .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.empty());
         when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
-        when(gameLedgerRepository.sumAmountPointsBySeasonIdAndUserIdAndType(1L, 7L, LedgerType.BONUS)).thenReturn(0L);
         when(gameWalletRepository.saveAndFlush(any(GameWallet.class))).thenAnswer(invocation -> {
             GameWallet wallet = invocation.getArgument(0, GameWallet.class);
             ReflectionTestUtils.setField(wallet, "id", 100L);
@@ -93,7 +92,7 @@ class GameServiceTest {
         assertThat(response.seasonId()).isEqualTo(1L);
         assertThat(response.wallet().balancePoints()).isEqualTo(10_000L);
         assertThat(response.wallet().reservedPoints()).isZero();
-        assertThat(response.wallet().bonusPoints()).isZero();
+        assertThat(response.wallet().coinBalance()).isZero();
         verify(gameLedgerRepository).save(any(GameLedger.class));
     }
 
@@ -577,7 +576,7 @@ class GameServiceTest {
     }
 
     @Test
-    void getDividendOverviewReturnsFixedEstimatedDividendPointsAndWarmupPositions() {
+    void getCoinOverviewReturnsFixedEstimatedCoinYieldAndWarmupPositions() {
         GameSeason season = activeSeason();
         AppUser me = user(7L, "Atlas User");
         AppUser rival = user(8L, "Rival User");
@@ -607,7 +606,7 @@ class GameServiceTest {
             Instant.parse("2026-04-01T05:35:00Z")
         );
         long myEligibleValuePoints = GamePointCalculator.calculatePricePoints(5);
-        long myEstimatedDividendPoints = Math.round(myEligibleValuePoints * 0.022D);
+        long myEstimatedCoinYield = Math.round(myEligibleValuePoints * 0.022D);
 
         ReflectionTestUtils.setField(myEligiblePosition, "id", 501L);
         ReflectionTestUtils.setField(myWarmupPosition, "id", 502L);
@@ -625,30 +624,31 @@ class GameServiceTest {
         when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN))
             .thenReturn(List.of(myEligiblePosition, myWarmupPosition, rivalEligiblePosition));
 
-        var response = gameService.getDividendOverview(authenticatedUser(), "KR");
+        var response = gameService.getCoinOverview(authenticatedUser(), "KR");
 
         assertThat(response.eligibleRankCutoff()).isEqualTo(20);
         assertThat(response.minimumHoldSeconds()).isEqualTo(600);
-        assertThat(response.myEstimatedDividendPoints()).isEqualTo(myEstimatedDividendPoints);
-        assertThat(response.myEligiblePositionCount()).isEqualTo(1);
+        assertThat(response.myCoinBalance()).isZero();
+        assertThat(response.myEstimatedCoinYield()).isEqualTo(myEstimatedCoinYield);
+        assertThat(response.myActiveProducerCount()).isEqualTo(1);
         assertThat(response.myWarmingUpPositionCount()).isEqualTo(1);
         assertThat(response.ranks()).hasSize(20);
         assertThat(response.ranks().getFirst().rank()).isEqualTo(1);
-        assertThat(response.ranks().getFirst().dividendRatePercent()).isEqualTo(3.0D);
-        assertThat(response.ranks().get(4).dividendRatePercent()).isEqualTo(2.2D);
-        assertThat(response.ranks().get(19).dividendRatePercent()).isEqualTo(0.4D);
+        assertThat(response.ranks().getFirst().coinRatePercent()).isEqualTo(3.0D);
+        assertThat(response.ranks().get(4).coinRatePercent()).isEqualTo(2.2D);
+        assertThat(response.ranks().get(19).coinRatePercent()).isEqualTo(0.4D);
         assertThat(response.positions()).hasSize(2);
         assertThat(response.positions().get(0).positionId()).isEqualTo(501L);
         assertThat(response.positions().get(0).rankEligible()).isTrue();
-        assertThat(response.positions().get(0).holdEligible()).isTrue();
-        assertThat(response.positions().get(0).dividendRatePercent()).isEqualTo(2.2D);
-        assertThat(response.positions().get(0).estimatedDividendPoints()).isEqualTo(myEstimatedDividendPoints);
+        assertThat(response.positions().get(0).productionActive()).isTrue();
+        assertThat(response.positions().get(0).coinRatePercent()).isEqualTo(2.2D);
+        assertThat(response.positions().get(0).estimatedCoinYield()).isEqualTo(myEstimatedCoinYield);
         assertThat(response.positions().get(1).positionId()).isEqualTo(502L);
         assertThat(response.positions().get(1).rankEligible()).isTrue();
-        assertThat(response.positions().get(1).holdEligible()).isFalse();
-        assertThat(response.positions().get(1).dividendRatePercent()).isEqualTo(2.8D);
-        assertThat(response.positions().get(1).estimatedDividendPoints()).isZero();
-        assertThat(response.positions().get(1).nextEligibleInSeconds()).isEqualTo(330L);
+        assertThat(response.positions().get(1).productionActive()).isFalse();
+        assertThat(response.positions().get(1).coinRatePercent()).isEqualTo(2.8D);
+        assertThat(response.positions().get(1).estimatedCoinYield()).isZero();
+        assertThat(response.positions().get(1).nextProductionInSeconds()).isEqualTo(330L);
     }
 
     @Test
@@ -793,6 +793,7 @@ class GameServiceTest {
         wallet.setBalancePoints(balance);
         wallet.setReservedPoints(reserved);
         wallet.setRealizedPnlPoints(realizedPnl);
+        wallet.setCoinBalance(0L);
         wallet.setUpdatedAt(Instant.parse("2026-04-01T05:30:00Z"));
         return wallet;
     }

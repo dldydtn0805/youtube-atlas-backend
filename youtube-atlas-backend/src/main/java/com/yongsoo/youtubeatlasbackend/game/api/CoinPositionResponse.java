@@ -1,6 +1,6 @@
 package com.yongsoo.youtubeatlasbackend.game.api;
 
-public record DividendPositionResponse(
+public record CoinPositionResponse(
     Long positionId,
     String videoId,
     String title,
@@ -9,9 +9,9 @@ public record DividendPositionResponse(
     Integer quantity,
     Long currentValuePoints,
     Boolean rankEligible,
-    Boolean holdEligible,
-    Double dividendRatePercent,
-    Long estimatedDividendPoints,
-    Long nextEligibleInSeconds
+    Boolean productionActive,
+    Double coinRatePercent,
+    Long estimatedCoinYield,
+    Long nextProductionInSeconds
 ) {
 }

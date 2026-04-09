@@ -17,11 +17,11 @@ import org.springframework.util.StringUtils;
 import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
+import com.yongsoo.youtubeatlasbackend.game.api.CoinOverviewResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.CoinPositionResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.CoinRankResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.CreatePositionRequest;
 import com.yongsoo.youtubeatlasbackend.game.api.CurrentSeasonResponse;
-import com.yongsoo.youtubeatlasbackend.game.api.DividendOverviewResponse;
-import com.yongsoo.youtubeatlasbackend.game.api.DividendPositionResponse;
-import com.yongsoo.youtubeatlasbackend.game.api.DividendRankResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.LeaderboardEntryResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.MarketVideoResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionRankHistoryPointResponse;
@@ -43,8 +43,8 @@ public class GameService {
 
     private static final String TRENDING_CATEGORY_ID = "0";
     private static final int DEFAULT_FALLBACK_RANK = 201;
-    private static final int DIVIDEND_ELIGIBLE_RANK_CUTOFF = 20;
-    private static final int[] DIVIDEND_RATE_BASIS_POINTS = {
+    private static final int COIN_ELIGIBLE_RANK_CUTOFF = 20;
+    private static final int[] COIN_RATE_BASIS_POINTS = {
         300, 280, 260, 240, 220,
         200, 180, 160, 150, 140,
         130, 120, 110, 100, 90,
@@ -171,9 +171,9 @@ public class GameService {
     }
 
     @Transactional
-    public DividendOverviewResponse getDividendOverview(AuthenticatedUser authenticatedUser, String regionCode) {
+    public CoinOverviewResponse getCoinOverview(AuthenticatedUser authenticatedUser, String regionCode) {
         GameSeason season = requireActiveSeason(regionCode);
-        getOrCreateWallet(season, authenticatedUser);
+        GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
 
         Map<String, TrendSignal> signalByVideoId = trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
             season.getRegionCode(),
@@ -181,34 +181,35 @@ public class GameService {
         ).stream().collect(Collectors.toMap(signal -> signal.getId().getVideoId(), Function.identity()));
         Instant now = Instant.now(clock);
 
-        List<DividendPositionCandidate> candidates = gamePositionRepository.findBySeasonIdAndStatus(season.getId(), PositionStatus.OPEN)
+        List<CoinPositionCandidate> candidates = gamePositionRepository.findBySeasonIdAndStatus(season.getId(), PositionStatus.OPEN)
             .stream()
-            .map(position -> toDividendPositionCandidate(position, signalByVideoId.get(position.getVideoId()), now))
+            .map(position -> toCoinPositionCandidate(position, signalByVideoId.get(position.getVideoId()), now))
             .toList();
 
-        List<DividendPositionCandidate> myCandidates = candidates.stream()
+        List<CoinPositionCandidate> myCandidates = candidates.stream()
             .filter(candidate -> candidate.position().getUser().getId().equals(authenticatedUser.id()))
             .filter(candidate -> candidate.rankEligible())
             .sorted(
-                Comparator.comparing(DividendPositionCandidate::holdEligible).reversed()
-                    .thenComparing(DividendPositionCandidate::currentRank, Comparator.nullsLast(Integer::compareTo))
-                    .thenComparing((DividendPositionCandidate candidate) -> candidate.position().getCreatedAt())
+                Comparator.comparing(CoinPositionCandidate::productionActive).reversed()
+                    .thenComparing(CoinPositionCandidate::currentRank, Comparator.nullsLast(Integer::compareTo))
+                    .thenComparing((CoinPositionCandidate candidate) -> candidate.position().getCreatedAt())
             )
             .toList();
 
-        long myEstimatedDividendPoints = myCandidates.stream()
-            .mapToLong(DividendPositionCandidate::estimatedDividendPoints)
+        long myEstimatedCoinYield = myCandidates.stream()
+            .mapToLong(CoinPositionCandidate::estimatedCoinYield)
             .sum();
 
-        return new DividendOverviewResponse(
-            DIVIDEND_ELIGIBLE_RANK_CUTOFF,
+        return new CoinOverviewResponse(
+            COIN_ELIGIBLE_RANK_CUTOFF,
             season.getMinHoldSeconds(),
-            myEstimatedDividendPoints,
-            (int) myCandidates.stream().filter(DividendPositionCandidate::holdEligible).count(),
-            (int) myCandidates.stream().filter(candidate -> !candidate.holdEligible()).count(),
-            buildDividendRankResponses(),
+            wallet.getCoinBalance(),
+            myEstimatedCoinYield,
+            (int) myCandidates.stream().filter(CoinPositionCandidate::productionActive).count(),
+            (int) myCandidates.stream().filter(candidate -> !candidate.productionActive()).count(),
+            buildCoinRankResponses(),
             myCandidates.stream()
-                .map(this::toDividendPositionResponse)
+                .map(this::toCoinPositionResponse)
                 .toList()
         );
     }
@@ -460,29 +461,23 @@ public class GameService {
     }
 
     private WalletResponse toWalletResponse(GameWallet wallet) {
-        long bonusPoints = gameLedgerRepository.sumAmountPointsBySeasonIdAndUserIdAndType(
-            wallet.getSeason().getId(),
-            wallet.getUser().getId(),
-            LedgerType.BONUS
-        );
-
         return new WalletResponse(
             wallet.getSeason().getId(),
             wallet.getBalancePoints(),
             wallet.getReservedPoints(),
             wallet.getRealizedPnlPoints(),
-            bonusPoints,
+            wallet.getCoinBalance(),
             wallet.getBalancePoints() + wallet.getReservedPoints()
         );
     }
 
-    private List<DividendRankResponse> buildDividendRankResponses() {
-        return java.util.stream.IntStream.rangeClosed(1, DIVIDEND_ELIGIBLE_RANK_CUTOFF)
-            .mapToObj(rank -> new DividendRankResponse(rank, resolveDividendRatePercent(rank)))
+    private List<CoinRankResponse> buildCoinRankResponses() {
+        return java.util.stream.IntStream.rangeClosed(1, COIN_ELIGIBLE_RANK_CUTOFF)
+            .mapToObj(rank -> new CoinRankResponse(rank, resolveCoinRatePercent(rank)))
             .toList();
     }
 
-    private DividendPositionCandidate toDividendPositionCandidate(GamePosition position, TrendSignal signal, Instant now) {
+    private CoinPositionCandidate toCoinPositionCandidate(GamePosition position, TrendSignal signal, Instant now) {
         OpenPositionSnapshot snapshot = signal != null
             ? new OpenPositionSnapshot(signal.getCurrentRank(), signal.getCapturedAt(), false)
             : resolveOpenPositionSnapshot(position);
@@ -490,37 +485,37 @@ public class GameService {
         boolean rankEligible = currentRank != null
             && !snapshot.chartOut()
             && currentRank >= 1
-            && currentRank <= DIVIDEND_ELIGIBLE_RANK_CUTOFF;
-        boolean holdEligible = rankEligible && canSellPosition(position, now);
+            && currentRank <= COIN_ELIGIBLE_RANK_CUTOFF;
+        boolean productionActive = rankEligible && canSellPosition(position, now);
         Long currentValuePoints = snapshot != null
             ? GamePointCalculator.calculatePositionPoints(
                 GamePointCalculator.calculatePricePoints(snapshot.currentRank()),
                 getPositionQuantity(position)
             )
             : null;
-        int dividendRateBasisPoints = rankEligible ? resolveDividendRateBasisPoints(currentRank) : 0;
-        long estimatedDividendPoints = rankEligible && holdEligible && currentValuePoints != null
-            ? calculateEstimatedDividendPoints(currentValuePoints, dividendRateBasisPoints)
+        int coinRateBasisPoints = rankEligible ? resolveCoinRateBasisPoints(currentRank) : 0;
+        long estimatedCoinYield = rankEligible && productionActive && currentValuePoints != null
+            ? calculateEstimatedCoinYield(currentValuePoints, coinRateBasisPoints)
             : 0L;
         long heldSeconds = Math.max(0L, now.getEpochSecond() - position.getCreatedAt().getEpochSecond());
-        Long nextEligibleInSeconds = rankEligible && !holdEligible
+        Long nextProductionInSeconds = rankEligible && !productionActive
             ? Math.max(0L, position.getSeason().getMinHoldSeconds() - heldSeconds)
             : null;
 
-        return new DividendPositionCandidate(
+        return new CoinPositionCandidate(
             position,
             currentRank,
             currentValuePoints,
             rankEligible,
-            holdEligible,
-            dividendRateBasisPoints,
-            estimatedDividendPoints,
-            nextEligibleInSeconds
+            productionActive,
+            coinRateBasisPoints,
+            estimatedCoinYield,
+            nextProductionInSeconds
         );
     }
 
-    private DividendPositionResponse toDividendPositionResponse(DividendPositionCandidate candidate) {
-        return new DividendPositionResponse(
+    private CoinPositionResponse toCoinPositionResponse(CoinPositionCandidate candidate) {
+        return new CoinPositionResponse(
             candidate.position().getId(),
             candidate.position().getVideoId(),
             candidate.position().getTitle(),
@@ -529,10 +524,10 @@ public class GameService {
             getPositionQuantity(candidate.position()),
             candidate.currentValuePoints(),
             candidate.rankEligible(),
-            candidate.holdEligible(),
-            basisPointsToPercent(candidate.dividendRateBasisPoints()),
-            candidate.estimatedDividendPoints(),
-            candidate.nextEligibleInSeconds()
+            candidate.productionActive(),
+            basisPointsToPercent(candidate.coinRateBasisPoints()),
+            candidate.estimatedCoinYield(),
+            candidate.nextProductionInSeconds()
         );
     }
 
@@ -764,6 +759,7 @@ public class GameService {
         wallet.setBalancePoints(season.getStartingBalancePoints());
         wallet.setReservedPoints(0L);
         wallet.setRealizedPnlPoints(0L);
+        wallet.setCoinBalance(0L);
         wallet.setUpdatedAt(now);
         GameWallet savedWallet = gameWalletRepository.saveAndFlush(wallet);
 
@@ -1089,28 +1085,28 @@ public class GameService {
             : position.getQuantity();
     }
 
-    static int resolveDividendRateBasisPoints(int rank) {
-        if (rank < 1 || rank > DIVIDEND_ELIGIBLE_RANK_CUTOFF) {
+    static int resolveCoinRateBasisPoints(int rank) {
+        if (rank < 1 || rank > COIN_ELIGIBLE_RANK_CUTOFF) {
             return 0;
         }
 
-        return DIVIDEND_RATE_BASIS_POINTS[rank - 1];
+        return COIN_RATE_BASIS_POINTS[rank - 1];
     }
 
-    private double resolveDividendRatePercent(int rank) {
-        return basisPointsToPercent(resolveDividendRateBasisPoints(rank));
+    private double resolveCoinRatePercent(int rank) {
+        return basisPointsToPercent(resolveCoinRateBasisPoints(rank));
     }
 
     private double basisPointsToPercent(int basisPoints) {
         return basisPoints / 100D;
     }
 
-    static long calculateEstimatedDividendPoints(long currentValuePoints, int dividendRateBasisPoints) {
-        if (currentValuePoints <= 0L || dividendRateBasisPoints <= 0) {
+    static long calculateEstimatedCoinYield(long currentValuePoints, int coinRateBasisPoints) {
+        if (currentValuePoints <= 0L || coinRateBasisPoints <= 0) {
             return 0L;
         }
 
-        return Math.round((double) currentValuePoints * dividendRateBasisPoints / 10_000D);
+        return Math.round((double) currentValuePoints * coinRateBasisPoints / 10_000D);
     }
 
     private long resolveUnitStakePoints(GamePosition position) {
@@ -1226,15 +1222,15 @@ public class GameService {
     private record PositionHistoryWindow(Long startRunId, Long endRunId, Integer latestRank, Instant latestCapturedAt) {
     }
 
-    private record DividendPositionCandidate(
+    private record CoinPositionCandidate(
         GamePosition position,
         Integer currentRank,
         Long currentValuePoints,
         boolean rankEligible,
-        boolean holdEligible,
-        int dividendRateBasisPoints,
-        long estimatedDividendPoints,
-        Long nextEligibleInSeconds
+        boolean productionActive,
+        int coinRateBasisPoints,
+        long estimatedCoinYield,
+        Long nextProductionInSeconds
     ) {
     }
 }

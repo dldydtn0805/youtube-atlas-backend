@@ -1,7 +1,7 @@
 package com.yongsoo.youtubeatlasbackend.game.api;
 
-public record DividendRankResponse(
+public record CoinRankResponse(
     Integer rank,
-    Double dividendRatePercent
+    Double coinRatePercent
 ) {
 }

@@ -33,7 +33,7 @@ public class GameSettlementService {
     private final GamePositionRepository gamePositionRepository;
     private final GameWalletRepository gameWalletRepository;
     private final GameLedgerRepository gameLedgerRepository;
-    private final GameDividendPayoutRepository gameDividendPayoutRepository;
+    private final GameCoinPayoutRepository gameCoinPayoutRepository;
     private final TrendSignalRepository trendSignalRepository;
     private final Clock clock;
 
@@ -43,7 +43,7 @@ public class GameSettlementService {
         GamePositionRepository gamePositionRepository,
         GameWalletRepository gameWalletRepository,
         GameLedgerRepository gameLedgerRepository,
-        GameDividendPayoutRepository gameDividendPayoutRepository,
+        GameCoinPayoutRepository gameCoinPayoutRepository,
         TrendSignalRepository trendSignalRepository,
         Clock clock
     ) {
@@ -52,7 +52,7 @@ public class GameSettlementService {
         this.gamePositionRepository = gamePositionRepository;
         this.gameWalletRepository = gameWalletRepository;
         this.gameLedgerRepository = gameLedgerRepository;
-        this.gameDividendPayoutRepository = gameDividendPayoutRepository;
+        this.gameCoinPayoutRepository = gameCoinPayoutRepository;
         this.trendSignalRepository = trendSignalRepository;
         this.clock = clock;
     }
@@ -64,20 +64,20 @@ public class GameSettlementService {
             return;
         }
 
-        distributeActiveSeasonDividends();
+        distributeActiveSeasonCoins();
         settleEndedSeasons();
         ensureManagedActiveSeasons();
     }
 
     @Transactional
-    public void distributeActiveSeasonDividends() {
+    public void distributeActiveSeasonCoins() {
         Instant now = Instant.now(clock);
         for (GameSeason season : gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)) {
             if (season.getEndAt() != null && !season.getEndAt().isAfter(now)) {
                 continue;
             }
 
-            distributeSeasonDividends(season, now);
+            distributeSeasonCoins(season, now);
         }
     }
 
@@ -105,7 +105,7 @@ public class GameSettlementService {
         }
     }
 
-    private void distributeSeasonDividends(GameSeason season, Instant now) {
+    private void distributeSeasonCoins(GameSeason season, Instant now) {
         List<TrendSignal> signals = trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
             season.getRegionCode(),
             TRENDING_CATEGORY_ID
@@ -119,7 +119,7 @@ public class GameSettlementService {
         Map<String, TrendSignal> signalByVideoId = signals.stream()
             .collect(Collectors.toMap(signal -> signal.getId().getVideoId(), Function.identity()));
         Set<Long> paidPositionIds = new HashSet<>(
-            gameDividendPayoutRepository.findPositionIdsBySeasonIdAndTrendRunId(season.getId(), currentRunId)
+            gameCoinPayoutRepository.findPositionIdsBySeasonIdAndTrendRunId(season.getId(), currentRunId)
         );
         Map<Long, GameWallet> walletByUserId = new HashMap<>();
 
@@ -134,8 +134,8 @@ public class GameSettlementService {
             }
 
             int rank = signal.getCurrentRank();
-            int dividendRateBasisPoints = GameService.resolveDividendRateBasisPoints(rank);
-            if (dividendRateBasisPoints <= 0) {
+            int coinRateBasisPoints = GameService.resolveCoinRateBasisPoints(rank);
+            if (coinRateBasisPoints <= 0) {
                 continue;
             }
 
@@ -150,8 +150,8 @@ public class GameSettlementService {
                     ? GamePointCalculator.QUANTITY_SCALE
                     : position.getQuantity()
             );
-            long dividendPoints = GameService.calculateEstimatedDividendPoints(currentValuePoints, dividendRateBasisPoints);
-            if (dividendPoints <= 0L) {
+            long producedCoins = GameService.calculateEstimatedCoinYield(currentValuePoints, coinRateBasisPoints);
+            if (producedCoins <= 0L) {
                 continue;
             }
 
@@ -162,7 +162,7 @@ public class GameSettlementService {
             );
 
             try {
-                saveDividendPayout(position, wallet, currentRunId, rank, dividendRateBasisPoints, dividendPoints, now);
+                saveCoinPayout(position, wallet, currentRunId, rank, coinRateBasisPoints, producedCoins, now);
                 paidPositionIds.add(position.getId());
             } catch (DataIntegrityViolationException ignored) {
                 // Another scheduler tick or node inserted the payout first.
@@ -170,39 +170,29 @@ public class GameSettlementService {
         }
     }
 
-    private void saveDividendPayout(
+    private void saveCoinPayout(
         GamePosition position,
         GameWallet wallet,
         Long trendRunId,
         int rank,
-        int dividendRateBasisPoints,
-        long dividendPoints,
+        int coinRateBasisPoints,
+        long producedCoins,
         Instant now
     ) {
-        GameDividendPayout payout = new GameDividendPayout();
+        GameCoinPayout payout = new GameCoinPayout();
         payout.setSeason(position.getSeason());
         payout.setUser(position.getUser());
         payout.setPosition(position);
         payout.setTrendRunId(trendRunId);
         payout.setRankAtPayout(rank);
-        payout.setDividendRateBasisPoints(dividendRateBasisPoints);
-        payout.setAmountPoints(dividendPoints);
+        payout.setCoinRateBasisPoints(coinRateBasisPoints);
+        payout.setAmountCoins(producedCoins);
         payout.setCreatedAt(now);
-        gameDividendPayoutRepository.saveAndFlush(payout);
+        gameCoinPayoutRepository.saveAndFlush(payout);
 
-        wallet.setBalancePoints(wallet.getBalancePoints() + dividendPoints);
+        wallet.setCoinBalance(wallet.getCoinBalance() + producedCoins);
         wallet.setUpdatedAt(now);
         gameWalletRepository.save(wallet);
-
-        GameLedger ledger = new GameLedger();
-        ledger.setSeason(position.getSeason());
-        ledger.setUser(position.getUser());
-        ledger.setPosition(position);
-        ledger.setType(LedgerType.BONUS);
-        ledger.setAmountPoints(dividendPoints);
-        ledger.setBalanceAfterPoints(wallet.getBalancePoints());
-        ledger.setCreatedAt(now);
-        gameLedgerRepository.save(ledger);
     }
 
     private void settleSeason(GameSeason season, Instant now) {

@@ -17,15 +17,15 @@ import jakarta.persistence.UniqueConstraint;
 
 @Entity
 @Table(
-    name = "game_dividend_payouts",
+    name = "game_coin_payouts",
     uniqueConstraints = {
         @UniqueConstraint(
-            name = "uk_game_dividend_payouts_season_position_run",
+            name = "uk_game_coin_payouts_season_position_run",
             columnNames = {"season_id", "position_id", "trend_run_id"}
         )
     }
 )
-public class GameDividendPayout {
+public class GameCoinPayout {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -49,11 +49,11 @@ public class GameDividendPayout {
     @Column(name = "rank_at_payout", nullable = false)
     private Integer rankAtPayout;
 
-    @Column(name = "dividend_rate_basis_points", nullable = false)
-    private Integer dividendRateBasisPoints;
+    @Column(name = "coin_rate_basis_points", nullable = false)
+    private Integer coinRateBasisPoints;
 
-    @Column(name = "amount_points", nullable = false)
-    private Long amountPoints;
+    @Column(name = "amount_coins", nullable = false)
+    private Long amountCoins;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -102,20 +102,20 @@ public class GameDividendPayout {
         this.rankAtPayout = rankAtPayout;
     }
 
-    public Integer getDividendRateBasisPoints() {
-        return dividendRateBasisPoints;
+    public Integer getCoinRateBasisPoints() {
+        return coinRateBasisPoints;
     }
 
-    public void setDividendRateBasisPoints(Integer dividendRateBasisPoints) {
-        this.dividendRateBasisPoints = dividendRateBasisPoints;
+    public void setCoinRateBasisPoints(Integer coinRateBasisPoints) {
+        this.coinRateBasisPoints = coinRateBasisPoints;
     }
 
-    public Long getAmountPoints() {
-        return amountPoints;
+    public Long getAmountCoins() {
+        return amountCoins;
     }
 
-    public void setAmountPoints(Long amountPoints) {
-        this.amountPoints = amountPoints;
+    public void setAmountCoins(Long amountCoins) {
+        this.amountCoins = amountCoins;
     }
 
     public Instant getCreatedAt() {
