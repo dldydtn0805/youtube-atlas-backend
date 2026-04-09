@@ -160,6 +160,7 @@ public class GameService {
     public List<LeaderboardEntryResponse> getLeaderboard(AuthenticatedUser authenticatedUser, String regionCode) {
         GameSeason season = requireActiveSeason(regionCode);
         getOrCreateWallet(season, authenticatedUser);
+        List<GameSeasonCoinTier> tiers = gameCoinTierService.getOrCreateTiers(season);
 
         Map<String, TrendSignal> signalByVideoId = trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
             season.getRegionCode(),
@@ -172,9 +173,15 @@ public class GameService {
         ).stream().collect(Collectors.groupingBy(position -> position.getUser().getId()));
 
         List<LeaderboardSnapshot> snapshots = gameWalletRepository.findBySeasonId(season.getId()).stream()
-            .map(wallet -> toLeaderboardSnapshot(wallet, openPositionsByUserId.getOrDefault(wallet.getUser().getId(), List.of()), signalByVideoId))
+            .map(wallet -> toLeaderboardSnapshot(
+                wallet,
+                openPositionsByUserId.getOrDefault(wallet.getUser().getId(), List.of()),
+                signalByVideoId,
+                tiers
+            ))
             .sorted(
-                Comparator.comparingLong(LeaderboardSnapshot::totalAssetPoints).reversed()
+                Comparator.comparingLong(LeaderboardSnapshot::coinBalance).reversed()
+                    .thenComparing(Comparator.comparingLong(LeaderboardSnapshot::totalAssetPoints).reversed())
                     .thenComparing(Comparator.comparingLong(LeaderboardSnapshot::realizedPnlPoints).reversed())
                     .thenComparing(LeaderboardSnapshot::displayName, String.CASE_INSENSITIVE_ORDER)
             )
@@ -786,7 +793,8 @@ public class GameService {
     private LeaderboardSnapshot toLeaderboardSnapshot(
         GameWallet wallet,
         List<GamePosition> openPositions,
-        Map<String, TrendSignal> signalByVideoId
+        Map<String, TrendSignal> signalByVideoId,
+        List<GameSeasonCoinTier> tiers
     ) {
         long markedOpenPositionPoints = 0L;
         long unrealizedPnlPoints = 0L;
@@ -818,6 +826,8 @@ public class GameService {
             wallet.getUser().getId(),
             wallet.getUser().getDisplayName(),
             wallet.getUser().getPictureUrl(),
+            toCoinTierResponse(gameCoinTierService.resolveTier(tiers, wallet.getCoinBalance())),
+            wallet.getCoinBalance(),
             wallet.getBalancePoints() + markedOpenPositionPoints,
             wallet.getBalancePoints(),
             wallet.getReservedPoints(),
@@ -836,6 +846,8 @@ public class GameService {
                     snapshot.userId(),
                     snapshot.displayName(),
                     snapshot.pictureUrl(),
+                    snapshot.currentTier(),
+                    snapshot.coinBalance(),
                     snapshot.totalAssetPoints(),
                     snapshot.balancePoints(),
                     snapshot.reservedPoints(),
@@ -1310,6 +1322,8 @@ public class GameService {
         Long userId,
         String displayName,
         String pictureUrl,
+        CoinTierResponse currentTier,
+        Long coinBalance,
         Long totalAssetPoints,
         Long balancePoints,
         Long reservedPoints,

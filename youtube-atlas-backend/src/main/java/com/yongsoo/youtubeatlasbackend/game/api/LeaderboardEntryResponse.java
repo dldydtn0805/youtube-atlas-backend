@@ -5,6 +5,8 @@ public record LeaderboardEntryResponse(
     Long userId,
     String displayName,
     String pictureUrl,
+    CoinTierResponse currentTier,
+    Long coinBalance,
     Long totalAssetPoints,
     Long balancePoints,
     Long reservedPoints,

@@ -531,21 +531,25 @@ class GameServiceTest {
     }
 
     @Test
-    void getLeaderboardOrdersByMarkedToMarketTotalAssets() {
+    void getLeaderboardOrdersByCoinBalanceBeforeMarkedToMarketTotalAssets() {
         GameSeason season = activeSeason();
         AppUser me = user(7L, "Atlas User");
         AppUser rival = user(8L, "Rival User");
-        long myBuyPricePoints = GamePointCalculator.calculatePricePoints(180);
-        long rivalBuyPricePoints = GamePointCalculator.calculatePricePoints(170);
-        long myMarkedPricePoints = GamePointCalculator.calculatePricePoints(170);
-        long rivalMarkedPricePoints = GamePointCalculator.calculatePricePoints(180);
+        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 1_000_000L, 4);
+        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", "골드", 300_000L, 3);
+        long myBuyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        long rivalBuyPricePoints = GamePointCalculator.calculatePricePoints(180);
+        long myMarkedPricePoints = GamePointCalculator.calculatePricePoints(180);
+        long rivalMarkedPricePoints = GamePointCalculator.calculatePricePoints(170);
         GameWallet myWallet = wallet(season, me, 10_000L - myBuyPricePoints, myBuyPricePoints, 0L);
         GameWallet rivalWallet = wallet(season, rival, 10_000L - rivalBuyPricePoints, rivalBuyPricePoints, 0L);
+        myWallet.setCoinBalance(2_500_000L);
+        rivalWallet.setCoinBalance(1_200_000L);
         GamePosition myPosition = openPosition(
             season,
             me,
             "video-1",
-            180,
+            170,
             myBuyPricePoints,
             Instant.parse("2026-04-01T05:45:00Z")
         );
@@ -553,16 +557,19 @@ class GameServiceTest {
             season,
             rival,
             "video-2",
-            170,
+            180,
             rivalBuyPricePoints,
             Instant.parse("2026-04-01T05:40:00Z")
         );
-        TrendSignal mySignal = signal("video-1", 170, 3);
-        TrendSignal rivalSignal = signal("video-2", 180, -4);
+        TrendSignal mySignal = signal("video-1", 180, -3);
+        TrendSignal rivalSignal = signal("video-2", 170, 4);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(myWallet));
+        when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(List.of(goldTier, platinumTier));
+        when(gameCoinTierService.resolveTier(List.of(goldTier, platinumTier), 2_500_000L)).thenReturn(platinumTier);
+        when(gameCoinTierService.resolveTier(List.of(goldTier, platinumTier), 1_200_000L)).thenReturn(goldTier);
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
             .thenReturn(List.of(mySignal, rivalSignal));
         when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN))
@@ -574,14 +581,21 @@ class GameServiceTest {
         assertThat(response).hasSize(2);
         assertThat(response.get(0).userId()).isEqualTo(7L);
         assertThat(response.get(0).rank()).isEqualTo(1);
+        assertThat(response.get(0).currentTier().tierCode()).isEqualTo("PLATINUM");
+        assertThat(response.get(0).currentTier().displayName()).isEqualTo("플래티넘");
+        assertThat(response.get(0).coinBalance()).isEqualTo(2_500_000L);
         assertThat(response.get(0).totalAssetPoints()).isEqualTo((10_000L - myBuyPricePoints) + myMarkedPricePoints);
         assertThat(response.get(0).unrealizedPnlPoints()).isEqualTo(myMarkedPricePoints - myBuyPricePoints);
         assertThat(response.get(0).me()).isTrue();
         assertThat(response.get(1).userId()).isEqualTo(8L);
         assertThat(response.get(1).rank()).isEqualTo(2);
+        assertThat(response.get(1).currentTier().tierCode()).isEqualTo("GOLD");
+        assertThat(response.get(1).currentTier().displayName()).isEqualTo("골드");
+        assertThat(response.get(1).coinBalance()).isEqualTo(1_200_000L);
         assertThat(response.get(1).totalAssetPoints()).isEqualTo((10_000L - rivalBuyPricePoints) + rivalMarkedPricePoints);
         assertThat(response.get(1).unrealizedPnlPoints()).isEqualTo(rivalMarkedPricePoints - rivalBuyPricePoints);
         assertThat(response.get(1).me()).isFalse();
+        assertThat(response.get(0).totalAssetPoints()).isLessThan(response.get(1).totalAssetPoints());
     }
 
     @Test

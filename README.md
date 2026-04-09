@@ -283,7 +283,9 @@ values
 
 현재 시즌 리더보드를 반환합니다.
 
-- 정렬 기준은 `totalAssetPoints desc`
+- 정렬 기준은 `coinBalance desc` 입니다.
+- 동률이면 `totalAssetPoints desc`, 이후 `realizedPnlPoints desc` 순서로 비교합니다.
+- `coinBalance` 는 현재 시즌 누적 코인 보유량입니다.
 - `totalAssetPoints = balancePoints + 오픈 포지션 평가금액`
 - 오픈 포지션은 현재 랭킹 기준 가격으로 평가손익을 반영합니다.
 
@@ -296,6 +298,7 @@ values
     "userId": 7,
     "displayName": "Atlas User",
     "pictureUrl": "https://lh3.googleusercontent.com/...",
+    "coinBalance": 900000,
     "totalAssetPoints": 12400,
     "balancePoints": 8000,
     "reservedPoints": 2000,
