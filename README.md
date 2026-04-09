@@ -67,6 +67,7 @@ AUTH_SESSION_TTL_DAYS=30
 ADMIN_ALLOWED_EMAILS=admin@example.com,owner@example.com
 GAME_SCHEDULER_ENABLED=false
 GAME_SETTLEMENT_CRON=0 */5 * * * *
+GAME_PAYOUT_SLOT_MINUTES=5
 TRENDING_SCHEDULER_ENABLED=false
 TRENDING_SYNC_CRON=0 0 * * * *
 TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
@@ -77,7 +78,8 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `ALLOWED_ORIGINS` 기본값에는 로컬 개발 주소와 Vercel 배포 주소 패턴이 포함됩니다.
 - `GOOGLE_CLIENT_ID` 는 프론트의 Google OAuth Client ID와 동일해야 합니다.
 - `GOOGLE_CLIENT_SECRET` 는 같은 Google OAuth Web Client의 secret 이어야 합니다.
-- `GAME_SCHEDULER_ENABLED=true` 로 두면 종료 시간이 지난 시즌의 오픈 포지션을 자동 청산합니다.
+- `GAME_SCHEDULER_ENABLED=true` 로 두면 시즌 코인 적립 배치와 종료 시즌 자동 정리가 함께 켜집니다.
+- 로컬에서 빠르게 확인하려면 `GAME_SETTLEMENT_CRON=0 */1 * * * *`, `GAME_PAYOUT_SLOT_MINUTES=1` 로 두면 1분 슬롯 기준 적립을 테스트할 수 있습니다.
 - `ADMIN_ALLOWED_EMAILS` 에 관리자 이메일을 쉼표로 구분해서 넣으면 `/api/admin/*` 엔드포인트 접근을 허용합니다.
 - `TRENDING_SYNC_MAX_PAGES_PER_SOURCE` 는 급상승 동기화 시 소스 카테고리별로 몇 페이지까지 수집할지 결정합니다.
 

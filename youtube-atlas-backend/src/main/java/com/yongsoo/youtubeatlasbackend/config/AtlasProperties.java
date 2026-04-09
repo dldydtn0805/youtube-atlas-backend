@@ -275,6 +275,7 @@ public class AtlasProperties {
     public static class Game {
         private boolean schedulerEnabled;
         private String cron = "0 */5 * * * *";
+        private int payoutSlotMinutes = 5;
         private int seasonDurationDays = 7;
         private long startingBalancePoints = 10_000L;
         private int minHoldSeconds = 600;
@@ -295,6 +296,14 @@ public class AtlasProperties {
 
         public void setCron(String cron) {
             this.cron = cron;
+        }
+
+        public int getPayoutSlotMinutes() {
+            return payoutSlotMinutes;
+        }
+
+        public void setPayoutSlotMinutes(int payoutSlotMinutes) {
+            this.payoutSlotMinutes = payoutSlotMinutes;
         }
 
         public int getSeasonDurationDays() {

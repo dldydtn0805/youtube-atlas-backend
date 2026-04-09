@@ -224,7 +224,8 @@ public class GameSettlementService {
     }
 
     private Instant resolvePayoutSlotAt(Instant now) {
-        long slotSeconds = 5L * 60L;
+        long slotMinutes = Math.max(1, atlasProperties.getGame().getPayoutSlotMinutes());
+        long slotSeconds = slotMinutes * 60L;
         long epochSecond = now.getEpochSecond();
         return Instant.ofEpochSecond(epochSecond - (epochSecond % slotSeconds));
     }

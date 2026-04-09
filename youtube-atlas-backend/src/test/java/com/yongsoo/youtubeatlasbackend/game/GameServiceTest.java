@@ -20,6 +20,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
+import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.game.api.CreatePositionRequest;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPositionsRequest;
 import com.yongsoo.youtubeatlasbackend.trending.TrendRun;
@@ -61,6 +62,7 @@ class GameServiceTest {
         trendRunRepository = org.mockito.Mockito.mock(TrendRunRepository.class);
         trendSnapshotRepository = org.mockito.Mockito.mock(TrendSnapshotRepository.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-01T06:00:00Z"), ZoneOffset.UTC);
+        AtlasProperties atlasProperties = new AtlasProperties();
 
         gameService = new GameService(
             gameSeasonRepository,
@@ -73,7 +75,8 @@ class GameServiceTest {
             trendSignalRepository,
             trendRunRepository,
             trendSnapshotRepository,
-            fixedClock
+            fixedClock,
+            atlasProperties
         );
     }
 

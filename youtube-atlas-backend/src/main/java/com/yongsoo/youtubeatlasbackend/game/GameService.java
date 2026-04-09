@@ -20,6 +20,7 @@ import org.springframework.util.StringUtils;
 import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
+import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.game.api.CoinOverviewResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.CoinPositionResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.CoinRankResponse;
@@ -78,7 +79,8 @@ public class GameService {
         TrendSignalRepository trendSignalRepository,
         TrendRunRepository trendRunRepository,
         TrendSnapshotRepository trendSnapshotRepository,
-        Clock clock
+        Clock clock,
+        AtlasProperties atlasProperties
     ) {
         this.gameSeasonRepository = gameSeasonRepository;
         this.gameWalletRepository = gameWalletRepository;
@@ -91,7 +93,7 @@ public class GameService {
         this.trendRunRepository = trendRunRepository;
         this.trendSnapshotRepository = trendSnapshotRepository;
         this.clock = clock;
-        this.gameSettlementCron = CronExpression.parse("0 */5 * * * *");
+        this.gameSettlementCron = CronExpression.parse(atlasProperties.getGame().getCron());
     }
 
     @Transactional
