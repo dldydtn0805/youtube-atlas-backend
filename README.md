@@ -1,6 +1,6 @@
 # youtube-atlas-backend
 
-`World-Best-YouTube`의 YouTube 조회, Google 로그인, 실시간 댓글, 급상승 스냅샷, 랭킹 기반 포인트 게임 기능을 Spring Boot로 제공하는 백엔드입니다.
+`World-Best-YouTube`의 YouTube 조회, Google 로그인, 실시간 댓글, 급상승 스냅샷, 랭킹 기반 포인트 게임과 시즌 코인 기능을 Spring Boot로 제공하는 백엔드입니다.
 
 ## 현재 구현 범위
 
@@ -13,6 +13,7 @@
 - 급상승 스냅샷 동기화
 - 급상승 시그널 조회
 - 랭킹 기반 포인트 게임 시즌/지갑/매수/매도/리더보드
+- Top 20 시즌 코인 생산과 코인 개요 조회
 - 시즌 종료 시 오픈 포지션 자동 청산
 - H2 로컬 실행 + PostgreSQL 전환 가능한 기본 설정
 
@@ -107,6 +108,7 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `GET /api/game/wallet`
 - `GET /api/game/market`
 - `GET /api/game/leaderboard`
+- `GET /api/game/coins/overview`
 - `GET /api/game/positions/me?status=OPEN`
 - `POST /api/game/positions`
 - `POST /api/game/positions/{positionId}/sell`
@@ -121,7 +123,18 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - 랭킹별 가격 곡선 기반 손익 정산
 - 거래 가능 마켓 목록 조회
 - 실시간 평가손익 반영 리더보드
+- Top 20 보유 포지션 대상 시즌 코인 생산
+- 시즌 코인 개요/예상 생산량 조회
 - 시즌 종료 시 오픈 포지션 자동 청산 스케줄러
+
+시즌 코인 규칙:
+
+- 코인은 돈이 아니라 시즌 명예 재화입니다.
+- 실시간 차트 1위부터 20위까지의 보유 포지션만 코인을 생산합니다.
+- 순위가 높을수록 코인 생산률이 높습니다.
+- 최소 보유 시간이 지난 포지션만 코인 생산에 반영됩니다.
+- 차트아웃되면 코인 생산이 중단됩니다.
+- 시즌 종료 시 코인 자체는 소멸하고, 최종 성과는 티어/뱃지 같은 시즌 결과로 남기는 방향을 전제로 합니다.
 
 핵심 정산 규칙:
 
@@ -150,10 +163,11 @@ profitPoints = settledPoints - buyPricePoints
 
 1. 로그인 후 `GET /api/game/seasons/current` 호출
 2. `GET /api/game/market` 으로 거래 가능 영상 목록 조회
-3. `GET /api/game/positions/me?status=OPEN` 으로 내 보유 포지션 조회
-4. `GET /api/game/leaderboard` 로 랭킹 조회
-5. 매수 시 `POST /api/game/positions`
-6. 매도 시 `POST /api/game/positions/{positionId}/sell`
+3. `GET /api/game/coins/overview` 로 내 시즌 코인 현황 조회
+4. `GET /api/game/positions/me?status=OPEN` 으로 내 보유 포지션 조회
+5. `GET /api/game/leaderboard` 로 랭킹 조회
+6. 매수 시 `POST /api/game/positions`
+7. 매도 시 `POST /api/game/positions/{positionId}/sell`
 
 모든 게임 API는 아래 헤더가 필요합니다.
 
@@ -206,6 +220,7 @@ values
     "balancePoints": 10000,
     "reservedPoints": 0,
     "realizedPnlPoints": 0,
+    "coinBalance": 0,
     "totalAssetPoints": 10000
   }
 }
@@ -214,6 +229,17 @@ values
 ### `GET /api/game/wallet`
 
 현재 시즌 기준 내 게임 지갑 정보를 반환합니다.
+
+### `GET /api/game/coins/overview`
+
+현재 시즌 기준 내 시즌 코인 현황을 반환합니다.
+
+- `myCoinBalance`: 현재까지 누적된 시즌 코인
+- `myEstimatedCoinYield`: 지금 상태가 유지될 때 예상되는 코인 생산량
+- `myActiveProducerCount`: 현재 생산 중인 포지션 수
+- `myWarmingUpPositionCount`: Top 20 안에 있지만 최소 보유 시간을 아직 채우지 못한 포지션 수
+
+후속 티어/뱃지 API 설계와 배포 체크리스트는 [docs/season-coin-roadmap.md](docs/season-coin-roadmap.md) 에 정리되어 있습니다.
 
 ### `GET /api/game/market`
 

@@ -40,6 +40,8 @@ class GameServiceTest {
     private GameWalletRepository gameWalletRepository;
     private GamePositionRepository gamePositionRepository;
     private GameLedgerRepository gameLedgerRepository;
+    private GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
+    private GameCoinTierService gameCoinTierService;
     private AppUserRepository appUserRepository;
     private TrendSignalRepository trendSignalRepository;
     private TrendRunRepository trendRunRepository;
@@ -52,6 +54,8 @@ class GameServiceTest {
         gameWalletRepository = org.mockito.Mockito.mock(GameWalletRepository.class);
         gamePositionRepository = org.mockito.Mockito.mock(GamePositionRepository.class);
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
+        gameSeasonCoinResultRepository = org.mockito.Mockito.mock(GameSeasonCoinResultRepository.class);
+        gameCoinTierService = org.mockito.Mockito.mock(GameCoinTierService.class);
         appUserRepository = org.mockito.Mockito.mock(AppUserRepository.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
         trendRunRepository = org.mockito.Mockito.mock(TrendRunRepository.class);
@@ -63,6 +67,8 @@ class GameServiceTest {
             gameWalletRepository,
             gamePositionRepository,
             gameLedgerRepository,
+            gameSeasonCoinResultRepository,
+            gameCoinTierService,
             appUserRepository,
             trendSignalRepository,
             trendRunRepository,
@@ -652,6 +658,63 @@ class GameServiceTest {
     }
 
     @Test
+    void getCurrentCoinTierReturnsCurrentAndNextTierFromCoinBalance() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        wallet.setCoinBalance(2_500_000L);
+        GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
+        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 500_000L, 2);
+        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", "골드", 2_000_000L, 3);
+        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 10_000_000L, 4);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gameCoinTierService.getOrCreateTiers(season))
+            .thenReturn(List.of(bronzeTier, silverTier, goldTier, platinumTier));
+        when(gameCoinTierService.resolveTier(List.of(bronzeTier, silverTier, goldTier, platinumTier), 2_500_000L))
+            .thenReturn(goldTier);
+
+        var response = gameService.getCurrentCoinTier(authenticatedUser(), "KR");
+
+        assertThat(response.seasonId()).isEqualTo(1L);
+        assertThat(response.coinBalance()).isEqualTo(2_500_000L);
+        assertThat(response.currentTier().tierCode()).isEqualTo("GOLD");
+        assertThat(response.currentTier().displayName()).isEqualTo("골드");
+        assertThat(response.nextTier().tierCode()).isEqualTo("PLATINUM");
+        assertThat(response.tiers()).hasSize(4);
+    }
+
+    @Test
+    void getSeasonCoinResultReturnsFinalizedSeasonCoinResult() {
+        GameSeason season = activeSeason();
+        season.setStatus(SeasonStatus.ENDED);
+        GameSeasonCoinResult result = new GameSeasonCoinResult();
+        result.setSeason(season);
+        result.setUser(user(7L));
+        result.setFinalCoinBalance(5_500_000L);
+        result.setFinalTierCode("PLATINUM");
+        result.setFinalTierDisplayName("플래티넘");
+        result.setFinalTierMinCoinBalance(5_000_000L);
+        result.setBadgeCode("season-platinum");
+        result.setTitleCode("platinum-investor");
+        result.setProfileThemeCode("platinum");
+        result.setCreatedAt(Instant.parse("2026-04-08T00:01:00Z"));
+
+        when(gameSeasonRepository.findById(1L)).thenReturn(Optional.of(season));
+        when(gameSeasonCoinResultRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(result));
+
+        var response = gameService.getSeasonCoinResult(authenticatedUser(), 1L);
+
+        assertThat(response.seasonId()).isEqualTo(1L);
+        assertThat(response.finalCoinBalance()).isEqualTo(5_500_000L);
+        assertThat(response.finalTier().tierCode()).isEqualTo("PLATINUM");
+        assertThat(response.finalTier().displayName()).isEqualTo("플래티넘");
+        assertThat(response.finalizedAt()).isEqualTo(Instant.parse("2026-04-08T00:01:00Z"));
+    }
+
+    @Test
     void getPositionRankHistoryReturnsObservedRunsBetweenBuyAndSell() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
@@ -796,6 +859,21 @@ class GameServiceTest {
         wallet.setCoinBalance(0L);
         wallet.setUpdatedAt(Instant.parse("2026-04-01T05:30:00Z"));
         return wallet;
+    }
+
+    private GameSeasonCoinTier coinTier(GameSeason season, String tierCode, String displayName, long minCoinBalance, int sortOrder) {
+        GameSeasonCoinTier tier = new GameSeasonCoinTier();
+        ReflectionTestUtils.setField(tier, "id", (long) sortOrder);
+        tier.setSeason(season);
+        tier.setTierCode(tierCode);
+        tier.setDisplayName(displayName);
+        tier.setMinCoinBalance(minCoinBalance);
+        tier.setBadgeCode("badge-" + tierCode.toLowerCase());
+        tier.setTitleCode("title-" + tierCode.toLowerCase());
+        tier.setProfileThemeCode(tierCode.toLowerCase());
+        tier.setSortOrder(sortOrder);
+        tier.setCreatedAt(Instant.parse("2026-04-01T00:00:00Z"));
+        return tier;
     }
 
     private GamePosition openPosition(

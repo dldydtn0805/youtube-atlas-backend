@@ -20,6 +20,8 @@ import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.game.api.CoinOverviewResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.CoinPositionResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.CoinRankResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.CoinTierProgressResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.CoinTierResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.CreatePositionRequest;
 import com.yongsoo.youtubeatlasbackend.game.api.CurrentSeasonResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.LeaderboardEntryResponse;
@@ -29,6 +31,7 @@ import com.yongsoo.youtubeatlasbackend.game.api.PositionRankHistoryResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPositionResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPositionsRequest;
+import com.yongsoo.youtubeatlasbackend.game.api.SeasonCoinResultResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.WalletResponse;
 import com.yongsoo.youtubeatlasbackend.trending.TrendRun;
 import com.yongsoo.youtubeatlasbackend.trending.TrendRunRepository;
@@ -55,6 +58,8 @@ public class GameService {
     private final GameWalletRepository gameWalletRepository;
     private final GamePositionRepository gamePositionRepository;
     private final GameLedgerRepository gameLedgerRepository;
+    private final GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
+    private final GameCoinTierService gameCoinTierService;
     private final AppUserRepository appUserRepository;
     private final TrendSignalRepository trendSignalRepository;
     private final TrendRunRepository trendRunRepository;
@@ -66,6 +71,8 @@ public class GameService {
         GameWalletRepository gameWalletRepository,
         GamePositionRepository gamePositionRepository,
         GameLedgerRepository gameLedgerRepository,
+        GameSeasonCoinResultRepository gameSeasonCoinResultRepository,
+        GameCoinTierService gameCoinTierService,
         AppUserRepository appUserRepository,
         TrendSignalRepository trendSignalRepository,
         TrendRunRepository trendRunRepository,
@@ -76,6 +83,8 @@ public class GameService {
         this.gameWalletRepository = gameWalletRepository;
         this.gamePositionRepository = gamePositionRepository;
         this.gameLedgerRepository = gameLedgerRepository;
+        this.gameSeasonCoinResultRepository = gameSeasonCoinResultRepository;
+        this.gameCoinTierService = gameCoinTierService;
         this.appUserRepository = appUserRepository;
         this.trendSignalRepository = trendSignalRepository;
         this.trendRunRepository = trendRunRepository;
@@ -211,6 +220,52 @@ public class GameService {
             myCandidates.stream()
                 .map(this::toCoinPositionResponse)
                 .toList()
+        );
+    }
+
+    @Transactional
+    public CoinTierProgressResponse getCurrentCoinTier(AuthenticatedUser authenticatedUser, String regionCode) {
+        GameSeason season = requireActiveSeason(regionCode);
+        GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
+        List<GameSeasonCoinTier> tiers = gameCoinTierService.getOrCreateTiers(season);
+        GameSeasonCoinTier currentTier = gameCoinTierService.resolveTier(tiers, wallet.getCoinBalance());
+        GameSeasonCoinTier nextTier = tiers.stream()
+            .filter(tier -> tier.getMinCoinBalance() > wallet.getCoinBalance())
+            .min(
+                Comparator.comparingLong(GameSeasonCoinTier::getMinCoinBalance)
+                    .thenComparingInt(GameSeasonCoinTier::getSortOrder)
+            )
+            .orElse(null);
+
+        return new CoinTierProgressResponse(
+            season.getId(),
+            season.getName(),
+            season.getRegionCode(),
+            wallet.getCoinBalance(),
+            toCoinTierResponse(currentTier),
+            nextTier != null ? toCoinTierResponse(nextTier) : null,
+            tiers.stream().map(this::toCoinTierResponse).toList()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public SeasonCoinResultResponse getSeasonCoinResult(AuthenticatedUser authenticatedUser, Long seasonId) {
+        if (seasonId == null) {
+            throw new IllegalArgumentException("seasonId는 필수입니다.");
+        }
+
+        GameSeason season = gameSeasonRepository.findById(seasonId)
+            .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 시즌입니다."));
+        GameSeasonCoinResult result = gameSeasonCoinResultRepository.findBySeasonIdAndUserId(seasonId, authenticatedUser.id())
+            .orElseThrow(() -> new IllegalArgumentException("시즌 코인 결과가 아직 확정되지 않았습니다."));
+
+        return new SeasonCoinResultResponse(
+            season.getId(),
+            season.getName(),
+            season.getRegionCode(),
+            result.getFinalCoinBalance(),
+            toCoinTierResponse(result),
+            result.getCreatedAt()
         );
     }
 
@@ -528,6 +583,28 @@ public class GameService {
             basisPointsToPercent(candidate.coinRateBasisPoints()),
             candidate.estimatedCoinYield(),
             candidate.nextProductionInSeconds()
+        );
+    }
+
+    private CoinTierResponse toCoinTierResponse(GameSeasonCoinTier tier) {
+        return new CoinTierResponse(
+            tier.getTierCode(),
+            tier.getDisplayName(),
+            tier.getMinCoinBalance(),
+            tier.getBadgeCode(),
+            tier.getTitleCode(),
+            tier.getProfileThemeCode()
+        );
+    }
+
+    private CoinTierResponse toCoinTierResponse(GameSeasonCoinResult result) {
+        return new CoinTierResponse(
+            result.getFinalTierCode(),
+            result.getFinalTierDisplayName(),
+            result.getFinalTierMinCoinBalance(),
+            result.getBadgeCode(),
+            result.getTitleCode(),
+            result.getProfileThemeCode()
         );
     }
 

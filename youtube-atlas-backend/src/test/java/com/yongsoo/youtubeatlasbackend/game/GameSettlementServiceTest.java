@@ -31,6 +31,8 @@ class GameSettlementServiceTest {
     private GameWalletRepository gameWalletRepository;
     private GameLedgerRepository gameLedgerRepository;
     private GameCoinPayoutRepository gameCoinPayoutRepository;
+    private GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
+    private GameCoinTierService gameCoinTierService;
     private TrendSignalRepository trendSignalRepository;
     private GameSettlementService gameSettlementService;
 
@@ -42,6 +44,8 @@ class GameSettlementServiceTest {
         gameWalletRepository = org.mockito.Mockito.mock(GameWalletRepository.class);
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
         gameCoinPayoutRepository = org.mockito.Mockito.mock(GameCoinPayoutRepository.class);
+        gameSeasonCoinResultRepository = org.mockito.Mockito.mock(GameSeasonCoinResultRepository.class);
+        gameCoinTierService = org.mockito.Mockito.mock(GameCoinTierService.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-08T00:01:00Z"), ZoneOffset.UTC);
 
@@ -52,6 +56,8 @@ class GameSettlementServiceTest {
             gameWalletRepository,
             gameLedgerRepository,
             gameCoinPayoutRepository,
+            gameSeasonCoinResultRepository,
+            gameCoinTierService,
             trendSignalRepository,
             fixedClock
         );
@@ -117,6 +123,8 @@ class GameSettlementServiceTest {
         GamePosition position = openPosition(season, appUser, "video-1", 120, buyPricePoints);
         GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
         TrendSignal signal = signal("video-1", 100);
+        GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", 0L, 1);
+        List<GameSeasonCoinTier> tiers = List.of(bronzeTier);
 
         when(gameSeasonRepository.findByStatusAndEndAtLessThanEqual(SeasonStatus.ACTIVE, Instant.parse("2026-04-08T00:01:00Z")))
             .thenReturn(List.of(season));
@@ -125,9 +133,15 @@ class GameSettlementServiceTest {
         when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN))
             .thenReturn(List.of(position));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gameWalletRepository.findBySeasonId(1L)).thenReturn(List.of(wallet));
         when(gamePositionRepository.save(position)).thenReturn(position);
         when(gameWalletRepository.save(wallet)).thenReturn(wallet);
         when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(tiers);
+        when(gameCoinTierService.resolveTier(tiers, 0L)).thenReturn(bronzeTier);
+        when(gameSeasonCoinResultRepository.findUserIdsBySeasonId(1L)).thenReturn(List.of());
+        when(gameSeasonCoinResultRepository.saveAndFlush(any(GameSeasonCoinResult.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
         when(gameSeasonRepository.save(season)).thenReturn(season);
 
         gameSettlementService.settleEndedSeasons();
@@ -153,6 +167,8 @@ class GameSettlementServiceTest {
         GamePosition position = openPosition(season, appUser, "video-1", 150, buyPricePoints);
         GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
         TrendSignal otherSignal = signal("video-2", 200);
+        GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", 0L, 1);
+        List<GameSeasonCoinTier> tiers = List.of(bronzeTier);
 
         when(gameSeasonRepository.findByStatusAndEndAtLessThanEqual(SeasonStatus.ACTIVE, Instant.parse("2026-04-08T00:01:00Z")))
             .thenReturn(List.of(season));
@@ -161,9 +177,15 @@ class GameSettlementServiceTest {
         when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN))
             .thenReturn(List.of(position));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gameWalletRepository.findBySeasonId(1L)).thenReturn(List.of(wallet));
         when(gamePositionRepository.save(position)).thenReturn(position);
         when(gameWalletRepository.save(wallet)).thenReturn(wallet);
         when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(tiers);
+        when(gameCoinTierService.resolveTier(tiers, 0L)).thenReturn(bronzeTier);
+        when(gameSeasonCoinResultRepository.findUserIdsBySeasonId(1L)).thenReturn(List.of());
+        when(gameSeasonCoinResultRepository.saveAndFlush(any(GameSeasonCoinResult.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
         when(gameSeasonRepository.save(season)).thenReturn(season);
 
         gameSettlementService.settleEndedSeasons();
@@ -172,6 +194,39 @@ class GameSettlementServiceTest {
         assertThat(position.getSellRank()).isEqualTo(201);
         assertThat(position.getRankDiff()).isEqualTo(-51);
         assertThat(position.getSettledPoints()).isZero();
+    }
+
+    @Test
+    void settleEndedSeasonsFinalizesSeasonCoinResultsFromWalletBalances() {
+        GameSeason season = activeSeasonEndingNow();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        wallet.setCoinBalance(2_500_000L);
+        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", 2_000_000L, 3);
+
+        when(gameSeasonRepository.findByStatusAndEndAtLessThanEqual(SeasonStatus.ACTIVE, Instant.parse("2026-04-08T00:01:00Z")))
+            .thenReturn(List.of(season));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
+            .thenReturn(List.of());
+        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN))
+            .thenReturn(List.of());
+        when(gameWalletRepository.findBySeasonId(1L)).thenReturn(List.of(wallet));
+        when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(List.of(goldTier));
+        when(gameCoinTierService.resolveTier(List.of(goldTier), 2_500_000L)).thenReturn(goldTier);
+        when(gameSeasonCoinResultRepository.findUserIdsBySeasonId(1L)).thenReturn(List.of());
+        when(gameSeasonCoinResultRepository.saveAndFlush(any(GameSeasonCoinResult.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameSeasonRepository.save(season)).thenReturn(season);
+
+        gameSettlementService.settleEndedSeasons();
+
+        org.mockito.ArgumentCaptor<GameSeasonCoinResult> captor = org.mockito.ArgumentCaptor.forClass(GameSeasonCoinResult.class);
+        verify(gameSeasonCoinResultRepository).saveAndFlush(captor.capture());
+        GameSeasonCoinResult savedResult = captor.getValue();
+
+        assertThat(savedResult.getFinalCoinBalance()).isEqualTo(2_500_000L);
+        assertThat(savedResult.getFinalTierCode()).isEqualTo("GOLD");
+        assertThat(savedResult.getFinalTierDisplayName()).isEqualTo("GOLD");
     }
 
     @Test
@@ -316,6 +371,25 @@ class GameSettlementServiceTest {
         wallet.setCoinBalance(0L);
         wallet.setUpdatedAt(Instant.parse("2026-04-07T23:55:00Z"));
         return wallet;
+    }
+
+    private GameSeasonCoinTier coinTier(GameSeason season, String tierCode, long minCoinBalance, int sortOrder) {
+        return coinTier(season, tierCode, tierCode, minCoinBalance, sortOrder);
+    }
+
+    private GameSeasonCoinTier coinTier(GameSeason season, String tierCode, String displayName, long minCoinBalance, int sortOrder) {
+        GameSeasonCoinTier tier = new GameSeasonCoinTier();
+        ReflectionTestUtils.setField(tier, "id", (long) sortOrder);
+        tier.setSeason(season);
+        tier.setTierCode(tierCode);
+        tier.setDisplayName(displayName);
+        tier.setMinCoinBalance(minCoinBalance);
+        tier.setBadgeCode("badge-" + tierCode.toLowerCase());
+        tier.setTitleCode("title-" + tierCode.toLowerCase());
+        tier.setProfileThemeCode(tierCode.toLowerCase());
+        tier.setSortOrder(sortOrder);
+        tier.setCreatedAt(Instant.parse("2026-04-07T23:55:00Z"));
+        return tier;
     }
 
     private TrendSignal signal(String videoId, int currentRank) {

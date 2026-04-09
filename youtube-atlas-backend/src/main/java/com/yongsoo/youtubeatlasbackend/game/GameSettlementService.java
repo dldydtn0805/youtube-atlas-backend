@@ -34,6 +34,8 @@ public class GameSettlementService {
     private final GameWalletRepository gameWalletRepository;
     private final GameLedgerRepository gameLedgerRepository;
     private final GameCoinPayoutRepository gameCoinPayoutRepository;
+    private final GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
+    private final GameCoinTierService gameCoinTierService;
     private final TrendSignalRepository trendSignalRepository;
     private final Clock clock;
 
@@ -44,6 +46,8 @@ public class GameSettlementService {
         GameWalletRepository gameWalletRepository,
         GameLedgerRepository gameLedgerRepository,
         GameCoinPayoutRepository gameCoinPayoutRepository,
+        GameSeasonCoinResultRepository gameSeasonCoinResultRepository,
+        GameCoinTierService gameCoinTierService,
         TrendSignalRepository trendSignalRepository,
         Clock clock
     ) {
@@ -53,6 +57,8 @@ public class GameSettlementService {
         this.gameWalletRepository = gameWalletRepository;
         this.gameLedgerRepository = gameLedgerRepository;
         this.gameCoinPayoutRepository = gameCoinPayoutRepository;
+        this.gameSeasonCoinResultRepository = gameSeasonCoinResultRepository;
+        this.gameCoinTierService = gameCoinTierService;
         this.trendSignalRepository = trendSignalRepository;
         this.clock = clock;
     }
@@ -101,7 +107,8 @@ public class GameSettlementService {
             }
 
             GameSeason latestSeason = gameSeasonRepository.findTopByRegionCodeOrderByStartAtDesc(regionCode).orElse(null);
-            gameSeasonRepository.save(createNextSeason(regionCode, latestSeason, now));
+            GameSeason createdSeason = gameSeasonRepository.save(createNextSeason(regionCode, latestSeason, now));
+            gameCoinTierService.getOrCreateTiers(createdSeason, latestSeason);
         }
     }
 
@@ -216,8 +223,44 @@ public class GameSettlementService {
             settlePosition(position, signalByVideoId.get(position.getVideoId()), fallbackRank, fallbackRunId, fallbackCapturedAt, now);
         }
 
+        finalizeSeasonCoinResults(season, now);
         season.setStatus(SeasonStatus.ENDED);
         gameSeasonRepository.save(season);
+    }
+
+    private void finalizeSeasonCoinResults(GameSeason season, Instant now) {
+        List<GameSeasonCoinTier> tiers = gameCoinTierService.getOrCreateTiers(season);
+        Set<Long> finalizedUserIds = new HashSet<>(gameSeasonCoinResultRepository.findUserIdsBySeasonId(season.getId()));
+
+        for (GameWallet wallet : gameWalletRepository.findBySeasonId(season.getId())) {
+            if (finalizedUserIds.contains(wallet.getUser().getId())) {
+                continue;
+            }
+
+            GameSeasonCoinTier resolvedTier = gameCoinTierService.resolveTier(tiers, wallet.getCoinBalance());
+
+            try {
+                saveSeasonCoinResult(season, wallet, resolvedTier, now);
+                finalizedUserIds.add(wallet.getUser().getId());
+            } catch (DataIntegrityViolationException ignored) {
+                // Another scheduler tick or node finalized the result first.
+            }
+        }
+    }
+
+    private void saveSeasonCoinResult(GameSeason season, GameWallet wallet, GameSeasonCoinTier resolvedTier, Instant now) {
+        GameSeasonCoinResult result = new GameSeasonCoinResult();
+        result.setSeason(season);
+        result.setUser(wallet.getUser());
+        result.setFinalCoinBalance(wallet.getCoinBalance());
+        result.setFinalTierCode(resolvedTier.getTierCode());
+        result.setFinalTierDisplayName(resolvedTier.getDisplayName());
+        result.setFinalTierMinCoinBalance(resolvedTier.getMinCoinBalance());
+        result.setBadgeCode(resolvedTier.getBadgeCode());
+        result.setTitleCode(resolvedTier.getTitleCode());
+        result.setProfileThemeCode(resolvedTier.getProfileThemeCode());
+        result.setCreatedAt(now);
+        gameSeasonCoinResultRepository.saveAndFlush(result);
     }
 
     private void settlePosition(
