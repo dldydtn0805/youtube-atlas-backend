@@ -14,4 +14,6 @@ public interface GameCoinPayoutRepository extends JpaRepository<GameCoinPayout, 
           and payout.trendRunId = :trendRunId
     """)
     List<Long> findPositionIdsBySeasonIdAndTrendRunId(Long seasonId, Long trendRunId);
+
+    void deleteByUserId(Long userId);
 }

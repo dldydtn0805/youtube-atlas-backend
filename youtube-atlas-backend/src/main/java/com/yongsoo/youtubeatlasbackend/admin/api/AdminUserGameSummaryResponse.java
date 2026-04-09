@@ -7,7 +7,10 @@ public record AdminUserGameSummaryResponse(
     Long balancePoints,
     Long reservedPoints,
     Long realizedPnlPoints,
+    Long coinBalance,
     Long totalAssetPoints,
+    AdminCoinTierSummaryResponse currentCoinTier,
+    AdminCoinTierSummaryResponse nextCoinTier,
     long openPositionCount,
     long closedPositionCount
 ) {

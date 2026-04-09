@@ -16,4 +16,6 @@ public interface GameSeasonCoinResultRepository extends JpaRepository<GameSeason
         where result.season.id = :seasonId
     """)
     List<Long> findUserIdsBySeasonId(Long seasonId);
+
+    void deleteByUserId(Long userId);
 }
