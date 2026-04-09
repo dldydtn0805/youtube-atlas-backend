@@ -14,10 +14,12 @@ public class GameCoinTierService {
 
     private static final List<DefaultCoinTierDefinition> DEFAULT_TIER_DEFINITIONS = List.of(
         new DefaultCoinTierDefinition("BRONZE", "브론즈", 0L, "season-bronze", "bronze-investor", "bronze", 1),
-        new DefaultCoinTierDefinition("SILVER", "실버", 200_000L, "season-silver", "silver-investor", "silver", 2),
-        new DefaultCoinTierDefinition("GOLD", "골드", 1_000_000L, "season-gold", "gold-investor", "gold", 3),
-        new DefaultCoinTierDefinition("PLATINUM", "플래티넘", 5_000_000L, "season-platinum", "platinum-investor", "platinum", 4),
-        new DefaultCoinTierDefinition("DIAMOND", "다이아몬드", 20_000_000L, "season-diamond", "diamond-investor", "diamond", 5)
+        new DefaultCoinTierDefinition("SILVER", "실버", 100_000L, "season-silver", "silver-investor", "silver", 2),
+        new DefaultCoinTierDefinition("GOLD", "골드", 300_000L, "season-gold", "gold-investor", "gold", 3),
+        new DefaultCoinTierDefinition("PLATINUM", "플래티넘", 1_000_000L, "season-platinum", "platinum-investor", "platinum", 4),
+        new DefaultCoinTierDefinition("DIAMOND", "다이아몬드", 3_000_000L, "season-diamond", "diamond-investor", "diamond", 5),
+        new DefaultCoinTierDefinition("MASTER", "마스터", 10_000_000L, "season-master", "master-investor", "master", 6),
+        new DefaultCoinTierDefinition("LEGEND", "레전드", 30_000_000L, "season-legend", "legend-investor", "legend", 7)
     );
 
     private final GameSeasonCoinTierRepository gameSeasonCoinTierRepository;

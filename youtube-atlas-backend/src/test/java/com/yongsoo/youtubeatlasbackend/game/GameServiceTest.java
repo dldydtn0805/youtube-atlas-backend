@@ -670,26 +670,32 @@ class GameServiceTest {
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
         wallet.setCoinBalance(2_500_000L);
         GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
-        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 200_000L, 2);
-        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", "골드", 1_000_000L, 3);
-        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 5_000_000L, 4);
+        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 100_000L, 2);
+        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", "골드", 300_000L, 3);
+        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 1_000_000L, 4);
+        GameSeasonCoinTier diamondTier = coinTier(season, "DIAMOND", "다이아몬드", 3_000_000L, 5);
+        GameSeasonCoinTier masterTier = coinTier(season, "MASTER", "마스터", 10_000_000L, 6);
+        GameSeasonCoinTier legendTier = coinTier(season, "LEGEND", "레전드", 30_000_000L, 7);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
         when(gameCoinTierService.getOrCreateTiers(season))
-            .thenReturn(List.of(bronzeTier, silverTier, goldTier, platinumTier));
-        when(gameCoinTierService.resolveTier(List.of(bronzeTier, silverTier, goldTier, platinumTier), 2_500_000L))
-            .thenReturn(goldTier);
+            .thenReturn(List.of(bronzeTier, silverTier, goldTier, platinumTier, diamondTier, masterTier, legendTier));
+        when(gameCoinTierService.resolveTier(
+            List.of(bronzeTier, silverTier, goldTier, platinumTier, diamondTier, masterTier, legendTier),
+            2_500_000L
+        ))
+            .thenReturn(platinumTier);
 
         var response = gameService.getCurrentCoinTier(authenticatedUser(), "KR");
 
         assertThat(response.seasonId()).isEqualTo(1L);
         assertThat(response.coinBalance()).isEqualTo(2_500_000L);
-        assertThat(response.currentTier().tierCode()).isEqualTo("GOLD");
-        assertThat(response.currentTier().displayName()).isEqualTo("골드");
-        assertThat(response.nextTier().tierCode()).isEqualTo("PLATINUM");
-        assertThat(response.tiers()).hasSize(4);
+        assertThat(response.currentTier().tierCode()).isEqualTo("PLATINUM");
+        assertThat(response.currentTier().displayName()).isEqualTo("플래티넘");
+        assertThat(response.nextTier().tierCode()).isEqualTo("DIAMOND");
+        assertThat(response.tiers()).hasSize(7);
     }
 
     @Test
