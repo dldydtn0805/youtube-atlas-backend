@@ -22,6 +22,7 @@ import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameCoinPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameCoinTierService;
+import com.yongsoo.youtubeatlasbackend.game.GameDividendPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameSeason;
 import com.yongsoo.youtubeatlasbackend.game.GameSeasonCoinResultRepository;
@@ -51,6 +52,7 @@ public class AdminUserService {
     private final GamePositionRepository gamePositionRepository;
     private final GameLedgerRepository gameLedgerRepository;
     private final GameCoinPayoutRepository gameCoinPayoutRepository;
+    private final GameDividendPayoutRepository gameDividendPayoutRepository;
     private final GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
     private final GameCoinTierService gameCoinTierService;
     private final AdminAccessService adminAccessService;
@@ -67,6 +69,7 @@ public class AdminUserService {
         GamePositionRepository gamePositionRepository,
         GameLedgerRepository gameLedgerRepository,
         GameCoinPayoutRepository gameCoinPayoutRepository,
+        GameDividendPayoutRepository gameDividendPayoutRepository,
         GameSeasonCoinResultRepository gameSeasonCoinResultRepository,
         GameCoinTierService gameCoinTierService,
         AdminAccessService adminAccessService,
@@ -82,6 +85,7 @@ public class AdminUserService {
         this.gamePositionRepository = gamePositionRepository;
         this.gameLedgerRepository = gameLedgerRepository;
         this.gameCoinPayoutRepository = gameCoinPayoutRepository;
+        this.gameDividendPayoutRepository = gameDividendPayoutRepository;
         this.gameSeasonCoinResultRepository = gameSeasonCoinResultRepository;
         this.gameCoinTierService = gameCoinTierService;
         this.adminAccessService = adminAccessService;
@@ -140,6 +144,7 @@ public class AdminUserService {
         favoriteStreamerRepository.deleteByUserId(userId);
         gameLedgerRepository.deleteByUserId(userId);
         gameCoinPayoutRepository.deleteByUserId(userId);
+        gameDividendPayoutRepository.deleteByUserId(userId);
         gamePositionRepository.deleteByUserId(userId);
         gameSeasonCoinResultRepository.deleteByUserId(userId);
         gameWalletRepository.deleteByUserId(userId);

@@ -24,6 +24,7 @@ import com.yongsoo.youtubeatlasbackend.auth.AuthSessionRepository;
 import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameCoinPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameCoinTierService;
+import com.yongsoo.youtubeatlasbackend.game.GameDividendPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameSeason;
@@ -51,6 +52,7 @@ class AdminUserServiceTest {
     private GamePositionRepository gamePositionRepository;
     private GameLedgerRepository gameLedgerRepository;
     private GameCoinPayoutRepository gameCoinPayoutRepository;
+    private GameDividendPayoutRepository gameDividendPayoutRepository;
     private GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
     private AdminAccessService adminAccessService;
     private AdminUserService adminUserService;
@@ -68,6 +70,7 @@ class AdminUserServiceTest {
         gamePositionRepository = org.mockito.Mockito.mock(GamePositionRepository.class);
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
         gameCoinPayoutRepository = org.mockito.Mockito.mock(GameCoinPayoutRepository.class);
+        gameDividendPayoutRepository = org.mockito.Mockito.mock(GameDividendPayoutRepository.class);
         gameSeasonCoinResultRepository = org.mockito.Mockito.mock(GameSeasonCoinResultRepository.class);
         adminAccessService = org.mockito.Mockito.mock(AdminAccessService.class);
         clock = Clock.fixed(Instant.parse("2026-04-08T03:00:00Z"), ZoneOffset.UTC);
@@ -84,6 +87,7 @@ class AdminUserServiceTest {
             gamePositionRepository,
             gameLedgerRepository,
             gameCoinPayoutRepository,
+            gameDividendPayoutRepository,
             gameSeasonCoinResultRepository,
             gameCoinTierService,
             adminAccessService,
@@ -218,6 +222,7 @@ class AdminUserServiceTest {
         org.mockito.Mockito.verify(favoriteStreamerRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gameLedgerRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gameCoinPayoutRepository).deleteByUserId(13L);
+        org.mockito.Mockito.verify(gameDividendPayoutRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gamePositionRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gameSeasonCoinResultRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gameWalletRepository).deleteByUserId(13L);
@@ -232,6 +237,7 @@ class AdminUserServiceTest {
         adminUserService.deleteUser(17L);
 
         org.mockito.Mockito.verify(gameCoinPayoutRepository).deleteByUserId(17L);
+        org.mockito.Mockito.verify(gameDividendPayoutRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(gameSeasonCoinResultRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(gamePositionRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(gameWalletRepository).deleteByUserId(17L);
