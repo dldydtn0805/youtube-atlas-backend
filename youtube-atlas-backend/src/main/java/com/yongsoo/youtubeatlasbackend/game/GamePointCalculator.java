@@ -4,7 +4,8 @@ final class GamePointCalculator {
 
     static final int QUANTITY_SCALE = 100;
     static final int MIN_QUANTITY = 1;
-
+    static final int MAX_TRACKED_RANK = 200;
+    private static final long CHART_OUT_DELISTING_PENALTY_POINTS = 100L;
     private static final long SELL_FEE_NUMERATOR = 3L;
     private static final long SELL_FEE_DENOMINATOR = 1_000L;
 
@@ -64,6 +65,10 @@ final class GamePointCalculator {
         }
 
         return PRICE_ANCHORS[PRICE_ANCHORS.length - 1].pricePoints();
+    }
+
+    static long calculateChartOutUnitPricePoints() {
+        return Math.max(0L, calculatePricePoints(MAX_TRACKED_RANK) - CHART_OUT_DELISTING_PENALTY_POINTS);
     }
 
     static long calculateProfitPoints(long buyPricePoints, long currentPricePoints) {

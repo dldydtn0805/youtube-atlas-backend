@@ -15,6 +15,7 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.yongsoo.youtubeatlasbackend.auth.AppUser;
@@ -333,7 +334,7 @@ class GameServiceTest {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
-        long sellPricePoints = GamePointCalculator.calculatePricePoints(13);
+        long sellPricePoints = GamePointCalculator.calculateChartOutUnitPricePoints();
         long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
         long pnlPoints = GamePointCalculator.calculateProfitPoints(buyPricePoints, settledPoints);
         GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
@@ -375,6 +376,56 @@ class GameServiceTest {
         assertThat(response.pnlPoints()).isEqualTo(pnlPoints);
         assertThat(response.settledPoints()).isEqualTo(settledPoints);
         assertThat(response.balancePoints()).isEqualTo((10_000L - buyPricePoints) + settledPoints);
+    }
+
+    @Test
+    void getMyPositionsUsesDiscountedFloorPriceWhenPositionIsChartOut() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        long currentPricePoints = GamePointCalculator.calculateChartOutUnitPricePoints();
+        long profitPoints = GamePointCalculator.calculateProfitPoints(buyPricePoints, currentPricePoints);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            170,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        TrendRun latestRun = trendRun(55L, Instant.parse("2026-04-01T06:00:00Z"));
+        TrendRun previousRun = trendRun(54L, Instant.parse("2026-04-01T05:00:00Z"));
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(
+            1L,
+            7L,
+            PositionStatus.OPEN,
+            PageRequest.of(0, 10)
+        ))
+            .thenReturn(List.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.empty());
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0")).thenReturn(Optional.of(latestRun));
+        when(trendSnapshotRepository.findByRunId(55L)).thenReturn(List.of(
+            snapshot(latestRun, "video-2", 8),
+            snapshot(latestRun, "video-3", 12)
+        ));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc("KR", "0", 55L))
+            .thenReturn(Optional.of(previousRun));
+        when(trendSnapshotRepository.findByRunId(54L)).thenReturn(List.of(
+            snapshot(previousRun, "video-1", 19),
+            snapshot(previousRun, "video-2", 7),
+            snapshot(previousRun, "video-3", 11)
+        ));
+
+        var response = gameService.getMyPositions(authenticatedUser(), "KR", "OPEN", 10);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).chartOut()).isTrue();
+        assertThat(response.get(0).currentRank()).isEqualTo(13);
+        assertThat(response.get(0).currentPricePoints()).isEqualTo(currentPricePoints);
+        assertThat(response.get(0).profitPoints()).isEqualTo(profitPoints);
     }
 
     @Test

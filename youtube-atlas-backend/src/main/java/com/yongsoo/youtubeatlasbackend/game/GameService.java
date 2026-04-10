@@ -13,6 +13,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -378,17 +379,35 @@ public class GameService {
         Integer limit
     ) {
         GameSeason season = requireActiveSeason(regionCode);
-        List<GamePosition> positions = StringUtils.hasText(status)
-            ? gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(
-                season.getId(),
-                authenticatedUser.id(),
-                parsePositionStatus(status)
-            )
-            : gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(season.getId(), authenticatedUser.id());
+        PositionStatus parsedStatus = StringUtils.hasText(status) ? parsePositionStatus(status) : null;
         int normalizedLimit = normalizePositionFetchLimit(limit);
+        List<GamePosition> positions;
+
+        if (limit != null) {
+            PageRequest pageRequest = PageRequest.of(0, normalizedLimit);
+            positions = parsedStatus != null
+                ? gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(
+                    season.getId(),
+                    authenticatedUser.id(),
+                    parsedStatus,
+                    pageRequest
+                )
+                : gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(
+                    season.getId(),
+                    authenticatedUser.id(),
+                    pageRequest
+                );
+        } else {
+            positions = parsedStatus != null
+                ? gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(
+                    season.getId(),
+                    authenticatedUser.id(),
+                    parsedStatus
+                )
+                : gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(season.getId(), authenticatedUser.id());
+        }
 
         return positions.stream()
-            .limit(normalizedLimit)
             .map(this::toPositionResponse)
             .toList();
     }
@@ -580,7 +599,7 @@ public class GameService {
         boolean productionActive = rankEligible && canSellPosition(position, now);
         Long currentValuePoints = snapshot != null
             ? GamePointCalculator.calculatePositionPoints(
-                GamePointCalculator.calculatePricePoints(snapshot.currentRank()),
+                resolveOpenPositionUnitPricePoints(snapshot),
                 getPositionQuantity(position)
             )
             : null;
@@ -717,7 +736,7 @@ public class GameService {
     private PositionResponse toOpenPositionResponse(GamePosition position, OpenPositionSnapshot snapshot) {
         int rankDiff = position.getBuyRank() - snapshot.currentRank();
         long currentPricePoints = GamePointCalculator.calculatePositionPoints(
-            GamePointCalculator.calculatePricePoints(snapshot.currentRank()),
+            resolveOpenPositionUnitPricePoints(snapshot),
             getPositionQuantity(position)
         );
         long profitPoints = GamePointCalculator.calculateProfitPoints(position.getStakePoints(), currentPricePoints);
@@ -855,7 +874,7 @@ public class GameService {
                 OpenPositionSnapshot snapshot = resolveOpenPositionSnapshot(position);
                 if (snapshot != null) {
                     markedValue = GamePointCalculator.calculatePositionPoints(
-                        GamePointCalculator.calculatePricePoints(snapshot.currentRank()),
+                        resolveOpenPositionUnitPricePoints(snapshot),
                         getPositionQuantity(position)
                     );
                 }
@@ -986,7 +1005,7 @@ public class GameService {
         TrendSignalId signalId = new TrendSignalId(position.getRegionCode(), position.getCategoryId(), position.getVideoId());
         TrendSignal signal = trendSignalRepository.findById(signalId).orElse(null);
         if (signal != null) {
-            return new SellSnapshot(signal.getCurrentRunId(), signal.getCurrentRank(), signal.getCapturedAt());
+            return new SellSnapshot(signal.getCurrentRunId(), signal.getCurrentRank(), signal.getCapturedAt(), false);
         }
 
         LatestTrendRun latestTrendRun = getLatestTrendRun(position.getRegionCode(), position.getCategoryId());
@@ -999,7 +1018,7 @@ public class GameService {
             .findFirst()
             .orElse(null);
         if (latestSnapshot != null) {
-            return new SellSnapshot(latestTrendRun.run().getId(), latestSnapshot.getRank(), latestTrendRun.run().getCapturedAt());
+            return new SellSnapshot(latestTrendRun.run().getId(), latestSnapshot.getRank(), latestTrendRun.run().getCapturedAt(), false);
         }
 
         ensureLatestRunLooksHealthy(
@@ -1014,7 +1033,7 @@ public class GameService {
             .max(Integer::compareTo)
             .map(rank -> rank + 1)
             .orElse(DEFAULT_FALLBACK_RANK);
-        return new SellSnapshot(latestTrendRun.run().getId(), fallbackRank, latestTrendRun.run().getCapturedAt());
+        return new SellSnapshot(latestTrendRun.run().getId(), fallbackRank, latestTrendRun.run().getCapturedAt(), true);
     }
 
     private OpenPositionSnapshot resolveOpenPositionSnapshot(GamePosition position) {
@@ -1079,7 +1098,7 @@ public class GameService {
         long unitStakePoints = resolveUnitStakePoints(position);
         long soldStakePoints = GamePointCalculator.calculatePositionPoints(unitStakePoints, sellQuantity);
         long sellPricePoints = GamePointCalculator.calculatePositionPoints(
-            GamePointCalculator.calculatePricePoints(sellSnapshot.rank()),
+            resolveSellUnitPricePoints(sellSnapshot),
             sellQuantity
         );
         long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
@@ -1219,6 +1238,18 @@ public class GameService {
         return position.getQuantity() == null || position.getQuantity() < GamePointCalculator.MIN_QUANTITY
             ? GamePointCalculator.QUANTITY_SCALE
             : position.getQuantity();
+    }
+
+    private long resolveOpenPositionUnitPricePoints(OpenPositionSnapshot snapshot) {
+        return snapshot.chartOut()
+            ? GamePointCalculator.calculateChartOutUnitPricePoints()
+            : GamePointCalculator.calculatePricePoints(snapshot.currentRank());
+    }
+
+    private long resolveSellUnitPricePoints(SellSnapshot sellSnapshot) {
+        return sellSnapshot.chartOut()
+            ? GamePointCalculator.calculateChartOutUnitPricePoints()
+            : GamePointCalculator.calculatePricePoints(sellSnapshot.rank());
     }
 
     static int resolveCoinRateBasisPoints(int rank) {
@@ -1398,7 +1429,7 @@ public class GameService {
     ) {
     }
 
-    private record SellSnapshot(Long runId, int rank, Instant capturedAt) {
+    private record SellSnapshot(Long runId, int rank, Instant capturedAt, boolean chartOut) {
     }
 
     private record OpenPositionSnapshot(int currentRank, Instant capturedAt, boolean chartOut) {

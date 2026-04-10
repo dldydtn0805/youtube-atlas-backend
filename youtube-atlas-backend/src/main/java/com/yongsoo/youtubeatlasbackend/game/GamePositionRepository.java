@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -40,6 +41,8 @@ public interface GamePositionRepository extends JpaRepository<GamePosition, Long
 
     List<GamePosition> findBySeasonIdAndUserIdOrderByCreatedAtDesc(Long seasonId, Long userId);
 
+    List<GamePosition> findBySeasonIdAndUserIdOrderByCreatedAtDesc(Long seasonId, Long userId, Pageable pageable);
+
     List<GamePosition> findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAsc(
         Long seasonId,
         Long userId,
@@ -65,6 +68,13 @@ public interface GamePositionRepository extends JpaRepository<GamePosition, Long
     );
 
     List<GamePosition> findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(Long seasonId, Long userId, PositionStatus status);
+
+    List<GamePosition> findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(
+        Long seasonId,
+        Long userId,
+        PositionStatus status,
+        Pageable pageable
+    );
 
     List<GamePosition> findBySeasonIdAndStatus(Long seasonId, PositionStatus status);
 
