@@ -165,7 +165,7 @@ public class GameSettlementService {
                 continue;
             }
 
-            long heldSeconds = capturedAt.getEpochSecond() - position.getCreatedAt().getEpochSecond();
+            long heldSeconds = now.getEpochSecond() - position.getCreatedAt().getEpochSecond();
             if (heldSeconds < position.getSeason().getMinHoldSeconds()) {
                 continue;
             }
