@@ -6,6 +6,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -67,6 +68,7 @@ public class GameService {
     private final TrendSnapshotRepository trendSnapshotRepository;
     private final Clock clock;
     private final CronExpression gameSettlementCron;
+    private final int trendCaptureSlotMinutes;
 
     public GameService(
         GameSeasonRepository gameSeasonRepository,
@@ -94,6 +96,7 @@ public class GameService {
         this.trendSnapshotRepository = trendSnapshotRepository;
         this.clock = clock;
         this.gameSettlementCron = CronExpression.parse(atlasProperties.getGame().getCron());
+        this.trendCaptureSlotMinutes = atlasProperties.getTrending().getCaptureSlotMinutes();
     }
 
     @Transactional
@@ -418,6 +421,7 @@ public class GameService {
                 );
             })
             .toList();
+        points = collapsePositionHistoryPoints(points);
 
         if (points.isEmpty()) {
             points = List.of(
@@ -1356,5 +1360,59 @@ public class GameService {
         Long nextProductionInSeconds,
         Long nextPayoutInSeconds
     ) {
+    }
+
+    private List<PositionRankHistoryPointResponse> collapsePositionHistoryPoints(List<PositionRankHistoryPointResponse> points) {
+        Map<Instant, PositionRankHistoryPointResponse> pointsBySlot = new LinkedHashMap<>();
+
+        for (PositionRankHistoryPointResponse point : points) {
+            Instant captureSlotAt = resolveTrendCaptureSlot(point.capturedAt());
+            PositionRankHistoryPointResponse existing = pointsBySlot.get(captureSlotAt);
+
+            if (existing == null) {
+                pointsBySlot.put(
+                    captureSlotAt,
+                    new PositionRankHistoryPointResponse(
+                        point.runId(),
+                        captureSlotAt,
+                        point.rank(),
+                        point.viewCount(),
+                        point.chartOut(),
+                        point.buyPoint(),
+                        point.sellPoint()
+                    )
+                );
+                continue;
+            }
+
+            Integer mergedRank = point.rank() != null ? point.rank() : existing.rank();
+            Long mergedViewCount = point.viewCount() != null ? point.viewCount() : existing.viewCount();
+
+            pointsBySlot.put(
+                captureSlotAt,
+                new PositionRankHistoryPointResponse(
+                    point.runId(),
+                    captureSlotAt,
+                    mergedRank,
+                    mergedViewCount,
+                    mergedRank == null,
+                    existing.buyPoint() || point.buyPoint(),
+                    existing.sellPoint() || point.sellPoint()
+                )
+            );
+        }
+
+        return new ArrayList<>(pointsBySlot.values());
+    }
+
+    private Instant resolveTrendCaptureSlot(Instant capturedAt) {
+        int slotMinutes = trendCaptureSlotMinutes;
+        if (slotMinutes <= 0) {
+            return capturedAt.truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
+        }
+
+        long slotSeconds = slotMinutes * 60L;
+        long slotEpochSeconds = Math.floorDiv(capturedAt.getEpochSecond(), slotSeconds) * slotSeconds;
+        return Instant.ofEpochSecond(slotEpochSeconds);
     }
 }

@@ -15,6 +15,8 @@ public interface TrendSnapshotRepository extends JpaRepository<TrendSnapshot, Lo
 
     void deleteByRun_IdIn(List<Long> runIds);
 
+    void deleteByRun_Id(Long runId);
+
     List<TrendSnapshot> findByRegionCodeAndCategoryIdAndVideoIdOrderByRun_IdAsc(
         String regionCode,
         String categoryId,

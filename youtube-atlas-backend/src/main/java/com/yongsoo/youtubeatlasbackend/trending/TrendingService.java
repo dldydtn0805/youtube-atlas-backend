@@ -5,6 +5,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +13,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -226,6 +228,7 @@ public class TrendingService {
                 );
             })
             .toList();
+        points = collapseHistoryPoints(points);
 
         Instant latestCapturedAt = currentSignal != null
             ? currentSignal.getCapturedAt()
@@ -265,16 +268,18 @@ public class TrendingService {
         String categoryId = TRENDING_CATEGORY_ID;
         String categoryLabel = TRENDING_CATEGORY_LABEL;
         List<String> sourceCategoryIds = List.of();
+        String source = "youtube-mostPopular";
         Instant now = Instant.now();
+        Instant captureSlotAt = resolveCaptureSlot(now);
 
-        TrendRun currentRun = new TrendRun();
-        currentRun.setRegionCode(regionCode);
-        currentRun.setCategoryId(categoryId);
-        currentRun.setCategoryLabel(categoryLabel);
-        currentRun.setSourceCategoryIds(sourceCategoryIds);
-        currentRun.setSource("youtube-mostPopular");
-        currentRun.setCapturedAt(now);
-        currentRun = trendRunRepository.save(currentRun);
+        TrendRun currentRun = trendRunRepository.findByRegionCodeAndCategoryIdAndSourceAndCapturedAt(
+            regionCode,
+            categoryId,
+            source,
+            captureSlotAt
+        ).orElseGet(() -> createOrLoadRun(regionCode, categoryId, categoryLabel, sourceCategoryIds, source, captureSlotAt));
+
+        trendSnapshotRepository.deleteByRun_Id(currentRun.getId());
 
         List<AtlasVideo> videos = youTubeCatalogService.fetchMergedCategoryVideos(
             regionCode,
@@ -352,7 +357,7 @@ public class TrendingService {
             signal.setChannelTitle(snapshot.getChannelTitle());
             signal.setChannelId(snapshot.getChannelId());
             signal.setThumbnailUrl(snapshot.getThumbnailUrl());
-            signal.setCapturedAt(currentRun.getCapturedAt());
+            signal.setCapturedAt(captureSlotAt);
             signal.setUpdatedAt(now);
             trendSignalRepository.save(signal);
         }
@@ -364,7 +369,7 @@ public class TrendingService {
             categoryId,
             snapshots.size(),
             snapshots.size(),
-            currentRun.getCapturedAt()
+            captureSlotAt
         );
     }
 
@@ -405,6 +410,85 @@ public class TrendingService {
 
         trendSnapshotRepository.deleteByRun_IdIn(expiredRunIds);
         trendRunRepository.deleteAllByIdInBatch(expiredRunIds);
+    }
+
+    private TrendRun createOrLoadRun(
+        String regionCode,
+        String categoryId,
+        String categoryLabel,
+        List<String> sourceCategoryIds,
+        String source,
+        Instant captureSlotAt
+    ) {
+        TrendRun currentRun = new TrendRun();
+        currentRun.setRegionCode(regionCode);
+        currentRun.setCategoryId(categoryId);
+        currentRun.setCategoryLabel(categoryLabel);
+        currentRun.setSourceCategoryIds(sourceCategoryIds);
+        currentRun.setSource(source);
+        currentRun.setCapturedAt(captureSlotAt);
+
+        try {
+            return trendRunRepository.save(currentRun);
+        } catch (DataIntegrityViolationException exception) {
+            return trendRunRepository.findByRegionCodeAndCategoryIdAndSourceAndCapturedAt(
+                regionCode,
+                categoryId,
+                source,
+                captureSlotAt
+            ).orElseThrow(() -> exception);
+        }
+    }
+
+    private Instant resolveCaptureSlot(Instant capturedAt) {
+        int slotMinutes = atlasProperties.getTrending().getCaptureSlotMinutes();
+        if (slotMinutes <= 0) {
+            return capturedAt.truncatedTo(ChronoUnit.MINUTES);
+        }
+
+        long slotSeconds = slotMinutes * 60L;
+        long epochSeconds = capturedAt.getEpochSecond();
+        long slotEpochSeconds = Math.floorDiv(epochSeconds, slotSeconds) * slotSeconds;
+        return Instant.ofEpochSecond(slotEpochSeconds);
+    }
+
+    private List<VideoRankHistoryPointResponse> collapseHistoryPoints(List<VideoRankHistoryPointResponse> points) {
+        Map<Instant, VideoRankHistoryPointResponse> pointsBySlot = new LinkedHashMap<>();
+
+        for (VideoRankHistoryPointResponse point : points) {
+            Instant captureSlotAt = resolveCaptureSlot(point.capturedAt());
+            VideoRankHistoryPointResponse existing = pointsBySlot.get(captureSlotAt);
+
+            if (existing == null) {
+                pointsBySlot.put(
+                    captureSlotAt,
+                    new VideoRankHistoryPointResponse(
+                        point.runId(),
+                        captureSlotAt,
+                        point.rank(),
+                        point.viewCount(),
+                        point.chartOut()
+                    )
+                );
+                continue;
+            }
+
+            Integer mergedRank = point.rank() != null ? point.rank() : existing.rank();
+            Long mergedViewCount = point.viewCount() != null ? point.viewCount() : existing.viewCount();
+
+            pointsBySlot.put(
+                captureSlotAt,
+                new VideoRankHistoryPointResponse(
+                    point.runId(),
+                    captureSlotAt,
+                    mergedRank,
+                    mergedViewCount,
+                    mergedRank == null
+                )
+            );
+        }
+
+        return new ArrayList<>(pointsBySlot.values());
     }
 
     private TrendSignalResponse toResponse(TrendSignal signal) {

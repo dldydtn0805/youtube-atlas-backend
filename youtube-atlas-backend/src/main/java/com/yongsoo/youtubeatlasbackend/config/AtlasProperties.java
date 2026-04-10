@@ -151,6 +151,7 @@ public class AtlasProperties {
     public static class Trending {
         private boolean schedulerEnabled;
         private String cron = "0 0 * * * *";
+        private int captureSlotMinutes = 60;
         private int syncMaxPagesPerSource = 4;
         private int retentionDays = 30;
         private int realtimeSurgingRankChangeThreshold = 5;
@@ -170,6 +171,14 @@ public class AtlasProperties {
 
         public void setCron(String cron) {
             this.cron = cron;
+        }
+
+        public int getCaptureSlotMinutes() {
+            return captureSlotMinutes;
+        }
+
+        public void setCaptureSlotMinutes(int captureSlotMinutes) {
+            this.captureSlotMinutes = captureSlotMinutes;
         }
 
         public int getSyncMaxPagesPerSource() {

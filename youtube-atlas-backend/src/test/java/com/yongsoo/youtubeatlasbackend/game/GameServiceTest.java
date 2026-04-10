@@ -63,6 +63,7 @@ class GameServiceTest {
         trendSnapshotRepository = org.mockito.Mockito.mock(TrendSnapshotRepository.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-01T06:00:00Z"), ZoneOffset.UTC);
         AtlasProperties atlasProperties = new AtlasProperties();
+        atlasProperties.getTrending().setCaptureSlotMinutes(5);
 
         gameService = new GameService(
             gameSeasonRepository,
@@ -839,6 +840,53 @@ class GameServiceTest {
         assertThat(response.points().get(0).rank()).isEqualTo(170);
         assertThat(response.points().get(1).rank()).isNull();
         assertThat(response.points().get(1).chartOut()).isTrue();
+    }
+
+    @Test
+    void getPositionRankHistoryCollapsesDuplicateRunsInSameCaptureSlot() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            133,
+            GamePointCalculator.calculatePricePoints(133),
+            Instant.parse("2026-04-10T07:00:10Z")
+        );
+        TrendRun firstRun = trendRun(20L, Instant.parse("2026-04-10T07:00:05Z"));
+        TrendRun secondRun = trendRun(21L, Instant.parse("2026-04-10T07:04:42Z"));
+        TrendRun latestRun = trendRun(22L, Instant.parse("2026-04-10T08:00:11Z"));
+
+        position.setStatus(PositionStatus.CLOSED);
+        position.setSellRunId(22L);
+        position.setSellRank(128);
+        position.setSellCapturedAt(latestRun.getCapturedAt());
+        position.setClosedAt(Instant.parse("2026-04-10T08:01:00Z"));
+
+        when(gamePositionRepository.findByIdAndUserId(300L, 7L)).thenReturn(Optional.of(position));
+        when(trendSnapshotRepository.findFirstByRegionCodeAndCategoryIdAndVideoIdOrderByRun_IdAsc("KR", "0", "video-1"))
+            .thenReturn(Optional.of(snapshot(firstRun, "video-1", 133)));
+        when(trendRunRepository.findByRegionCodeAndCategoryIdAndIdBetweenOrderByIdAsc("KR", "0", 20L, 22L))
+            .thenReturn(List.of(firstRun, secondRun, latestRun));
+        when(trendSnapshotRepository.findByRegionCodeAndCategoryIdAndVideoIdAndRun_IdBetweenOrderByRun_IdAsc(
+            "KR",
+            "0",
+            "video-1",
+            20L,
+            22L
+        )).thenReturn(List.of(
+            snapshot(firstRun, "video-1", 133),
+            snapshot(secondRun, "video-1", 133),
+            snapshot(latestRun, "video-1", 128)
+        ));
+
+        var response = gameService.getPositionRankHistory(authenticatedUser(), 300L);
+
+        assertThat(response.points()).hasSize(2);
+        assertThat(response.points().get(0).capturedAt()).isEqualTo(Instant.parse("2026-04-10T07:00:00Z"));
+        assertThat(response.points().get(1).capturedAt()).isEqualTo(Instant.parse("2026-04-10T08:00:00Z"));
+        assertThat(response.points().get(1).sellPoint()).isTrue();
     }
 
     private AuthenticatedUser authenticatedUser() {

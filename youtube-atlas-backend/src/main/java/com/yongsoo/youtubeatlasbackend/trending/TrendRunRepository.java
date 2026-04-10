@@ -12,6 +12,13 @@ public interface TrendRunRepository extends JpaRepository<TrendRun, Long> {
 
     Optional<TrendRun> findTopByRegionCodeAndCategoryIdOrderByIdDesc(String regionCode, String categoryId);
 
+    Optional<TrendRun> findByRegionCodeAndCategoryIdAndSourceAndCapturedAt(
+        String regionCode,
+        String categoryId,
+        String source,
+        java.time.Instant capturedAt
+    );
+
     Optional<TrendRun> findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc(
         String regionCode,
         String categoryId,

@@ -3,6 +3,7 @@ package com.yongsoo.youtubeatlasbackend.trending;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +40,7 @@ class TrendingServiceTest {
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
 
         AtlasProperties atlasProperties = new AtlasProperties();
+        atlasProperties.getTrending().setCaptureSlotMinutes(5);
         atlasProperties.getTrending().setSyncMaxPagesPerSource(3);
 
         trendingService = new TrendingService(
@@ -237,6 +239,8 @@ class TrendingServiceTest {
     @Test
     void syncAlwaysUsesAllCategoryDefaults() {
         when(trendRunRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(trendRunRepository.findByRegionCodeAndCategoryIdAndSourceAndCapturedAt(eq("KR"), eq("0"), eq("youtube-mostPopular"), any()))
+            .thenReturn(Optional.empty());
         when(youTubeCatalogService.fetchMergedCategoryVideos("KR", List.of(), 3))
             .thenReturn(List.of(video("video-1")));
         when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc(eq("KR"), eq("0"), any()))
@@ -254,6 +258,8 @@ class TrendingServiceTest {
         assertThat(trendRunCaptor.getValue().getCategoryId()).isEqualTo("0");
         assertThat(trendRunCaptor.getValue().getCategoryLabel()).isEqualTo("전체");
         assertThat(trendRunCaptor.getValue().getSourceCategoryIds()).isEmpty();
+        assertThat(trendRunCaptor.getValue().getCapturedAt()).isNotNull();
+        assertThat(trendRunCaptor.getValue().getCapturedAt().getEpochSecond() % 300L).isZero();
 
         verify(youTubeCatalogService).fetchMergedCategoryVideos("KR", List.of(), 3);
         verify(trendSignalRepository).findByIdRegionCodeAndIdCategoryId("KR", "0");
@@ -263,6 +269,8 @@ class TrendingServiceTest {
     @Test
     void syncPurgesExpiredRunsWhenRetentionIsEnabled() {
         when(trendRunRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(trendRunRepository.findByRegionCodeAndCategoryIdAndSourceAndCapturedAt(eq("US"), eq("0"), eq("youtube-mostPopular"), any()))
+            .thenReturn(Optional.empty());
         when(youTubeCatalogService.fetchMergedCategoryVideos("US", List.of(), 3))
             .thenReturn(List.of(video("video-1")));
         when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc(eq("US"), eq("0"), any()))
@@ -277,6 +285,54 @@ class TrendingServiceTest {
 
         verify(trendSnapshotRepository).deleteByRun_IdIn(List.of(4L, 5L));
         verify(trendRunRepository).deleteAllByIdInBatch(List.of(4L, 5L));
+    }
+
+    @Test
+    void syncReusesExistingRunWithinSameCaptureSlot() {
+        TrendRun existingRun = trendRun(31L, Instant.parse("2026-04-10T09:00:00Z"));
+
+        when(trendRunRepository.findByRegionCodeAndCategoryIdAndSourceAndCapturedAt(eq("KR"), eq("0"), eq("youtube-mostPopular"), any()))
+            .thenReturn(Optional.of(existingRun));
+        when(youTubeCatalogService.fetchMergedCategoryVideos("KR", List.of(), 3))
+            .thenReturn(List.of(video("video-1")));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc("KR", "0", 31L))
+            .thenReturn(Optional.empty());
+        when(trendRunRepository.findIdsByRegionCodeAndCategoryIdAndCapturedAtBefore(eq("KR"), eq("0"), any()))
+            .thenReturn(List.of());
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryId("KR", "0"))
+            .thenReturn(List.of());
+        when(trendSignalRepository.findById(any())).thenReturn(Optional.empty());
+
+        trendingService.sync(new SyncTrendingRequest("KR", "0", "전체", List.of()));
+
+        verify(trendRunRepository, never()).save(any());
+        verify(trendSnapshotRepository).deleteByRun_Id(31L);
+    }
+
+    @Test
+    void getVideoHistoryCollapsesDuplicateRunsInSameCaptureSlot() {
+        TrendRun firstRun = trendRun(41L, Instant.parse("2026-04-10T07:00:03Z"));
+        TrendRun secondRun = trendRun(42L, Instant.parse("2026-04-10T07:04:55Z"));
+        TrendRun latestRun = trendRun(43L, Instant.parse("2026-04-10T08:00:20Z"));
+
+        when(trendSnapshotRepository.findByRegionCodeAndCategoryIdAndVideoIdOrderByRun_IdAsc("KR", "0", "video-1"))
+            .thenReturn(List.of(
+                snapshot(firstRun, "video-1", 133),
+                snapshot(secondRun, "video-1", 133),
+                snapshot(latestRun, "video-1", 128)
+            ));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0"))
+            .thenReturn(Optional.of(latestRun));
+        when(trendRunRepository.findByRegionCodeAndCategoryIdAndIdBetweenOrderByIdAsc("KR", "0", 41L, 43L))
+            .thenReturn(List.of(firstRun, secondRun, latestRun));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1")))
+            .thenReturn(Optional.empty());
+
+        var response = trendingService.getVideoHistory("KR", "video-1");
+
+        assertThat(response.points()).hasSize(2);
+        assertThat(response.points().get(0).capturedAt()).isEqualTo(Instant.parse("2026-04-10T07:00:00Z"));
+        assertThat(response.points().get(1).capturedAt()).isEqualTo(Instant.parse("2026-04-10T08:00:00Z"));
     }
 
     private AtlasVideo video(String id) {
