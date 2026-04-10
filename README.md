@@ -289,6 +289,9 @@ values
 - 정렬 기준은 `coinBalance desc` 입니다.
 - 동률이면 `totalAssetPoints desc`, 이후 `realizedPnlPoints desc` 순서로 비교합니다.
 - `coinBalance` 는 현재 시즌 누적 코인 보유량입니다.
+- `totalStakePoints` 는 현재 오픈 포지션의 총 매수금액입니다.
+- `totalEvaluationPoints` 는 현재 오픈 포지션의 총 평가금액입니다.
+- `profitRatePercent` 는 현재 오픈 포지션 기준 실시간 수익률이며, 계산식은 `(totalEvaluationPoints - totalStakePoints) / totalStakePoints * 100` 입니다.
 - `totalAssetPoints = balancePoints + 오픈 포지션 평가금액`
 - 오픈 포지션은 현재 랭킹 기준 가격으로 평가손익을 반영합니다.
 
@@ -305,6 +308,9 @@ values
     "totalAssetPoints": 12400,
     "balancePoints": 8000,
     "reservedPoints": 2000,
+    "totalStakePoints": 10000,
+    "totalEvaluationPoints": 12400,
+    "profitRatePercent": 24.0,
     "realizedPnlPoints": 0,
     "unrealizedPnlPoints": 2400,
     "openPositionCount": 1,

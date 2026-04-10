@@ -837,12 +837,14 @@ public class GameService {
         Map<String, TrendSignal> signalByVideoId,
         List<GameSeasonCoinTier> tiers
     ) {
+        long totalStakePoints = 0L;
         long markedOpenPositionPoints = 0L;
         long unrealizedPnlPoints = 0L;
 
         for (GamePosition position : openPositions) {
             TrendSignal signal = signalByVideoId.get(position.getVideoId());
             long markedValue = position.getStakePoints();
+            totalStakePoints += position.getStakePoints();
 
             if (signal != null) {
                 markedValue = GamePointCalculator.calculatePositionPoints(
@@ -872,6 +874,9 @@ public class GameService {
             wallet.getBalancePoints() + markedOpenPositionPoints,
             wallet.getBalancePoints(),
             wallet.getReservedPoints(),
+            totalStakePoints,
+            markedOpenPositionPoints,
+            calculateProfitRatePercent(unrealizedPnlPoints, totalStakePoints),
             wallet.getRealizedPnlPoints(),
             unrealizedPnlPoints,
             openPositions.stream().mapToInt(this::getPositionQuantity).sum()
@@ -892,6 +897,9 @@ public class GameService {
                     snapshot.totalAssetPoints(),
                     snapshot.balancePoints(),
                     snapshot.reservedPoints(),
+                    snapshot.totalStakePoints(),
+                    snapshot.totalEvaluationPoints(),
+                    snapshot.profitRatePercent(),
                     snapshot.realizedPnlPoints(),
                     snapshot.unrealizedPnlPoints(),
                     snapshot.openPositionCount(),
@@ -1239,6 +1247,14 @@ public class GameService {
         return basisPoints / 100D;
     }
 
+    private Double calculateProfitRatePercent(long profitPoints, long stakePoints) {
+        if (stakePoints <= 0L) {
+            return null;
+        }
+
+        return Math.round((double) profitPoints * 1000D / stakePoints) / 10D;
+    }
+
     static long calculateEstimatedCoinYield(long currentValuePoints, int coinRateBasisPoints) {
         if (currentValuePoints <= 0L || coinRateBasisPoints <= 0) {
             return 0L;
@@ -1373,6 +1389,9 @@ public class GameService {
         Long totalAssetPoints,
         Long balancePoints,
         Long reservedPoints,
+        Long totalStakePoints,
+        Long totalEvaluationPoints,
+        Double profitRatePercent,
         Long realizedPnlPoints,
         Long unrealizedPnlPoints,
         Integer openPositionCount

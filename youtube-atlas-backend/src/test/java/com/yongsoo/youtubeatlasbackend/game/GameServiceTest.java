@@ -594,6 +594,9 @@ class GameServiceTest {
         assertThat(response.get(0).currentTier().tierCode()).isEqualTo("PLATINUM");
         assertThat(response.get(0).currentTier().displayName()).isEqualTo("플래티넘");
         assertThat(response.get(0).coinBalance()).isEqualTo(2_500_000L);
+        assertThat(response.get(0).totalStakePoints()).isEqualTo(myBuyPricePoints);
+        assertThat(response.get(0).totalEvaluationPoints()).isEqualTo(myMarkedPricePoints);
+        assertThat(response.get(0).profitRatePercent()).isEqualTo(-26.7D);
         assertThat(response.get(0).totalAssetPoints()).isEqualTo((10_000L - myBuyPricePoints) + myMarkedPricePoints);
         assertThat(response.get(0).unrealizedPnlPoints()).isEqualTo(myMarkedPricePoints - myBuyPricePoints);
         assertThat(response.get(0).me()).isTrue();
@@ -602,6 +605,9 @@ class GameServiceTest {
         assertThat(response.get(1).currentTier().tierCode()).isEqualTo("GOLD");
         assertThat(response.get(1).currentTier().displayName()).isEqualTo("골드");
         assertThat(response.get(1).coinBalance()).isEqualTo(1_200_000L);
+        assertThat(response.get(1).totalStakePoints()).isEqualTo(rivalBuyPricePoints);
+        assertThat(response.get(1).totalEvaluationPoints()).isEqualTo(rivalMarkedPricePoints);
+        assertThat(response.get(1).profitRatePercent()).isEqualTo(36.4D);
         assertThat(response.get(1).totalAssetPoints()).isEqualTo((10_000L - rivalBuyPricePoints) + rivalMarkedPricePoints);
         assertThat(response.get(1).unrealizedPnlPoints()).isEqualTo(rivalMarkedPricePoints - rivalBuyPricePoints);
         assertThat(response.get(1).me()).isFalse();
