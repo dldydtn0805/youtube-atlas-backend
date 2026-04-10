@@ -11,6 +11,8 @@ public record CoinPositionResponse(
     Boolean rankEligible,
     Boolean productionActive,
     Double coinRatePercent,
+    Double holdBoostPercent,
+    Double effectiveCoinRatePercent,
     Long estimatedCoinYield,
     Long nextProductionInSeconds,
     Long nextPayoutInSeconds

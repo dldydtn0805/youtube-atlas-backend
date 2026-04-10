@@ -71,7 +71,9 @@ class GameSettlementServiceTest {
         GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
         TrendSignal signal = signal("video-1", 5);
         long currentValuePoints = GamePointCalculator.calculatePricePoints(5);
-        long producedCoins = Math.round(currentValuePoints * 0.0289D);
+        int holdBoostBasisPoints = GameService.calculateHoldBoostBasisPoints(1_860L, 600, 600, 1_000, 10_000);
+        int effectiveCoinRateBasisPoints = GameService.calculateEffectiveCoinRateBasisPoints(289, holdBoostBasisPoints);
+        long producedCoins = GameService.calculateEstimatedCoinYield(currentValuePoints, effectiveCoinRateBasisPoints);
 
         when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
@@ -139,6 +141,33 @@ class GameSettlementServiceTest {
 
         assertThat(wallet.getCoinBalance()).isPositive();
         verify(gameCoinPayoutRepository).saveAndFlush(any(GameCoinPayout.class));
+    }
+
+    @Test
+    void distributeActiveSeasonCoinsAppliesHoldBoostUpToDoubleRate() {
+        GameSeason season = activeSeasonStillRunning();
+        AppUser appUser = user(7L);
+        GamePosition position = openPosition(season, appUser, "video-1", 12, GamePointCalculator.calculatePricePoints(12));
+        position.setCreatedAt(Instant.parse("2026-04-07T22:00:00Z"));
+        GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
+        TrendSignal signal = signal("video-1", 1);
+        long currentValuePoints = GamePointCalculator.calculatePricePoints(1);
+        long producedCoins = GameService.calculateEstimatedCoinYield(currentValuePoints, 600);
+
+        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
+            .thenReturn(List.of(signal));
+        when(gameCoinPayoutRepository.findPositionIdsBySeasonIdAndPayoutSlotAt(1L, Instant.parse("2026-04-08T00:00:00Z")))
+            .thenReturn(List.of());
+        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(position));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gameCoinPayoutRepository.saveAndFlush(any(GameCoinPayout.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+
+        gameSettlementService.distributeActiveSeasonCoins();
+
+        assertThat(wallet.getCoinBalance()).isEqualTo(producedCoins);
     }
 
     @Test

@@ -69,6 +69,7 @@ public class GameService {
     private final Clock clock;
     private final CronExpression gameSettlementCron;
     private final int trendCaptureSlotMinutes;
+    private final AtlasProperties.Game gameProperties;
 
     public GameService(
         GameSeasonRepository gameSeasonRepository,
@@ -95,6 +96,7 @@ public class GameService {
         this.trendRunRepository = trendRunRepository;
         this.trendSnapshotRepository = trendSnapshotRepository;
         this.clock = clock;
+        this.gameProperties = atlasProperties.getGame();
         this.gameSettlementCron = CronExpression.parse(atlasProperties.getGame().getCron());
         this.trendCaptureSlotMinutes = atlasProperties.getTrending().getCaptureSlotMinutes();
     }
@@ -563,11 +565,23 @@ public class GameService {
                 getPositionQuantity(position)
             )
             : null;
-        int coinRateBasisPoints = rankEligible ? resolveCoinRateBasisPoints(currentRank) : 0;
-        long estimatedCoinYield = rankEligible && productionActive && currentValuePoints != null
-            ? calculateEstimatedCoinYield(currentValuePoints, coinRateBasisPoints)
-            : 0L;
         long heldSeconds = Math.max(0L, now.getEpochSecond() - position.getCreatedAt().getEpochSecond());
+        int coinRateBasisPoints = rankEligible ? resolveCoinRateBasisPoints(currentRank) : 0;
+        int holdBoostBasisPoints = rankEligible
+            ? calculateHoldBoostBasisPoints(
+                heldSeconds,
+                position.getSeason().getMinHoldSeconds(),
+                gameProperties.getCoinHoldBoostIntervalSeconds(),
+                gameProperties.getCoinHoldBoostBasisPoints(),
+                gameProperties.getCoinHoldBoostMaxBasisPoints()
+            )
+            : 0;
+        int effectiveCoinRateBasisPoints = rankEligible
+            ? calculateEffectiveCoinRateBasisPoints(coinRateBasisPoints, holdBoostBasisPoints)
+            : 0;
+        long estimatedCoinYield = rankEligible && productionActive && currentValuePoints != null
+            ? calculateEstimatedCoinYield(currentValuePoints, effectiveCoinRateBasisPoints)
+            : 0L;
         Long nextProductionInSeconds = rankEligible && !productionActive
             ? Math.max(0L, position.getSeason().getMinHoldSeconds() - heldSeconds)
             : null;
@@ -582,6 +596,8 @@ public class GameService {
             rankEligible,
             productionActive,
             coinRateBasisPoints,
+            holdBoostBasisPoints,
+            effectiveCoinRateBasisPoints,
             estimatedCoinYield,
             nextProductionInSeconds,
             nextPayoutInSeconds
@@ -600,6 +616,8 @@ public class GameService {
             candidate.rankEligible(),
             candidate.productionActive(),
             basisPointsToPercent(candidate.coinRateBasisPoints()),
+            basisPointsToPercent(candidate.holdBoostBasisPoints()),
+            basisPointsToPercent(candidate.effectiveCoinRateBasisPoints()),
             candidate.estimatedCoinYield(),
             candidate.nextProductionInSeconds(),
             candidate.nextPayoutInSeconds()
@@ -1234,6 +1252,35 @@ public class GameService {
         return Math.round((double) currentValuePoints * coinRateBasisPoints / 10_000D);
     }
 
+    static int calculateHoldBoostBasisPoints(
+        long heldSeconds,
+        int minHoldSeconds,
+        int boostIntervalSeconds,
+        int boostBasisPoints,
+        int maxBoostBasisPoints
+    ) {
+        if (heldSeconds < minHoldSeconds || boostIntervalSeconds <= 0 || boostBasisPoints <= 0 || maxBoostBasisPoints <= 0) {
+            return 0;
+        }
+
+        long eligibleHeldSeconds = heldSeconds - minHoldSeconds;
+        long completedIntervals = eligibleHeldSeconds / boostIntervalSeconds;
+        long accumulatedBoost = completedIntervals * (long) boostBasisPoints;
+        return (int) Math.min(Math.max(0L, accumulatedBoost), maxBoostBasisPoints);
+    }
+
+    static int calculateEffectiveCoinRateBasisPoints(int baseCoinRateBasisPoints, int holdBoostBasisPoints) {
+        if (baseCoinRateBasisPoints <= 0) {
+            return 0;
+        }
+
+        if (holdBoostBasisPoints <= 0) {
+            return baseCoinRateBasisPoints;
+        }
+
+        return (int) Math.round(baseCoinRateBasisPoints * (10_000D + holdBoostBasisPoints) / 10_000D);
+    }
+
     private long resolveUnitStakePoints(GamePosition position) {
         return GamePointCalculator.estimateUnitPricePoints(position.getStakePoints(), getPositionQuantity(position));
     }
@@ -1356,6 +1403,8 @@ public class GameService {
         boolean rankEligible,
         boolean productionActive,
         int coinRateBasisPoints,
+        int holdBoostBasisPoints,
+        int effectiveCoinRateBasisPoints,
         long estimatedCoinYield,
         Long nextProductionInSeconds,
         Long nextPayoutInSeconds

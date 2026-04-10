@@ -160,8 +160,8 @@ public class GameSettlementService {
             }
 
             int rank = signal.getCurrentRank();
-            int coinRateBasisPoints = GameService.resolveCoinRateBasisPoints(rank);
-            if (coinRateBasisPoints <= 0) {
+            int baseCoinRateBasisPoints = GameService.resolveCoinRateBasisPoints(rank);
+            if (baseCoinRateBasisPoints <= 0) {
                 continue;
             }
 
@@ -170,13 +170,25 @@ public class GameSettlementService {
                 continue;
             }
 
+            int holdBoostBasisPoints = GameService.calculateHoldBoostBasisPoints(
+                heldSeconds,
+                position.getSeason().getMinHoldSeconds(),
+                atlasProperties.getGame().getCoinHoldBoostIntervalSeconds(),
+                atlasProperties.getGame().getCoinHoldBoostBasisPoints(),
+                atlasProperties.getGame().getCoinHoldBoostMaxBasisPoints()
+            );
+            int effectiveCoinRateBasisPoints = GameService.calculateEffectiveCoinRateBasisPoints(
+                baseCoinRateBasisPoints,
+                holdBoostBasisPoints
+            );
+
             long currentValuePoints = GamePointCalculator.calculatePositionPoints(
                 GamePointCalculator.calculatePricePoints(rank),
                 position.getQuantity() == null || position.getQuantity() < GamePointCalculator.MIN_QUANTITY
                     ? GamePointCalculator.QUANTITY_SCALE
                     : position.getQuantity()
             );
-            long producedCoins = GameService.calculateEstimatedCoinYield(currentValuePoints, coinRateBasisPoints);
+            long producedCoins = GameService.calculateEstimatedCoinYield(currentValuePoints, effectiveCoinRateBasisPoints);
             if (producedCoins <= 0L) {
                 continue;
             }
@@ -188,7 +200,7 @@ public class GameSettlementService {
             );
 
             try {
-                saveCoinPayout(position, wallet, currentRunId, payoutSlotAt, rank, coinRateBasisPoints, producedCoins, now);
+                saveCoinPayout(position, wallet, currentRunId, payoutSlotAt, rank, effectiveCoinRateBasisPoints, producedCoins, now);
                 paidPositionIds.add(position.getId());
             } catch (DataIntegrityViolationException ignored) {
                 // Another scheduler tick or node inserted the payout first.

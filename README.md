@@ -243,6 +243,9 @@ values
 - `myEstimatedCoinYield`: 지금 상태가 유지될 때 예상되는 코인 생산량
 - `myActiveProducerCount`: 현재 생산 중인 포지션 수
 - `myWarmingUpPositionCount`: Top 200 안에 있지만 최소 보유 시간을 아직 채우지 못한 포지션 수
+- 최소 보유 시간 이후부터 보유 시간이 길수록 채굴 부스트가 붙습니다.
+- 기본 부스트 규칙은 `10분마다 +10%` 이며, 최대 `2배` 까지 증가합니다.
+- 각 포지션에는 기본 수익률 `coinRatePercent`, 보유 시간 부스트 `holdBoostPercent`, 최종 적용 수익률 `effectiveCoinRatePercent` 가 함께 내려갑니다.
 
 후속 티어/뱃지 API 설계와 배포 체크리스트는 [docs/season-coin-roadmap.md](docs/season-coin-roadmap.md) 에 정리되어 있습니다.
 

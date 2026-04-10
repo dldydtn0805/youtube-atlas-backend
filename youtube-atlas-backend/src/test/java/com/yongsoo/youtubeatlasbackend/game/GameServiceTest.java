@@ -630,7 +630,9 @@ class GameServiceTest {
             Instant.parse("2026-04-01T05:35:00Z")
         );
         long myEligibleValuePoints = GamePointCalculator.calculatePricePoints(5);
-        long myEstimatedCoinYield = Math.round(myEligibleValuePoints * 0.0289D);
+        int myHoldBoostBasisPoints = GameService.calculateHoldBoostBasisPoints(1_200L, 600, 600, 1_000, 10_000);
+        int myEffectiveCoinRateBasisPoints = GameService.calculateEffectiveCoinRateBasisPoints(289, myHoldBoostBasisPoints);
+        long myEstimatedCoinYield = GameService.calculateEstimatedCoinYield(myEligibleValuePoints, myEffectiveCoinRateBasisPoints);
 
         ReflectionTestUtils.setField(myEligiblePosition, "id", 501L);
         ReflectionTestUtils.setField(myWarmupPosition, "id", 502L);
@@ -667,15 +669,28 @@ class GameServiceTest {
         assertThat(response.positions().get(0).rankEligible()).isTrue();
         assertThat(response.positions().get(0).productionActive()).isTrue();
         assertThat(response.positions().get(0).coinRatePercent()).isEqualTo(2.89D);
+        assertThat(response.positions().get(0).holdBoostPercent()).isEqualTo(10.0D);
+        assertThat(response.positions().get(0).effectiveCoinRatePercent()).isEqualTo(3.18D);
         assertThat(response.positions().get(0).estimatedCoinYield()).isEqualTo(myEstimatedCoinYield);
         assertThat(response.positions().get(0).nextPayoutInSeconds()).isEqualTo(300L);
         assertThat(response.positions().get(1).positionId()).isEqualTo(502L);
         assertThat(response.positions().get(1).rankEligible()).isTrue();
         assertThat(response.positions().get(1).productionActive()).isFalse();
         assertThat(response.positions().get(1).coinRatePercent()).isEqualTo(2.97D);
+        assertThat(response.positions().get(1).holdBoostPercent()).isZero();
+        assertThat(response.positions().get(1).effectiveCoinRatePercent()).isEqualTo(2.97D);
         assertThat(response.positions().get(1).estimatedCoinYield()).isZero();
         assertThat(response.positions().get(1).nextProductionInSeconds()).isEqualTo(330L);
         assertThat(response.positions().get(1).nextPayoutInSeconds()).isNull();
+    }
+
+    @Test
+    void calculateHoldBoostCapsAtDoubleBaseRate() {
+        int holdBoostBasisPoints = GameService.calculateHoldBoostBasisPoints(8_400L, 600, 600, 1_000, 10_000);
+        int effectiveCoinRateBasisPoints = GameService.calculateEffectiveCoinRateBasisPoints(300, holdBoostBasisPoints);
+
+        assertThat(holdBoostBasisPoints).isEqualTo(10_000);
+        assertThat(effectiveCoinRateBasisPoints).isEqualTo(600);
     }
 
     @Test
