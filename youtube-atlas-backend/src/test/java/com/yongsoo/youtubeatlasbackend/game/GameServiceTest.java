@@ -147,7 +147,7 @@ class GameServiceTest {
     }
 
     @Test
-    void buyMergesAdditionalQuantityIntoExistingOpenPositionForSameVideo() {
+    void buyCreatesSeparateOpenPositionForAdditionalQuantityOnSameVideo() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
@@ -171,7 +171,11 @@ class GameServiceTest {
         when(gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(1L);
         when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal));
         when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
-        when(gamePositionRepository.save(existingPosition)).thenReturn(existingPosition);
+        when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> {
+            GamePosition position = invocation.getArgument(0, GamePosition.class);
+            ReflectionTestUtils.setField(position, "id", 202L);
+            return position;
+        });
         when(gameWalletRepository.save(wallet)).thenReturn(wallet);
         when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -181,13 +185,13 @@ class GameServiceTest {
         );
 
         assertThat(response).hasSize(1);
-        assertThat(response.get(0).id()).isEqualTo(201L);
+        assertThat(response.get(0).id()).isEqualTo(202L);
         assertThat(response.get(0).videoId()).isEqualTo("video-1");
-        assertThat(response.get(0).quantity()).isEqualTo(TWO_SHARES);
-        assertThat(response.get(0).stakePoints()).isEqualTo(buyPricePoints * 2);
+        assertThat(response.get(0).quantity()).isEqualTo(ONE_SHARE);
+        assertThat(response.get(0).stakePoints()).isEqualTo(buyPricePoints);
         assertThat(wallet.getBalancePoints()).isEqualTo(20_000L - buyPricePoints);
         assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints * 2);
-        assertThat(existingPosition.getCreatedAt()).isEqualTo(Instant.parse("2026-04-01T06:00:00Z"));
+        assertThat(existingPosition.getCreatedAt()).isEqualTo(Instant.parse("2026-04-01T05:45:00Z"));
     }
 
     @Test
@@ -313,7 +317,7 @@ class GameServiceTest {
         when(gameWalletRepository.save(wallet)).thenReturn(wallet);
         when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = gameService.sell(authenticatedUser(), new SellPositionsRequest("KR", "video-1", TWO_SHARES));
+        var response = gameService.sell(authenticatedUser(), new SellPositionsRequest("KR", null, "video-1", TWO_SHARES));
 
         assertThat(response).hasSize(2);
         assertThat(response).extracting(responseItem -> responseItem.positionId()).containsExactly(301L, 302L);
@@ -490,7 +494,11 @@ class GameServiceTest {
             .thenReturn((long) season.getMaxOpenPositions());
         when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal));
         when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
-        when(gamePositionRepository.save(existingPosition)).thenReturn(existingPosition);
+        when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> {
+            GamePosition position = invocation.getArgument(0, GamePosition.class);
+            ReflectionTestUtils.setField(position, "id", 305L);
+            return position;
+        });
         when(gameWalletRepository.save(wallet)).thenReturn(wallet);
         when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -500,7 +508,8 @@ class GameServiceTest {
         );
 
         assertThat(response).hasSize(1);
-        assertThat(response.get(0).quantity()).isEqualTo(THREE_SHARES);
+        assertThat(response.get(0).quantity()).isEqualTo(TWO_SHARES);
+        assertThat(response.get(0).stakePoints()).isEqualTo(buyPricePoints * 2);
         assertThat(wallet.getBalancePoints()).isEqualTo(buyPricePoints);
     }
 

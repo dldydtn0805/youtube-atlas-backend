@@ -348,9 +348,17 @@ public class GameService {
 
         AppUser user = requireUser(authenticatedUser.id());
         long previousBalancePoints = wallet.getBalancePoints();
-        GamePosition savedPosition = alreadyOwned
-            ? mergeOpenPosition(openPositionsForVideo, signal, quantity, totalStakePoints, now)
-            : createOpenPosition(season, user, regionCode, categoryId, videoId, signal, quantity, totalStakePoints, now);
+        GamePosition savedPosition = createOpenPosition(
+            season,
+            user,
+            regionCode,
+            categoryId,
+            videoId,
+            signal,
+            quantity,
+            totalStakePoints,
+            now
+        );
 
         wallet.setBalancePoints(previousBalancePoints - totalStakePoints);
         wallet.setReservedPoints(wallet.getReservedPoints() + totalStakePoints);
@@ -475,20 +483,31 @@ public class GameService {
     @Transactional
     public List<SellPositionResponse> sell(AuthenticatedUser authenticatedUser, SellPositionsRequest request) {
         GameSeason season = requireActiveSeason(request.regionCode());
-        String videoId = normalizeRequired(request.videoId(), "videoId는 필수입니다.");
         int quantity = normalizeQuantity(request.quantity());
         Instant now = Instant.now(clock);
+        List<GamePosition> sellablePositions;
 
-        List<GamePosition> sellablePositions = gamePositionRepository
-            .findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(
-                season.getId(),
-                authenticatedUser.id(),
-                videoId,
-                PositionStatus.OPEN
-            )
-            .stream()
-            .filter(position -> canSellPosition(position, now))
-            .toList();
+        if (request.positionId() != null) {
+            GamePosition position = gamePositionRepository.findByIdAndUserIdForUpdate(request.positionId(), authenticatedUser.id())
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 포지션입니다."));
+            ensurePositionOpen(position);
+            if (!position.getSeason().getId().equals(season.getId())) {
+                throw new IllegalArgumentException("현재 시즌 포지션만 매도할 수 있습니다.");
+            }
+            sellablePositions = canSellPosition(position, now) ? List.of(position) : List.of();
+        } else {
+            String videoId = normalizeRequired(request.videoId(), "videoId는 필수입니다.");
+            sellablePositions = gamePositionRepository
+                .findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(
+                    season.getId(),
+                    authenticatedUser.id(),
+                    videoId,
+                    PositionStatus.OPEN
+                )
+                .stream()
+                .filter(position -> canSellPosition(position, now))
+                .toList();
+        }
 
         int totalSellableQuantity = sellablePositions.stream()
             .mapToInt(this::getPositionQuantity)
@@ -943,30 +962,6 @@ public class GameService {
         position.setStatus(PositionStatus.OPEN);
         position.setCreatedAt(now);
         return gamePositionRepository.save(position);
-    }
-
-    private GamePosition mergeOpenPosition(
-        List<GamePosition> openPositionsForVideo,
-        TrendSignal signal,
-        int addedQuantity,
-        long addedStakePoints,
-        Instant now
-    ) {
-        GamePosition targetPosition = openPositionsForVideo.get(openPositionsForVideo.size() - 1);
-        int mergedQuantity = Math.addExact(getPositionQuantity(targetPosition), addedQuantity);
-        long mergedStakePoints = Math.addExact(targetPosition.getStakePoints(), addedStakePoints);
-        long averageUnitStakePoints = GamePointCalculator.estimateUnitPricePoints(mergedStakePoints, mergedQuantity);
-
-        targetPosition.setTitle(signal.getTitle());
-        targetPosition.setChannelTitle(signal.getChannelTitle());
-        targetPosition.setThumbnailUrl(signal.getThumbnailUrl());
-        targetPosition.setBuyRunId(signal.getCurrentRunId());
-        targetPosition.setBuyRank(GamePointCalculator.estimateRankForPricePoints(averageUnitStakePoints));
-        targetPosition.setBuyCapturedAt(signal.getCapturedAt());
-        targetPosition.setQuantity(mergedQuantity);
-        targetPosition.setStakePoints(mergedStakePoints);
-        targetPosition.setCreatedAt(now);
-        return gamePositionRepository.save(targetPosition);
     }
 
     private AppUser requireUser(Long userId) {
