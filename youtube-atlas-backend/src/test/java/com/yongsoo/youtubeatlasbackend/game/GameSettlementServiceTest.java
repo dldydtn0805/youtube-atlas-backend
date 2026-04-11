@@ -13,10 +13,12 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
+import com.yongsoo.youtubeatlasbackend.game.api.GameRealtimeEventResponse;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalId;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
@@ -34,6 +36,7 @@ class GameSettlementServiceTest {
     private GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
     private GameCoinTierService gameCoinTierService;
     private TrendSignalRepository trendSignalRepository;
+    private SimpMessagingTemplate messagingTemplate;
     private GameSettlementService gameSettlementService;
 
     @BeforeEach
@@ -47,6 +50,7 @@ class GameSettlementServiceTest {
         gameSeasonCoinResultRepository = org.mockito.Mockito.mock(GameSeasonCoinResultRepository.class);
         gameCoinTierService = org.mockito.Mockito.mock(GameCoinTierService.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
+        messagingTemplate = org.mockito.Mockito.mock(SimpMessagingTemplate.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-08T00:01:00Z"), ZoneOffset.UTC);
 
         gameSettlementService = new GameSettlementService(
@@ -59,6 +63,7 @@ class GameSettlementServiceTest {
             gameSeasonCoinResultRepository,
             gameCoinTierService,
             trendSignalRepository,
+            messagingTemplate,
             fixedClock
         );
     }
@@ -91,6 +96,12 @@ class GameSettlementServiceTest {
         assertThat(wallet.getBalancePoints()).isEqualTo(10_000L);
         assertThat(wallet.getCoinBalance()).isEqualTo(producedCoins);
         verify(gameCoinPayoutRepository).saveAndFlush(any(GameCoinPayout.class));
+        org.mockito.ArgumentCaptor<GameRealtimeEventResponse> eventCaptor =
+            org.mockito.ArgumentCaptor.forClass(GameRealtimeEventResponse.class);
+        verify(messagingTemplate).convertAndSend(org.mockito.Mockito.eq("/topic/game/KR"), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().eventType()).isEqualTo("wallet-updated");
+        assertThat(eventCaptor.getValue().seasonId()).isEqualTo(1L);
+        assertThat(eventCaptor.getValue().capturedAt()).isEqualTo(Instant.parse("2026-04-08T00:00:00Z"));
     }
 
     @Test
@@ -114,6 +125,8 @@ class GameSettlementServiceTest {
         assertThat(wallet.getCoinBalance()).isZero();
         verify(gameCoinPayoutRepository, org.mockito.Mockito.never()).saveAndFlush(any(GameCoinPayout.class));
         verify(gameLedgerRepository, org.mockito.Mockito.never()).save(any(GameLedger.class));
+        verify(messagingTemplate, org.mockito.Mockito.never())
+            .convertAndSend(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.<Object>any());
     }
 
     @Test
