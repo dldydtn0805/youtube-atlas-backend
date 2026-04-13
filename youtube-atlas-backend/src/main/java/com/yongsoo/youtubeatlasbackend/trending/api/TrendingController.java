@@ -51,6 +51,14 @@ public class TrendingController {
         return trendingService.getTopVideos(regionCode, pageToken);
     }
 
+    @GetMapping("/music-top-videos")
+    public VideoCategorySectionResponse getMusicTopVideos(
+        @RequestParam String regionCode,
+        @RequestParam(required = false) String pageToken
+    ) {
+        return trendingService.getMusicTopVideos(regionCode, pageToken);
+    }
+
     @GetMapping("/videos/{videoId}/history")
     public VideoRankHistoryResponse getVideoHistory(
         @RequestParam String regionCode,

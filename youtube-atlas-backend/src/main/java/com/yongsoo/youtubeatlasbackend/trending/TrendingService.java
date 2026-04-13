@@ -51,6 +51,9 @@ public class TrendingService {
     private static final String TRENDING_CATEGORY_ID = CategoryCatalog.ALL_VIDEO_CATEGORY_ID;
     private static final String TRENDING_CATEGORY_LABEL = "전체";
     private static final String TRENDING_CATEGORY_DESCRIPTION = "카테고리 구분 없이 현재 국가 전체 인기 영상을 보여줍니다.";
+    private static final String MUSIC_CATEGORY_ID = "10";
+    private static final String MUSIC_CATEGORY_LABEL = "음악";
+    private static final String MUSIC_CATEGORY_DESCRIPTION = "TOP 200 스냅샷 안에서 음악 카테고리 영상만 모아 보여줍니다.";
 
     private final AtlasProperties atlasProperties;
     private final YouTubeCatalogService youTubeCatalogService;
@@ -134,6 +137,19 @@ public class TrendingService {
 
     @Transactional(readOnly = true)
     public VideoCategorySectionResponse getTopVideos(String regionCode, String pageToken) {
+        return getSnapshotBackedTopVideos(regionCode, pageToken, null);
+    }
+
+    @Transactional(readOnly = true)
+    public VideoCategorySectionResponse getMusicTopVideos(String regionCode, String pageToken) {
+        return getSnapshotBackedTopVideos(regionCode, pageToken, MUSIC_CATEGORY_ID);
+    }
+
+    private VideoCategorySectionResponse getSnapshotBackedTopVideos(
+        String regionCode,
+        String pageToken,
+        String videoCategoryIdFilter
+    ) {
         String normalizedRegionCode = regionCode.trim().toUpperCase();
         int startIndex = parseTopVideosPageToken(pageToken);
         TrendRun latestRun = trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc(
@@ -148,15 +164,20 @@ public class TrendingService {
 
         List<TrendSnapshot> limitedSnapshots = allSnapshots.stream()
             .limit(TOP_VIDEOS_MAX_COUNT)
+            .filter(snapshot -> matchesVideoCategory(snapshot, videoCategoryIdFilter))
             .toList();
         int endIndex = Math.min(startIndex + TOP_VIDEOS_PAGE_SIZE, limitedSnapshots.size());
 
+        String responseCategoryId = videoCategoryIdFilter == null ? TRENDING_CATEGORY_ID : videoCategoryIdFilter;
+        String responseCategoryLabel = videoCategoryIdFilter == null ? TRENDING_CATEGORY_LABEL : MUSIC_CATEGORY_LABEL;
+        String responseDescription = videoCategoryIdFilter == null ? TRENDING_CATEGORY_DESCRIPTION : MUSIC_CATEGORY_DESCRIPTION;
+
         if (startIndex >= limitedSnapshots.size()) {
             return new VideoCategorySectionResponse(
-                TRENDING_CATEGORY_ID,
-                TRENDING_CATEGORY_LABEL,
-                TRENDING_CATEGORY_DESCRIPTION,
-                buildAvailableCategories(normalizedRegionCode, limitedSnapshots),
+                responseCategoryId,
+                responseCategoryLabel,
+                responseDescription,
+                videoCategoryIdFilter == null ? buildAvailableCategories(normalizedRegionCode, limitedSnapshots) : List.of(),
                 List.of(),
                 null
             );
@@ -178,10 +199,10 @@ public class TrendingService {
         String nextPageToken = endIndex < limitedSnapshots.size() ? Integer.toString(endIndex) : null;
 
         return new VideoCategorySectionResponse(
-            TRENDING_CATEGORY_ID,
-            TRENDING_CATEGORY_LABEL,
-            TRENDING_CATEGORY_DESCRIPTION,
-            buildAvailableCategories(normalizedRegionCode, limitedSnapshots),
+            responseCategoryId,
+            responseCategoryLabel,
+            responseDescription,
+            videoCategoryIdFilter == null ? buildAvailableCategories(normalizedRegionCode, limitedSnapshots) : List.of(),
             items,
             nextPageToken
         );
@@ -633,6 +654,15 @@ public class TrendingService {
         }
 
         return null;
+    }
+
+    private boolean matchesVideoCategory(TrendSnapshot snapshot, String expectedVideoCategoryId) {
+        if (!StringUtils.hasText(expectedVideoCategoryId)) {
+            return true;
+        }
+
+        String normalizedVideoCategoryId = normalizeVideoCategoryId(snapshot.getVideoCategoryId(), snapshot.getCategoryId());
+        return expectedVideoCategoryId.equals(normalizedVideoCategoryId);
     }
 
     private Map<String, String> loadCategoryLabels(String regionCode) {

@@ -226,6 +226,32 @@ class TrendingServiceTest {
     }
 
     @Test
+    void getMusicTopVideosFiltersSnapshotToMusicVideosOnly() {
+        TrendRun latestRun = trendRun(23L, Instant.parse("2026-04-02T08:00:00Z"));
+        TrendSnapshot musicFirst = snapshot(latestRun, "music-1", 1, "10", "음악");
+        TrendSnapshot nonMusic = snapshot(latestRun, "news-1", 2, "25", "뉴스");
+        TrendSnapshot musicSecond = snapshot(latestRun, "music-2", 3, "10", "음악");
+
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0"))
+            .thenReturn(Optional.of(latestRun));
+        when(trendSnapshotRepository.findByRunIdOrderByRankAsc(23L))
+            .thenReturn(List.of(musicFirst, nonMusic, musicSecond));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryId("KR", "0"))
+            .thenReturn(List.of());
+
+        var response = trendingService.getMusicTopVideos("KR", null);
+
+        assertThat(response.categoryId()).isEqualTo("10");
+        assertThat(response.label()).isEqualTo("음악");
+        assertThat(response.availableCategories()).isEmpty();
+        assertThat(response.items()).extracting("id").containsExactly("music-1", "music-2");
+        assertThat(response.items()).allSatisfy(item -> {
+            assertThat(item.snippet().categoryId()).isEqualTo("10");
+            assertThat(item.snippet().categoryLabel()).isEqualTo("음악");
+        });
+    }
+
+    @Test
     void getVideoHistoryReturnsObservedHistoryAndCurrentChartOut() {
         TrendRun firstRun = trendRun(11L, Instant.parse("2026-04-01T05:00:00Z"));
         TrendRun latestRun = trendRun(12L, Instant.parse("2026-04-01T06:00:00Z"));
@@ -409,12 +435,16 @@ class TrendingServiceTest {
     }
 
     private TrendSnapshot snapshot(TrendRun run, String videoId, int rank) {
+        return snapshot(run, videoId, rank, "10", "음악");
+    }
+
+    private TrendSnapshot snapshot(TrendRun run, String videoId, int rank, String videoCategoryId, String videoCategoryLabel) {
         TrendSnapshot snapshot = new TrendSnapshot();
         snapshot.setRun(run);
         snapshot.setRegionCode("KR");
         snapshot.setCategoryId("0");
-        snapshot.setVideoCategoryId("10");
-        snapshot.setVideoCategoryLabel("음악");
+        snapshot.setVideoCategoryId(videoCategoryId);
+        snapshot.setVideoCategoryLabel(videoCategoryLabel);
         snapshot.setVideoId(videoId);
         snapshot.setRank(rank);
         snapshot.setTitle("Title");
