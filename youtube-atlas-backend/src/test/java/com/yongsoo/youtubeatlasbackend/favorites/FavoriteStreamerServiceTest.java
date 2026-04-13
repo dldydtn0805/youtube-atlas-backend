@@ -127,6 +127,7 @@ class FavoriteStreamerServiceTest {
             "즐겨찾기 채널",
             "전체 인기 영상 중 즐겨찾기한 채널의 영상만 모았습니다.",
             List.of(),
+            List.of(),
             "NEXT"
         );
         when(favoriteStreamerRepository.findByUserIdOrderByCreatedAtDesc(7L)).thenReturn(List.of(newer, older));

@@ -19,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.trending.api.SyncTrendingRequest;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeCatalogService;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategoryResponse;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasContentDetails;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasVideo;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasVideoSnippet;
@@ -42,6 +43,11 @@ class TrendingServiceTest {
         AtlasProperties atlasProperties = new AtlasProperties();
         atlasProperties.getTrending().setCaptureSlotMinutes(5);
         atlasProperties.getTrending().setSyncMaxPagesPerSource(3);
+        when(youTubeCatalogService.getCategories(any())).thenReturn(List.of(
+            new VideoCategoryResponse("10", "음악", "뮤직", List.of("10")),
+            new VideoCategoryResponse("20", "게임", "게임", List.of("20")),
+            new VideoCategoryResponse("25", "뉴스", "뉴스", List.of("25"))
+        ));
 
         trendingService = new TrendingService(
             atlasProperties,
@@ -181,8 +187,14 @@ class TrendingServiceTest {
 
         assertThat(response.categoryId()).isEqualTo("0");
         assertThat(response.items()).hasSize(2);
+        assertThat(response.availableCategories()).extracting("id", "label", "count")
+            .containsExactly(
+                org.assertj.core.groups.Tuple.tuple("10", "음악", 2L)
+            );
         assertThat(response.nextPageToken()).isNull();
         assertThat(response.items().getFirst().id()).isEqualTo("video-1");
+        assertThat(response.items().getFirst().snippet().categoryId()).isEqualTo("10");
+        assertThat(response.items().getFirst().snippet().categoryLabel()).isEqualTo("음악");
         assertThat(response.items().getFirst().trend()).isNotNull();
         assertThat(response.items().getFirst().trend().currentRank()).isEqualTo(1);
         assertThat(response.items().getLast().trend()).isNotNull();
@@ -208,6 +220,8 @@ class TrendingServiceTest {
 
         assertThat(response.items()).hasSize(5);
         assertThat(response.items().getFirst().id()).isEqualTo("video-51");
+        assertThat(response.availableCategories()).singleElement().extracting("id", "label", "count")
+            .containsExactly("10", "음악", 55L);
         assertThat(response.nextPageToken()).isNull();
     }
 
@@ -262,6 +276,7 @@ class TrendingServiceTest {
         assertThat(trendRunCaptor.getValue().getCapturedAt().getEpochSecond() % 300L).isZero();
 
         verify(youTubeCatalogService).fetchMergedCategoryVideos("KR", List.of(), 3);
+        verify(youTubeCatalogService).getCategories("KR");
         verify(trendSignalRepository).findByIdRegionCodeAndIdCategoryId("KR", "0");
         assertThat(response.categoryId()).isEqualTo("0");
     }
@@ -398,6 +413,8 @@ class TrendingServiceTest {
         snapshot.setRun(run);
         snapshot.setRegionCode("KR");
         snapshot.setCategoryId("0");
+        snapshot.setVideoCategoryId("10");
+        snapshot.setVideoCategoryLabel("음악");
         snapshot.setVideoId(videoId);
         snapshot.setRank(rank);
         snapshot.setTitle("Title");

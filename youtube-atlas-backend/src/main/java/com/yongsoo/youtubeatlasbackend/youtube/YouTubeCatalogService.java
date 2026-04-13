@@ -85,6 +85,7 @@ public class YouTubeCatalogService {
                 "즐겨찾기 채널",
                 "전체 인기 영상 중 즐겨찾기한 채널의 영상만 모았습니다.",
                 List.of(),
+                List.of(),
                 null
             );
         }
@@ -110,6 +111,7 @@ public class YouTubeCatalogService {
                 "favorite-streamers",
                 "즐겨찾기 채널",
                 "전체 인기 영상 중 즐겨찾기한 채널의 영상만 모았습니다.",
+                List.of(),
                 List.copyOf(matchedItems),
                 nextPageToken
             )
@@ -157,6 +159,7 @@ public class YouTubeCatalogService {
                 categoryId,
                 categoryCatalog.allCategory().label(),
                 categoryCatalog.allCategory().description(),
+                List.of(),
                 page.items().stream().map(this::toVideoResponse).toList(),
                 page.nextPageToken()
             );
@@ -181,6 +184,7 @@ public class YouTubeCatalogService {
             category.id(),
             category.label(),
             category.description(),
+            List.of(),
             page.items().stream().map(this::toVideoResponse).toList(),
             page.nextPageToken()
         );
@@ -335,6 +339,7 @@ public class YouTubeCatalogService {
             section.categoryId(),
             section.label(),
             section.description(),
+            section.availableCategories(),
             itemsWithTrends,
             section.nextPageToken()
         );
@@ -373,6 +378,7 @@ public class YouTubeCatalogService {
                 video.snippet() != null ? video.snippet().channelTitle() : null,
                 video.snippet() != null ? video.snippet().channelId() : null,
                 video.snippet() != null ? video.snippet().categoryId() : null,
+                null,
                 video.snippet() != null && video.snippet().publishedAt() != null ? video.snippet().publishedAt().toString() : null,
                 toThumbnailsResponse(video.snippet() != null ? video.snippet().thumbnails() : null)
             ),

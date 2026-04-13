@@ -21,6 +21,7 @@ public record VideoItemResponse(
         String channelTitle,
         String channelId,
         String categoryId,
+        String categoryLabel,
         String publishedAt,
         ThumbnailsResponse thumbnails
     ) {

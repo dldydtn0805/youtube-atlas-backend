@@ -30,6 +30,8 @@ import com.yongsoo.youtubeatlasbackend.trending.api.VideoRankHistoryResponse;
 import com.yongsoo.youtubeatlasbackend.youtube.CategoryCatalog;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeCatalogService;
 import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategorySectionResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategorySectionResponse.AvailableCategoryResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategoryResponse;
 import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse;
 import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse.ContentDetailsResponse;
 import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse.SnippetResponse;
@@ -154,12 +156,14 @@ public class TrendingService {
                 TRENDING_CATEGORY_ID,
                 TRENDING_CATEGORY_LABEL,
                 TRENDING_CATEGORY_DESCRIPTION,
+                buildAvailableCategories(normalizedRegionCode, limitedSnapshots),
                 List.of(),
                 null
             );
         }
 
         Map<String, TrendSignal> signalsByVideoId = new HashMap<>();
+        Map<String, String> categoryLabelById = loadCategoryLabels(normalizedRegionCode);
         for (TrendSignal signal : trendSignalRepository.findByIdRegionCodeAndIdCategoryId(
             normalizedRegionCode,
             TRENDING_CATEGORY_ID
@@ -168,7 +172,7 @@ public class TrendingService {
         }
 
         List<VideoItemResponse> items = limitedSnapshots.subList(startIndex, endIndex).stream()
-            .map(snapshot -> toTopVideoResponse(snapshot, latestRun, signalsByVideoId.get(snapshot.getVideoId())))
+            .map(snapshot -> toTopVideoResponse(snapshot, latestRun, signalsByVideoId.get(snapshot.getVideoId()), categoryLabelById))
             .toList();
 
         String nextPageToken = endIndex < limitedSnapshots.size() ? Integer.toString(endIndex) : null;
@@ -177,6 +181,7 @@ public class TrendingService {
             TRENDING_CATEGORY_ID,
             TRENDING_CATEGORY_LABEL,
             TRENDING_CATEGORY_DESCRIPTION,
+            buildAvailableCategories(normalizedRegionCode, limitedSnapshots),
             items,
             nextPageToken
         );
@@ -286,14 +291,18 @@ public class TrendingService {
             sourceCategoryIds,
             atlasProperties.getTrending().getSyncMaxPagesPerSource()
         );
+        Map<String, String> categoryLabelById = loadCategoryLabels(regionCode);
         List<TrendSnapshot> snapshots = new ArrayList<>();
 
         for (int index = 0; index < videos.size(); index++) {
             AtlasVideo video = videos.get(index);
+            String videoCategoryId = video.snippet() != null ? video.snippet().categoryId() : null;
             TrendSnapshot snapshot = new TrendSnapshot();
             snapshot.setRun(currentRun);
             snapshot.setRegionCode(regionCode);
             snapshot.setCategoryId(categoryId);
+            snapshot.setVideoCategoryId(videoCategoryId);
+            snapshot.setVideoCategoryLabel(resolveVideoCategoryLabel(videoCategoryId, null, categoryLabelById));
             snapshot.setVideoId(video.id());
             snapshot.setRank(index + 1);
             snapshot.setTitle(video.snippet() != null ? video.snippet().title() : "");
@@ -549,8 +558,20 @@ public class TrendingService {
         return thumbnail != null ? thumbnail.url() : "";
     }
 
-    private VideoItemResponse toTopVideoResponse(TrendSnapshot snapshot, TrendRun run, TrendSignal signal) {
+    private VideoItemResponse toTopVideoResponse(
+        TrendSnapshot snapshot,
+        TrendRun run,
+        TrendSignal signal,
+        Map<String, String> categoryLabelById
+    ) {
         ThumbnailResponse thumbnail = new ThumbnailResponse(snapshot.getThumbnailUrl(), null, null);
+        String videoCategoryId = snapshot.getVideoCategoryId();
+        String normalizedVideoCategoryId = normalizeVideoCategoryId(videoCategoryId, snapshot.getCategoryId());
+        String videoCategoryLabel = resolveVideoCategoryLabel(
+            normalizedVideoCategoryId,
+            snapshot.getVideoCategoryLabel(),
+            categoryLabelById
+        );
 
         return new VideoItemResponse(
             snapshot.getVideoId(),
@@ -559,13 +580,64 @@ public class TrendingService {
                 snapshot.getTitle(),
                 snapshot.getChannelTitle(),
                 snapshot.getChannelId(),
-                snapshot.getCategoryId(),
+                normalizedVideoCategoryId,
+                videoCategoryLabel,
                 snapshot.getPublishedAt() != null ? snapshot.getPublishedAt().toString() : null,
                 new ThumbnailsResponse(thumbnail, thumbnail, thumbnail, thumbnail, thumbnail)
             ),
             new StatisticsResponse(snapshot.getViewCount()),
             toTrendResponse(snapshot, run, signal)
         );
+    }
+
+    private List<AvailableCategoryResponse> buildAvailableCategories(String regionCode, List<TrendSnapshot> snapshots) {
+        Map<String, String> categoryLabelById = loadCategoryLabels(regionCode);
+        Map<String, Long> countsByCategoryId = snapshots.stream()
+            .map(snapshot -> normalizeVideoCategoryId(snapshot.getVideoCategoryId(), snapshot.getCategoryId()))
+            .filter(StringUtils::hasText)
+            .collect(Collectors.groupingBy(Function.identity(), LinkedHashMap::new, Collectors.counting()));
+
+        return countsByCategoryId.entrySet().stream()
+            .map(entry -> new AvailableCategoryResponse(
+                entry.getKey(),
+                resolveVideoCategoryLabel(entry.getKey(), null, categoryLabelById),
+                entry.getValue()
+            ))
+            .sorted(
+                Comparator.comparingLong(AvailableCategoryResponse::count).reversed()
+                    .thenComparing(AvailableCategoryResponse::label, Comparator.nullsLast(String::compareTo))
+                    .thenComparing(AvailableCategoryResponse::id)
+            )
+            .toList();
+    }
+
+    private String resolveVideoCategoryLabel(String categoryId, String storedLabel, Map<String, String> categoryLabelById) {
+        if (StringUtils.hasText(storedLabel)) {
+            return storedLabel;
+        }
+
+        if (StringUtils.hasText(categoryId)) {
+            return categoryLabelById.getOrDefault(categoryId.trim(), categoryId.trim());
+        }
+
+        return null;
+    }
+
+    private String normalizeVideoCategoryId(String videoCategoryId, String fallbackCategoryId) {
+        if (StringUtils.hasText(videoCategoryId)) {
+            return videoCategoryId.trim();
+        }
+
+        if (StringUtils.hasText(fallbackCategoryId) && !TRENDING_CATEGORY_ID.equals(fallbackCategoryId.trim())) {
+            return fallbackCategoryId.trim();
+        }
+
+        return null;
+    }
+
+    private Map<String, String> loadCategoryLabels(String regionCode) {
+        return youTubeCatalogService.getCategories(regionCode).stream()
+            .collect(Collectors.toMap(VideoCategoryResponse::id, VideoCategoryResponse::label, (left, right) -> left));
     }
 
     private TrendResponse toTrendResponse(TrendSnapshot snapshot, TrendRun run, TrendSignal signal) {

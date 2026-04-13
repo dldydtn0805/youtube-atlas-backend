@@ -30,6 +30,12 @@ public class TrendSnapshot {
     @Column(name = "category_id", nullable = false)
     private String categoryId;
 
+    @Column(name = "video_category_id", length = 32)
+    private String videoCategoryId;
+
+    @Column(name = "video_category_label", length = 255)
+    private String videoCategoryLabel;
+
     @Column(name = "video_id", nullable = false)
     private String videoId;
 
@@ -87,6 +93,22 @@ public class TrendSnapshot {
 
     public String getVideoId() {
         return videoId;
+    }
+
+    public String getVideoCategoryId() {
+        return videoCategoryId;
+    }
+
+    public void setVideoCategoryId(String videoCategoryId) {
+        this.videoCategoryId = videoCategoryId;
+    }
+
+    public String getVideoCategoryLabel() {
+        return videoCategoryLabel;
+    }
+
+    public void setVideoCategoryLabel(String videoCategoryLabel) {
+        this.videoCategoryLabel = videoCategoryLabel;
     }
 
     public void setVideoId(String videoId) {

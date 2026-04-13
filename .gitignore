@@ -6,3 +6,8 @@
 .envrc
 youtube-atlas-backend/.env
 youtube-atlas-backend/.env.local
+.codex/environments/environment-2.toml
+.codex/environments/environment.toml
+scripts/boot-local.sh
+scripts/boot-local.sh
+scripts/boot-local.sh
