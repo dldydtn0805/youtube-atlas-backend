@@ -44,7 +44,6 @@ public class AtlasProperties {
         private String apiKey = "";
         private String categoryLanguage = "ko";
         private int maxResultsPerCategory = 50;
-        private int shortsMaxDurationSeconds = 180;
         private final Cache cache = new Cache();
 
         public String getApiBaseUrl() {
@@ -77,14 +76,6 @@ public class AtlasProperties {
 
         public void setMaxResultsPerCategory(int maxResultsPerCategory) {
             this.maxResultsPerCategory = maxResultsPerCategory;
-        }
-
-        public int getShortsMaxDurationSeconds() {
-            return shortsMaxDurationSeconds;
-        }
-
-        public void setShortsMaxDurationSeconds(int shortsMaxDurationSeconds) {
-            this.shortsMaxDurationSeconds = shortsMaxDurationSeconds;
         }
 
         public Cache getCache() {

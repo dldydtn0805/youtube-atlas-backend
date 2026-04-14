@@ -3,8 +3,6 @@ package com.yongsoo.youtubeatlasbackend.youtube;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.ResponseEntity;
@@ -27,11 +25,6 @@ import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasVideoStatistics;
 
 @Component
 public class YouTubeApiClient {
-
-    private static final Pattern ISO_DURATION_PATTERN = Pattern.compile(
-        "^P(?:\\d+Y)?(?:\\d+M)?(?:\\d+W)?(?:\\d+D)?(?:T(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?)?$"
-    );
-    private static final Pattern SHORTS_TITLE_PATTERN = Pattern.compile("#shorts\\b|\\bshorts?\\b|쇼츠", Pattern.CASE_INSENSITIVE);
 
     private final AtlasProperties atlasProperties;
     private final RestTemplate restTemplate;
@@ -78,11 +71,7 @@ public class YouTubeApiClient {
 
         if (result.items() != null) {
             for (RemoteVideoItem item : result.items()) {
-                AtlasVideo video = toVideo(item);
-
-                if (!isShortFormVideo(video)) {
-                    items.add(video);
-                }
+                items.add(toVideo(item));
             }
         }
 
@@ -220,36 +209,6 @@ public class YouTubeApiClient {
         } catch (NumberFormatException ignored) {
             return null;
         }
-    }
-
-    private boolean isShortFormVideo(AtlasVideo video) {
-        String duration = video.contentDetails() != null ? video.contentDetails().duration() : null;
-        if (parseIso8601DurationToSeconds(duration) <= atlasProperties.getYoutube().getShortsMaxDurationSeconds()) {
-            return true;
-        }
-
-        String title = video.snippet() != null ? video.snippet().title() : "";
-        return title != null && SHORTS_TITLE_PATTERN.matcher(title).find();
-    }
-
-    private long parseIso8601DurationToSeconds(String duration) {
-        if (!StringUtils.hasText(duration)) {
-            return Long.MAX_VALUE;
-        }
-
-        Matcher matcher = ISO_DURATION_PATTERN.matcher(duration);
-        if (!matcher.matches()) {
-            return Long.MAX_VALUE;
-        }
-
-        long hours = parsePart(matcher.group(1));
-        long minutes = parsePart(matcher.group(2));
-        long seconds = parsePart(matcher.group(3));
-        return hours * 3600 + minutes * 60 + seconds;
-    }
-
-    private long parsePart(String value) {
-        return StringUtils.hasText(value) ? Long.parseLong(value) : 0L;
     }
 
     public record RemoteVideoPage(
