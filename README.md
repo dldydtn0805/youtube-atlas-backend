@@ -876,6 +876,7 @@ Authorization: Bearer {accessToken}
 ### `GET /api/videos/{videoId}/comments`
 
 영상의 댓글을 생성 시각 오름차순으로 반환합니다.
+`since` 쿼리 파라미터에 ISO-8601 시각을 전달하면 해당 시각 이후에 생성된 댓글만 반환합니다.
 
 ### `POST /api/videos/{videoId}/comments`
 

@@ -36,7 +36,17 @@ public class CommentService {
 
     @Transactional(readOnly = true)
     public List<ChatMessageResponse> getComments(String videoId) {
-        return commentRepository.findByVideoIdOrderByCreatedAtAsc(videoId).stream()
+        return getComments(videoId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ChatMessageResponse> getComments(String videoId, Instant since) {
+        String normalizedVideoId = normalizeRequired(videoId, "videoId는 필수입니다.");
+        List<Comment> comments = since == null
+            ? commentRepository.findByVideoIdOrderByCreatedAtAsc(normalizedVideoId)
+            : commentRepository.findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc(normalizedVideoId, since);
+
+        return comments.stream()
             .map(this::toResponse)
             .toList();
     }

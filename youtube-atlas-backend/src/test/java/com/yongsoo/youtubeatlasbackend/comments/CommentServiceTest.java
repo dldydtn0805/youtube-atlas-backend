@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +35,29 @@ class CommentServiceTest {
         messagingTemplate = org.mockito.Mockito.mock(SimpMessagingTemplate.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-03-24T10:00:00Z"), ZoneOffset.UTC);
         commentService = new CommentService(commentRepository, messagingTemplate, fixedClock);
+    }
+
+    @Test
+    void getCommentsOnlyReturnsMessagesCreatedAfterSince() {
+        Instant since = Instant.parse("2026-03-24T10:00:00Z");
+        Comment newerComment = new Comment();
+        ReflectionTestUtils.setField(newerComment, "id", 2L);
+        newerComment.setVideoId("video-1");
+        newerComment.setAuthor("익명");
+        newerComment.setClientId("client-2");
+        newerComment.setContent("지금 들어온 메시지");
+        newerComment.setCreatedAt(Instant.parse("2026-03-24T10:00:01Z"));
+
+        when(commentRepository.findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc("video-1", since))
+            .thenReturn(List.of(newerComment));
+
+        List<ChatMessageResponse> response = commentService.getComments(" video-1 ", since);
+
+        assertThat(response).singleElement().satisfies(message -> {
+            assertThat(message.id()).isEqualTo(2L);
+            assertThat(message.content()).isEqualTo("지금 들어온 메시지");
+        });
+        verify(commentRepository).findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc("video-1", since);
     }
 
     @Test
