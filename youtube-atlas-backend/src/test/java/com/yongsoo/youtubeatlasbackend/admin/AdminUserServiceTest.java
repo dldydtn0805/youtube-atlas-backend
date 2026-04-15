@@ -312,10 +312,10 @@ class AdminUserServiceTest {
             tier(season, "BRONZE", "브론즈", 0L, 1),
             tier(season, "SILVER", "실버", 100_000L, 2),
             tier(season, "GOLD", "골드", 300_000L, 3),
-            tier(season, "PLATINUM", "플래티넘", 1_000_000L, 4),
-            tier(season, "DIAMOND", "다이아몬드", 3_000_000L, 5),
-            tier(season, "MASTER", "마스터", 10_000_000L, 6),
-            tier(season, "LEGEND", "레전드", 30_000_000L, 7)
+            tier(season, "PLATINUM", "플래티넘", 1_200_000L, 4),
+            tier(season, "DIAMOND", "다이아몬드", 6_000_000L, 5),
+            tier(season, "MASTER", "마스터", 36_000_000L, 6),
+            tier(season, "LEGEND", "레전드", 252_000_000L, 7)
         );
     }
 

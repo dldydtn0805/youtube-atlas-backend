@@ -157,7 +157,7 @@
 1. `sql/migrate_game_coin_system.sql` 이 배포 DB에 반영되었는지 확인한다.
 2. `game_wallets.coin_balance` 기본값이 `0` 으로 채워졌는지 확인한다.
 3. `game_coin_payouts` 테이블과 인덱스가 생성되었는지 확인한다.
-4. `sql/migrate_game_coin_tier_thresholds.sql` 과 `sql/migrate_game_coin_add_master_legend_tiers.sql` 이 배포 DB에 반영되어 기존 시즌 티어 컷라인이 `BRONZE 0 / SILVER 100,000 / GOLD 300,000 / PLATINUM 1,000,000 / DIAMOND 3,000,000 / MASTER 10,000,000 / LEGEND 30,000,000` 으로 맞춰졌는지 확인한다.
+4. `sql/migrate_game_coin_tier_thresholds.sql`, `sql/migrate_game_coin_add_master_legend_tiers.sql`, `sql/migrate_game_coin_tier_thresholds_20260415.sql` 이 배포 DB에 반영되어 시즌 티어 컷라인이 `BRONZE 0 / SILVER 100,000 / GOLD 300,000 / PLATINUM 1,200,000 / DIAMOND 6,000,000 / MASTER 36,000,000 / LEGEND 252,000,000` 으로 맞춰졌는지 확인한다.
 5. 배포 후 `GET /api/game/coins/overview?regionCode=KR` 가 `200` 을 반환하는지 확인한다.
 6. 스케줄러 사용 시 Top 200 보유 포지션에 대해 `coin_balance` 가 증가하는지 확인한다.
 7. 매수/매도와 리더보드 계산이 기존 포인트 경제를 깨지 않았는지 확인한다.

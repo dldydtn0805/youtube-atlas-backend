@@ -11,3 +11,5 @@ youtube-atlas-backend/.env.local
 scripts/boot-local.sh
 scripts/boot-local.sh
 scripts/boot-local.sh
+scripts/boot-local.sh
+scripts/boot-local.sh

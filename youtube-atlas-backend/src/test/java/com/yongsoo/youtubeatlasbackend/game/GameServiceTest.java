@@ -630,7 +630,7 @@ class GameServiceTest {
         GameSeason season = activeSeason();
         AppUser me = user(7L, "Atlas User");
         AppUser rival = user(8L, "Rival User");
-        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 1_000_000L, 4);
+        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 1_200_000L, 4);
         GameSeasonCoinTier goldTier = coinTier(season, "GOLD", "골드", 300_000L, 3);
         long myBuyPricePoints = GamePointCalculator.calculatePricePoints(170);
         long rivalBuyPricePoints = GamePointCalculator.calculatePricePoints(180);
@@ -639,7 +639,7 @@ class GameServiceTest {
         GameWallet myWallet = wallet(season, me, 10_000L - myBuyPricePoints, myBuyPricePoints, 0L);
         GameWallet rivalWallet = wallet(season, rival, 10_000L - rivalBuyPricePoints, rivalBuyPricePoints, 0L);
         myWallet.setCoinBalance(2_500_000L);
-        rivalWallet.setCoinBalance(1_200_000L);
+        rivalWallet.setCoinBalance(1_199_999L);
         GamePosition myPosition = openPosition(
             season,
             me,
@@ -664,7 +664,7 @@ class GameServiceTest {
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(myWallet));
         when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(List.of(goldTier, platinumTier));
         when(gameCoinTierService.resolveTier(List.of(goldTier, platinumTier), 2_500_000L)).thenReturn(platinumTier);
-        when(gameCoinTierService.resolveTier(List.of(goldTier, platinumTier), 1_200_000L)).thenReturn(goldTier);
+        when(gameCoinTierService.resolveTier(List.of(goldTier, platinumTier), 1_199_999L)).thenReturn(goldTier);
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
             .thenReturn(List.of(mySignal, rivalSignal));
         when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN))
@@ -689,7 +689,7 @@ class GameServiceTest {
         assertThat(response.get(1).rank()).isEqualTo(2);
         assertThat(response.get(1).currentTier().tierCode()).isEqualTo("GOLD");
         assertThat(response.get(1).currentTier().displayName()).isEqualTo("골드");
-        assertThat(response.get(1).coinBalance()).isEqualTo(1_200_000L);
+        assertThat(response.get(1).coinBalance()).isEqualTo(1_199_999L);
         assertThat(response.get(1).totalStakePoints()).isEqualTo(rivalBuyPricePoints);
         assertThat(response.get(1).totalEvaluationPoints()).isEqualTo(rivalMarkedPricePoints);
         assertThat(response.get(1).profitRatePercent()).isEqualTo(36.4D);
@@ -802,10 +802,10 @@ class GameServiceTest {
         GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
         GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 100_000L, 2);
         GameSeasonCoinTier goldTier = coinTier(season, "GOLD", "골드", 300_000L, 3);
-        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 1_000_000L, 4);
-        GameSeasonCoinTier diamondTier = coinTier(season, "DIAMOND", "다이아몬드", 3_000_000L, 5);
-        GameSeasonCoinTier masterTier = coinTier(season, "MASTER", "마스터", 10_000_000L, 6);
-        GameSeasonCoinTier legendTier = coinTier(season, "LEGEND", "레전드", 30_000_000L, 7);
+        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 1_200_000L, 4);
+        GameSeasonCoinTier diamondTier = coinTier(season, "DIAMOND", "다이아몬드", 6_000_000L, 5);
+        GameSeasonCoinTier masterTier = coinTier(season, "MASTER", "마스터", 36_000_000L, 6);
+        GameSeasonCoinTier legendTier = coinTier(season, "LEGEND", "레전드", 252_000_000L, 7);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));

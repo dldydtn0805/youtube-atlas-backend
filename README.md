@@ -34,6 +34,18 @@ cp youtube-atlas-backend/.env.local.example youtube-atlas-backend/.env.local
 ./scripts/boot-local.sh
 ```
 
+로컬 백엔드를 원격 PostgreSQL에 붙여서 실행하려면 `.env.local`에 아래 값을 채운 뒤 같은 스크립트를 사용하면 됩니다:
+
+```bash
+REMOTE_DB_URL=jdbc:postgresql://your-remote-host:5432/your_remote_db?sslmode=require
+REMOTE_DB_USERNAME=your_remote_user
+REMOTE_DB_PASSWORD=your_remote_password
+REMOTE_DB_DRIVER=org.postgresql.Driver
+SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+```
+
+`REMOTE_DB_URL` 이 있으면 `./scripts/boot-local.sh` 는 H2 대신 원격 PostgreSQL에 연결합니다.
+
 테스트:
 
 ```bash

@@ -35,5 +35,15 @@ EOF
   exit 1
 fi
 
+# Allow a local backend process to target a remote PostgreSQL instance without
+# changing the generic DB_* variables used for local development.
+if [[ -n "${REMOTE_DB_URL:-}" ]]; then
+  export SPRING_DATASOURCE_URL="$REMOTE_DB_URL"
+  export SPRING_DATASOURCE_USERNAME="${REMOTE_DB_USERNAME:-${SPRING_DATASOURCE_USERNAME:-${DB_USERNAME:-}}}"
+  export SPRING_DATASOURCE_PASSWORD="${REMOTE_DB_PASSWORD:-${SPRING_DATASOURCE_PASSWORD:-${DB_PASSWORD:-}}}"
+  export SPRING_DATASOURCE_DRIVER_CLASS_NAME="${REMOTE_DB_DRIVER:-org.postgresql.Driver}"
+  export SPRING_JPA_HIBERNATE_DDL_AUTO="${SPRING_JPA_HIBERNATE_DDL_AUTO:-validate}"
+fi
+
 cd "$APP_DIR"
 ./gradlew bootRun

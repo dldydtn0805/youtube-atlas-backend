@@ -273,7 +273,7 @@ class GameSettlementServiceTest {
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
         wallet.setCoinBalance(2_500_000L);
-        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", 1_000_000L, 3);
+        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", 300_000L, 3);
 
         when(gameSeasonRepository.findByStatusAndEndAtLessThanEqual(SeasonStatus.ACTIVE, Instant.parse("2026-04-08T00:01:00Z")))
             .thenReturn(List.of(season));
