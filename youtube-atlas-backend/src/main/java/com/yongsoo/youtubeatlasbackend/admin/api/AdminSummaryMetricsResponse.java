@@ -4,6 +4,7 @@ public record AdminSummaryMetricsResponse(
     long totalUsers,
     long totalComments,
     long totalFavorites,
-    long totalTrendRuns
+    long totalTrendRuns,
+    long totalTradeHistories
 ) {
 }

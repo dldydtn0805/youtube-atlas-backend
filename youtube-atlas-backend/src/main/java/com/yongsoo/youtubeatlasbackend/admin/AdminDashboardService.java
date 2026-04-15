@@ -17,6 +17,7 @@ import com.yongsoo.youtubeatlasbackend.admin.api.AdminUserSummaryResponse;
 import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.comments.CommentRepository;
 import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
+import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameSeason;
 import com.yongsoo.youtubeatlasbackend.game.GameSeasonRepository;
 import com.yongsoo.youtubeatlasbackend.game.SeasonStatus;
@@ -31,6 +32,7 @@ public class AdminDashboardService {
     private final AdminAccessService adminAccessService;
     private final CommentRepository commentRepository;
     private final FavoriteStreamerRepository favoriteStreamerRepository;
+    private final GamePositionRepository gamePositionRepository;
     private final GameSeasonRepository gameSeasonRepository;
     private final TrendRunRepository trendRunRepository;
     private final TrendSnapshotRepository trendSnapshotRepository;
@@ -40,6 +42,7 @@ public class AdminDashboardService {
         AdminAccessService adminAccessService,
         CommentRepository commentRepository,
         FavoriteStreamerRepository favoriteStreamerRepository,
+        GamePositionRepository gamePositionRepository,
         GameSeasonRepository gameSeasonRepository,
         TrendRunRepository trendRunRepository,
         TrendSnapshotRepository trendSnapshotRepository
@@ -48,6 +51,7 @@ public class AdminDashboardService {
         this.adminAccessService = adminAccessService;
         this.commentRepository = commentRepository;
         this.favoriteStreamerRepository = favoriteStreamerRepository;
+        this.gamePositionRepository = gamePositionRepository;
         this.gameSeasonRepository = gameSeasonRepository;
         this.trendRunRepository = trendRunRepository;
         this.trendSnapshotRepository = trendSnapshotRepository;
@@ -78,7 +82,8 @@ public class AdminDashboardService {
                 appUserRepository.count(),
                 commentRepository.count(),
                 favoriteStreamerRepository.count(),
-                trendRunRepository.count()
+                trendRunRepository.count(),
+                gamePositionRepository.count()
             ),
             activeSeasons.stream().findFirst().orElse(null),
             activeSeasons,

@@ -18,6 +18,7 @@ import com.yongsoo.youtubeatlasbackend.comments.Comment;
 import com.yongsoo.youtubeatlasbackend.comments.CommentRepository;
 import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamer;
 import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
+import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameSeason;
 import com.yongsoo.youtubeatlasbackend.game.GameSeasonRepository;
 import com.yongsoo.youtubeatlasbackend.game.SeasonStatus;
@@ -32,6 +33,7 @@ class AdminDashboardServiceTest {
     private AdminAccessService adminAccessService;
     private CommentRepository commentRepository;
     private FavoriteStreamerRepository favoriteStreamerRepository;
+    private GamePositionRepository gamePositionRepository;
     private GameSeasonRepository gameSeasonRepository;
     private TrendRunRepository trendRunRepository;
     private TrendSnapshotRepository trendSnapshotRepository;
@@ -43,6 +45,7 @@ class AdminDashboardServiceTest {
         adminAccessService = org.mockito.Mockito.mock(AdminAccessService.class);
         commentRepository = org.mockito.Mockito.mock(CommentRepository.class);
         favoriteStreamerRepository = org.mockito.Mockito.mock(FavoriteStreamerRepository.class);
+        gamePositionRepository = org.mockito.Mockito.mock(GamePositionRepository.class);
         gameSeasonRepository = org.mockito.Mockito.mock(GameSeasonRepository.class);
         trendRunRepository = org.mockito.Mockito.mock(TrendRunRepository.class);
         trendSnapshotRepository = org.mockito.Mockito.mock(TrendSnapshotRepository.class);
@@ -51,6 +54,7 @@ class AdminDashboardServiceTest {
             adminAccessService,
             commentRepository,
             favoriteStreamerRepository,
+            gamePositionRepository,
             gameSeasonRepository,
             trendRunRepository,
             trendSnapshotRepository
@@ -111,6 +115,7 @@ class AdminDashboardServiceTest {
         when(commentRepository.count()).thenReturn(34L);
         when(favoriteStreamerRepository.count()).thenReturn(5L);
         when(trendRunRepository.count()).thenReturn(7L);
+        when(gamePositionRepository.count()).thenReturn(21L);
         when(adminAccessService.isAdminEmail("user@example.com")).thenReturn(false);
         when(appUserRepository.findTop8ByOrderByCreatedAtDesc()).thenReturn(List.of(user));
         when(commentRepository.findTop8ByOrderByCreatedAtDesc()).thenReturn(List.of(comment));
@@ -123,6 +128,7 @@ class AdminDashboardServiceTest {
 
         assertThat(response.metrics().totalUsers()).isEqualTo(12L);
         assertThat(response.metrics().totalComments()).isEqualTo(34L);
+        assertThat(response.metrics().totalTradeHistories()).isEqualTo(21L);
         assertThat(response.activeSeason()).isNotNull();
         assertThat(response.activeSeason().name()).isEqualTo("Season 1");
         assertThat(response.activeSeasons()).hasSize(1);

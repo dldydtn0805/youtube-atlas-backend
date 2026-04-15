@@ -527,7 +527,8 @@ Authorization: Bearer {accessToken}
     "totalUsers": 12,
     "totalComments": 34,
     "totalFavorites": 5,
-    "totalTrendRuns": 7
+    "totalTrendRuns": 7,
+    "totalTradeHistories": 21
   },
   "activeSeason": {
     "id": 4,
@@ -558,6 +559,63 @@ Authorization: Bearer {accessToken}
       "createdAt": "2026-04-01T00:00:00Z"
     }
   ]
+}
+```
+
+### `POST /api/admin/comments/purge`
+
+관리자가 기준 시각보다 오래된 채팅 로그를 일괄 삭제합니다.
+
+요청 본문:
+
+```json
+{
+  "deleteBefore": "2026-03-01T00:00:00Z"
+}
+```
+
+- `deleteBefore` 는 필수입니다.
+- 미래 시각은 허용되지 않습니다.
+- 해당 시각보다 `이전` 에 생성된 댓글만 삭제됩니다.
+
+응답 예시:
+
+```json
+{
+  "deleteBefore": "2026-03-01T00:00:00Z",
+  "deletedAt": "2026-04-15T03:00:00Z",
+  "deletedCount": 128
+}
+```
+
+### `POST /api/admin/trade-history/purge`
+
+관리자가 기준 시각보다 오래된 차트 거래내역을 일괄 삭제합니다.
+
+요청 본문:
+
+```json
+{
+  "deleteBefore": "2026-03-01T00:00:00Z"
+}
+```
+
+- `deleteBefore` 는 필수입니다.
+- 미래 시각은 허용되지 않습니다.
+- `deleteBefore` 보다 이전에 종료된 `CLOSED`, `AUTO_CLOSED` 거래내역만 삭제됩니다.
+- 해당 거래내역에 연결된 원장, 코인 지급, 배당 지급 데이터도 함께 삭제됩니다.
+- `OPEN` 포지션은 삭제 대상이 아닙니다.
+
+응답 예시:
+
+```json
+{
+  "deleteBefore": "2026-03-01T00:00:00Z",
+  "deletedAt": "2026-04-15T03:00:00Z",
+  "deletedPositionCount": 42,
+  "deletedLedgerCount": 84,
+  "deletedCoinPayoutCount": 128,
+  "deletedDividendPayoutCount": 56
 }
 ```
 

@@ -1,10 +1,12 @@
 package com.yongsoo.youtubeatlasbackend.admin.api;
 
+import jakarta.validation.Valid;
+
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,8 +14,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.yongsoo.youtubeatlasbackend.admin.AdminAccessService;
+import com.yongsoo.youtubeatlasbackend.admin.AdminCommentService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminDashboardService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminSeasonService;
+import com.yongsoo.youtubeatlasbackend.admin.AdminTradeHistoryService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminUserService;
 
 @RestController
@@ -21,26 +25,50 @@ import com.yongsoo.youtubeatlasbackend.admin.AdminUserService;
 public class AdminController {
 
     private final AdminAccessService adminAccessService;
+    private final AdminCommentService adminCommentService;
     private final AdminDashboardService adminDashboardService;
     private final AdminUserService adminUserService;
     private final AdminSeasonService adminSeasonService;
+    private final AdminTradeHistoryService adminTradeHistoryService;
 
     public AdminController(
         AdminAccessService adminAccessService,
+        AdminCommentService adminCommentService,
         AdminDashboardService adminDashboardService,
         AdminUserService adminUserService,
-        AdminSeasonService adminSeasonService
+        AdminSeasonService adminSeasonService,
+        AdminTradeHistoryService adminTradeHistoryService
     ) {
         this.adminAccessService = adminAccessService;
+        this.adminCommentService = adminCommentService;
         this.adminDashboardService = adminDashboardService;
         this.adminUserService = adminUserService;
         this.adminSeasonService = adminSeasonService;
+        this.adminTradeHistoryService = adminTradeHistoryService;
     }
 
     @GetMapping("/dashboard")
     public AdminDashboardResponse getDashboard(@RequestHeader("Authorization") String authorizationHeader) {
         adminAccessService.requireAdmin(authorizationHeader);
         return adminDashboardService.getDashboard();
+    }
+
+    @PostMapping("/comments/purge")
+    public AdminCommentCleanupResponse purgeOldComments(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @Valid @RequestBody AdminCommentCleanupRequest request
+    ) {
+        adminAccessService.requireAdmin(authorizationHeader);
+        return adminCommentService.deleteCommentsOlderThan(request);
+    }
+
+    @PostMapping("/trade-history/purge")
+    public AdminTradeHistoryCleanupResponse purgeOldTradeHistory(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @Valid @RequestBody AdminTradeHistoryCleanupRequest request
+    ) {
+        adminAccessService.requireAdmin(authorizationHeader);
+        return adminTradeHistoryService.deleteClosedTradeHistoryOlderThan(request);
     }
 
     @PatchMapping("/seasons/{seasonId}")

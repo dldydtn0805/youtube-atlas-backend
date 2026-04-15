@@ -13,6 +13,18 @@ import jakarta.persistence.LockModeType;
 
 public interface GamePositionRepository extends JpaRepository<GamePosition, Long> {
 
+    @Query("""
+        select position
+        from GamePosition position
+        where position.status in :statuses
+          and (
+            position.closedAt < :deleteBefore
+            or (position.closedAt is null and position.createdAt < :deleteBefore)
+          )
+        order by position.closedAt asc nulls first, position.createdAt asc
+    """)
+    List<GamePosition> findCleanupTargets(Collection<PositionStatus> statuses, java.time.Instant deleteBefore);
+
     long countBySeasonIdAndUserIdAndStatus(Long seasonId, Long userId, PositionStatus status);
 
     long countBySeasonIdAndUserIdAndStatusIn(Long seasonId, Long userId, Collection<PositionStatus> statuses);
@@ -77,6 +89,13 @@ public interface GamePositionRepository extends JpaRepository<GamePosition, Long
     );
 
     List<GamePosition> findBySeasonIdAndStatus(Long seasonId, PositionStatus status);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("""
+        delete from GamePosition position
+        where position.id in :ids
+    """)
+    long deleteByIds(Collection<Long> ids);
 
     void deleteByUserId(Long userId);
 }
