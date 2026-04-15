@@ -66,13 +66,11 @@ public class AuthController {
     @GetMapping("/google/config")
     public GoogleAuthConfigResponse getGoogleAuthConfig() {
         String clientId = atlasProperties.getAuth().getGoogleClientId();
-        String clientSecret = atlasProperties.getAuth().getGoogleClientSecret();
         String normalizedClientId = StringUtils.hasText(clientId) ? clientId.trim() : "";
-        String normalizedClientSecret = StringUtils.hasText(clientSecret) ? clientSecret.trim() : "";
 
         return new GoogleAuthConfigResponse(
             normalizedClientId,
-            StringUtils.hasText(normalizedClientId) && StringUtils.hasText(normalizedClientSecret)
+            StringUtils.hasText(normalizedClientId)
         );
     }
 
