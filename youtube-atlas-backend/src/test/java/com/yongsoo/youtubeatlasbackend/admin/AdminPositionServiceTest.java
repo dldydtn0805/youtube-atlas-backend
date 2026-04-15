@@ -1,0 +1,139 @@
+package com.yongsoo.youtubeatlasbackend.admin;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Optional;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import com.yongsoo.youtubeatlasbackend.admin.api.AdminPositionUpdateRequest;
+import com.yongsoo.youtubeatlasbackend.auth.AppUser;
+import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
+import com.yongsoo.youtubeatlasbackend.game.GamePosition;
+import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameSeason;
+import com.yongsoo.youtubeatlasbackend.game.GameWallet;
+import com.yongsoo.youtubeatlasbackend.game.GameWalletRepository;
+import com.yongsoo.youtubeatlasbackend.game.PositionStatus;
+
+class AdminPositionServiceTest {
+
+    private AppUserRepository appUserRepository;
+    private GamePositionRepository gamePositionRepository;
+    private GameWalletRepository gameWalletRepository;
+    private AdminPositionService adminPositionService;
+
+    @BeforeEach
+    void setUp() {
+        appUserRepository = org.mockito.Mockito.mock(AppUserRepository.class);
+        gamePositionRepository = org.mockito.Mockito.mock(GamePositionRepository.class);
+        gameWalletRepository = org.mockito.Mockito.mock(GameWalletRepository.class);
+        Clock clock = Clock.fixed(Instant.parse("2026-04-15T03:00:00Z"), ZoneOffset.UTC);
+        adminPositionService = new AdminPositionService(
+            appUserRepository,
+            gamePositionRepository,
+            gameWalletRepository,
+            clock
+        );
+    }
+
+    @Test
+    void getOpenPositionsReturnsSeasonScopedOpenPositions() {
+        when(appUserRepository.existsById(7L)).thenReturn(true);
+        when(gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(3L, 7L, PositionStatus.OPEN))
+            .thenReturn(List.of(openPosition(11L, 3L, "Season 3", 1200L, 200)));
+
+        var response = adminPositionService.getOpenPositions(7L, 3L);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).id()).isEqualTo(11L);
+        assertThat(response.get(0).seasonId()).isEqualTo(3L);
+        assertThat(response.get(0).quantity()).isEqualTo(200);
+        assertThat(response.get(0).stakePoints()).isEqualTo(1200L);
+    }
+
+    @Test
+    void updateOpenPositionAdjustsWalletBalanceAndReservedPoints() {
+        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200);
+        GameWallet wallet = new GameWallet();
+        wallet.setBalancePoints(8800L);
+        wallet.setReservedPoints(1200L);
+        wallet.setRealizedPnlPoints(0L);
+        wallet.setCoinBalance(0L);
+
+        when(appUserRepository.existsById(7L)).thenReturn(true);
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(11L, 7L)).thenReturn(Optional.of(position));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(3L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = adminPositionService.updateOpenPosition(7L, 11L, new AdminPositionUpdateRequest(300, 1500L));
+
+        assertThat(response.quantity()).isEqualTo(300);
+        assertThat(response.stakePoints()).isEqualTo(1500L);
+        assertThat(position.getQuantity()).isEqualTo(300);
+        assertThat(position.getStakePoints()).isEqualTo(1500L);
+        assertThat(wallet.getBalancePoints()).isEqualTo(8500L);
+        assertThat(wallet.getReservedPoints()).isEqualTo(1500L);
+        assertThat(wallet.getUpdatedAt()).isEqualTo(Instant.parse("2026-04-15T03:00:00Z"));
+        verify(gameWalletRepository).save(wallet);
+    }
+
+    @Test
+    void updateOpenPositionRejectsNonOpenPosition() {
+        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200);
+        position.setStatus(PositionStatus.CLOSED);
+
+        when(appUserRepository.existsById(7L)).thenReturn(true);
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(11L, 7L)).thenReturn(Optional.of(position));
+
+        assertThatThrownBy(() -> adminPositionService.updateOpenPosition(7L, 11L, new AdminPositionUpdateRequest(300, 1500L)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("OPEN");
+    }
+
+    @Test
+    void updateOpenPositionRejectsNonStepQuantity() {
+        when(appUserRepository.existsById(7L)).thenReturn(true);
+
+        assertThatThrownBy(() -> adminPositionService.updateOpenPosition(7L, 11L, new AdminPositionUpdateRequest(250, 1500L)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("100");
+    }
+
+    private GamePosition openPosition(Long id, Long seasonId, String seasonName, Long stakePoints, Integer quantity) {
+        GameSeason season = new GameSeason();
+        ReflectionTestUtils.setField(season, "id", seasonId);
+        season.setName(seasonName);
+
+        AppUser user = new AppUser();
+        ReflectionTestUtils.setField(user, "id", 7L);
+
+        GamePosition position = new GamePosition();
+        ReflectionTestUtils.setField(position, "id", id);
+        position.setSeason(season);
+        position.setUser(user);
+        position.setRegionCode("KR");
+        position.setCategoryId("music");
+        position.setVideoId("video-1");
+        position.setTitle("Sample");
+        position.setChannelTitle("Atlas TV");
+        position.setThumbnailUrl("https://example.com/thumb.jpg");
+        position.setBuyRank(12);
+        position.setQuantity(quantity);
+        position.setStakePoints(stakePoints);
+        position.setStatus(PositionStatus.OPEN);
+        position.setBuyCapturedAt(Instant.parse("2026-04-01T00:00:00Z"));
+        position.setCreatedAt(Instant.parse("2026-04-01T00:00:00Z"));
+        return position;
+    }
+}

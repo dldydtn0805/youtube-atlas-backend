@@ -749,6 +749,31 @@ Authorization: Bearer {accessToken}
 }
 ```
 
+### `GET /api/admin/users/{userId}/positions`
+
+관리자가 특정 시즌에서 유저가 현재 보유 중인 `OPEN` 포지션 목록을 조회합니다.
+
+쿼리 파라미터:
+
+- `seasonId` 필수값: 조회할 시즌 ID
+
+### `PATCH /api/admin/users/{userId}/positions/{positionId}`
+
+관리자가 유저의 보유 중인 포지션 수치를 직접 수정합니다.
+
+요청 본문:
+
+```json
+{
+  "quantity": 300,
+  "stakePoints": 1500
+}
+```
+
+- 현재 `OPEN` 상태 포지션만 수정할 수 있습니다.
+- `quantity` 는 100 단위로만 수정할 수 있습니다.
+- `stakePoints` 수정 시 지갑의 `balancePoints` 와 `reservedPoints` 도 함께 보정됩니다.
+
 ### `PATCH /api/admin/users/{userId}/wallet`
 
 관리자가 선택한 활성 시즌 기준으로 해당 유저의 지갑 수치를 직접 수정합니다.

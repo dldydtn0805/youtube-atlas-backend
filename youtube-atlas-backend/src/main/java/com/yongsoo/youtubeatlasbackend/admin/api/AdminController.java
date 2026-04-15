@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.yongsoo.youtubeatlasbackend.admin.AdminAccessService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminCommentService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminDashboardService;
+import com.yongsoo.youtubeatlasbackend.admin.AdminPositionService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminSeasonService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminTradeHistoryService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminUserService;
@@ -27,6 +28,7 @@ public class AdminController {
     private final AdminAccessService adminAccessService;
     private final AdminCommentService adminCommentService;
     private final AdminDashboardService adminDashboardService;
+    private final AdminPositionService adminPositionService;
     private final AdminUserService adminUserService;
     private final AdminSeasonService adminSeasonService;
     private final AdminTradeHistoryService adminTradeHistoryService;
@@ -35,6 +37,7 @@ public class AdminController {
         AdminAccessService adminAccessService,
         AdminCommentService adminCommentService,
         AdminDashboardService adminDashboardService,
+        AdminPositionService adminPositionService,
         AdminUserService adminUserService,
         AdminSeasonService adminSeasonService,
         AdminTradeHistoryService adminTradeHistoryService
@@ -42,6 +45,7 @@ public class AdminController {
         this.adminAccessService = adminAccessService;
         this.adminCommentService = adminCommentService;
         this.adminDashboardService = adminDashboardService;
+        this.adminPositionService = adminPositionService;
         this.adminUserService = adminUserService;
         this.adminSeasonService = adminSeasonService;
         this.adminTradeHistoryService = adminTradeHistoryService;
@@ -109,6 +113,16 @@ public class AdminController {
         return adminUserService.getUser(userId);
     }
 
+    @GetMapping("/users/{userId}/positions")
+    public java.util.List<AdminUserPositionResponse> getUserPositions(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @PathVariable Long userId,
+        @RequestParam Long seasonId
+    ) {
+        adminAccessService.requireAdmin(authorizationHeader);
+        return adminPositionService.getOpenPositions(userId, seasonId);
+    }
+
     @PatchMapping("/users/{userId}/wallet")
     public AdminUserDetailResponse updateWallet(
         @RequestHeader("Authorization") String authorizationHeader,
@@ -117,6 +131,17 @@ public class AdminController {
     ) {
         adminAccessService.requireAdmin(authorizationHeader);
         return adminUserService.updateActiveSeasonWallet(userId, request);
+    }
+
+    @PatchMapping("/users/{userId}/positions/{positionId}")
+    public AdminUserPositionResponse updateUserPosition(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @PathVariable Long userId,
+        @PathVariable Long positionId,
+        @Valid @RequestBody AdminPositionUpdateRequest request
+    ) {
+        adminAccessService.requireAdmin(authorizationHeader);
+        return adminPositionService.updateOpenPosition(userId, positionId, request);
     }
 
     @DeleteMapping("/users/{userId}")
