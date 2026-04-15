@@ -832,7 +832,7 @@ public class GameService {
         }
         long minimumBuyPoints = GamePointCalculator.calculatePositionPoints(
             unitPricePoints,
-            GamePointCalculator.MIN_QUANTITY
+            GamePointCalculator.ORDER_QUANTITY_STEP
         );
         if (wallet.getBalancePoints() < minimumBuyPoints) {
             return "현재 가격 기준 보유 포인트가 부족합니다.";
@@ -1215,8 +1215,12 @@ public class GameService {
             throw new IllegalArgumentException("quantity는 필수입니다.");
         }
 
-        if (quantity < GamePointCalculator.MIN_QUANTITY) {
-            throw new IllegalArgumentException("quantity는 0.01개 이상이어야 합니다.");
+        if (quantity < GamePointCalculator.ORDER_QUANTITY_STEP) {
+            throw new IllegalArgumentException("quantity는 1개 이상이어야 합니다.");
+        }
+
+        if (quantity % GamePointCalculator.ORDER_QUANTITY_STEP != 0) {
+            throw new IllegalArgumentException("quantity는 1개 단위로만 주문할 수 있습니다.");
         }
 
         return quantity;

@@ -4,6 +4,7 @@ final class GamePointCalculator {
 
     static final int QUANTITY_SCALE = 100;
     static final int MIN_QUANTITY = 1;
+    static final int ORDER_QUANTITY_STEP = QUANTITY_SCALE;
     static final int MAX_TRACKED_RANK = 200;
     private static final long CHART_OUT_DELISTING_PENALTY_POINTS = 100L;
     private static final long SELL_FEE_NUMERATOR = 3L;

@@ -6,6 +6,8 @@ import com.yongsoo.youtubeatlasbackend.comments.CommentPolicyViolationException;
 import com.yongsoo.youtubeatlasbackend.comments.CommentValidationException;
 import com.yongsoo.youtubeatlasbackend.youtube.ResourceNotFoundException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -14,6 +16,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(CommentPolicyViolationException.class)
     public ResponseEntity<ApiErrorResponse> handleCommentPolicyViolation(CommentPolicyViolationException exception) {
@@ -39,12 +43,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ExternalServiceException.class)
     public ResponseEntity<ApiErrorResponse> handleExternalServiceFailure(ExternalServiceException exception) {
+        log.error("External service failure: {}", exception.getMessage(), exception);
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
             .body(new ApiErrorResponse("external_service_error", exception.getMessage(), null));
     }
 
     @ExceptionHandler(AuthException.class)
     public ResponseEntity<ApiErrorResponse> handleAuthFailure(AuthException exception) {
+        log.warn("Authentication failure: code={}, message={}", exception.getCode(), exception.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
             .body(new ApiErrorResponse(exception.getCode(), exception.getMessage(), null));
     }

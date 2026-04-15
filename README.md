@@ -370,7 +370,8 @@ values
 제약:
 
 - `stakePoints` 는 현재 마켓의 `currentPricePoints` 와 같아야 함
-- `quantity` 는 고정 소수점 수량입니다. `100 = 1.00개`, `1 = 0.01개`
+- `quantity` 는 고정 소수점 수량입니다. `100 = 1.00개`
+- 주문은 `1개` 단위로만 가능하므로 `quantity` 는 `100`, `200`, `300` 처럼 `100`의 배수여야 함
 - 같은 시즌에 동일 영상 중복 보유 불가
 - 시즌의 `maxOpenPositions` 초과 불가
 - 시즌 `regionCode` 와 다른 값으로는 매수 불가

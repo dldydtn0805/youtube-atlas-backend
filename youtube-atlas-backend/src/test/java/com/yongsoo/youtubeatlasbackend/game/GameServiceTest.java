@@ -592,6 +592,40 @@ class GameServiceTest {
     }
 
     @Test
+    void buyRejectsFractionalQuantityOrders() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+
+        assertThatThrownBy(() -> gameService.buy(
+            authenticatedUser(),
+            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, ONE_SHARE + (ONE_SHARE / 2))
+        ))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("quantity는 1개 단위로만 주문할 수 있습니다.");
+    }
+
+    @Test
+    void sellRejectsFractionalQuantityOrders() {
+        GameSeason season = activeSeason();
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+
+        assertThatThrownBy(() -> gameService.sell(
+            authenticatedUser(),
+            new SellPositionsRequest("KR", null, "video-1", ONE_SHARE + (ONE_SHARE / 2))
+        ))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("quantity는 1개 단위로만 주문할 수 있습니다.");
+    }
+
+    @Test
     void getLeaderboardOrdersByCoinBalanceBeforeMarkedToMarketTotalAssets() {
         GameSeason season = activeSeason();
         AppUser me = user(7L, "Atlas User");
