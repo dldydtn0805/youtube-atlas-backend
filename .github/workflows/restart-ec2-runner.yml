@@ -1,0 +1,58 @@
+name: Restart EC2 runner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Restart runner service
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/youtube-atlas-backend-key.pem
+          chmod 600 ~/.ssh/youtube-atlas-backend-key.pem
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/youtube-atlas-backend-key.pem "ec2-user@$EC2_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+
+          echo "Host: $(hostname)"
+          echo "Time: $(date -Is)"
+
+          mapfile -t runner_services < <(
+            sudo systemctl list-units --type=service --all 'actions.runner*' --no-legend --no-pager \
+              | awk '{print $1}'
+          )
+
+          if [ "${#runner_services[@]}" -gt 0 ]; then
+            printf 'Restarting runner services: %s\n' "${runner_services[*]}"
+            sudo systemctl restart "${runner_services[@]}"
+            sudo systemctl status "${runner_services[@]}" --no-pager
+            exit 0
+          fi
+
+          runner_dir=""
+          for candidate in /home/ec2-user/actions-runner /home/ec2-user/*actions-runner*; do
+            if [ -d "$candidate" ] && [ -x "$candidate/run.sh" ]; then
+              runner_dir="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$runner_dir" ]; then
+            echo "No actions runner service or run.sh directory found" >&2
+            exit 1
+          fi
+
+          echo "Starting runner from $runner_dir"
+          cd "$runner_dir"
+          nohup ./run.sh > runner.log 2>&1 &
+          REMOTE
