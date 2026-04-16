@@ -53,9 +53,14 @@ public class GameService {
     private static final String TRENDING_CATEGORY_ID = "0";
     private static final int DEFAULT_FALLBACK_RANK = 201;
     private static final int COIN_ELIGIBLE_RANK_CUTOFF = 200;
-    private static final int TOP_RANK_COIN_RATE_BASIS_POINTS = 300;
-    private static final int LAST_ELIGIBLE_RANK_COIN_RATE_BASIS_POINTS = 1;
-    private static final double COIN_RATE_CURVE_POWER = 1.8D;
+    private static final CoinRateAnchor[] COIN_RATE_ANCHORS = {
+        new CoinRateAnchor(1, 100),
+        new CoinRateAnchor(10, 46),
+        new CoinRateAnchor(50, 30),
+        new CoinRateAnchor(100, 15),
+        new CoinRateAnchor(150, 4),
+        new CoinRateAnchor(200, 0)
+    };
 
     private final GameSeasonRepository gameSeasonRepository;
     private final GameWalletRepository gameWalletRepository;
@@ -1306,16 +1311,31 @@ public class GameService {
             return 0;
         }
 
-        if (rank == 1) {
-            return TOP_RANK_COIN_RATE_BASIS_POINTS;
+        CoinRateAnchor previousAnchor = COIN_RATE_ANCHORS[0];
+        for (CoinRateAnchor anchor : COIN_RATE_ANCHORS) {
+            if (anchor.rank() == rank) {
+                return anchor.rateBasisPoints();
+            }
+
+            if (anchor.rank() > rank) {
+                return interpolateCoinRateBasisPoints(previousAnchor, anchor, rank);
+            }
+
+            previousAnchor = anchor;
         }
 
-        double progress = (double) (COIN_ELIGIBLE_RANK_CUTOFF - rank) / (COIN_ELIGIBLE_RANK_CUTOFF - 1);
-        double curvedProgress = Math.pow(progress, COIN_RATE_CURVE_POWER);
+        return COIN_RATE_ANCHORS[COIN_RATE_ANCHORS.length - 1].rateBasisPoints();
+    }
+
+    private static int interpolateCoinRateBasisPoints(CoinRateAnchor betterAnchor, CoinRateAnchor worseAnchor, int rank) {
+        if (betterAnchor.rank() == worseAnchor.rank()) {
+            return betterAnchor.rateBasisPoints();
+        }
+
+        double progress = (double) (rank - betterAnchor.rank()) / (worseAnchor.rank() - betterAnchor.rank());
         return (int) Math.round(
-            TOP_RANK_COIN_RATE_BASIS_POINTS
-                * curvedProgress
-                + LAST_ELIGIBLE_RANK_COIN_RATE_BASIS_POINTS * (1D - curvedProgress)
+            betterAnchor.rateBasisPoints()
+                + (worseAnchor.rateBasisPoints() - betterAnchor.rateBasisPoints()) * progress
         );
     }
 
@@ -1503,6 +1523,9 @@ public class GameService {
         Long nextProductionInSeconds,
         Long nextPayoutInSeconds
     ) {
+    }
+
+    private record CoinRateAnchor(int rank, int rateBasisPoints) {
     }
 
     private List<PositionRankHistoryPointResponse> collapsePositionHistoryPoints(List<PositionRankHistoryPointResponse> points) {

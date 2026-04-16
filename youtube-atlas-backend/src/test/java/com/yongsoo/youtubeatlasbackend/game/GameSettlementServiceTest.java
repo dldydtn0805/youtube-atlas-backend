@@ -77,7 +77,7 @@ class GameSettlementServiceTest {
         TrendSignal signal = signal("video-1", 5);
         long currentValuePoints = GamePointCalculator.calculatePricePoints(5);
         int holdBoostBasisPoints = GameService.calculateHoldBoostBasisPoints(1_860L, 600, 600, 1_000, 10_000);
-        int effectiveCoinRateBasisPoints = GameService.calculateEffectiveCoinRateBasisPoints(289, holdBoostBasisPoints);
+        int effectiveCoinRateBasisPoints = GameService.calculateEffectiveCoinRateBasisPoints(76, holdBoostBasisPoints);
         long producedCoins = GameService.calculateEstimatedCoinYield(currentValuePoints, effectiveCoinRateBasisPoints);
 
         when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
@@ -165,7 +165,7 @@ class GameSettlementServiceTest {
         GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
         TrendSignal signal = signal("video-1", 1);
         long currentValuePoints = GamePointCalculator.calculatePricePoints(1);
-        long producedCoins = GameService.calculateEstimatedCoinYield(currentValuePoints, 600);
+        long producedCoins = GameService.calculateEstimatedCoinYield(currentValuePoints, 200);
 
         when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))

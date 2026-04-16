@@ -851,7 +851,7 @@ class GameServiceTest {
         );
         long myEligibleValuePoints = GamePointCalculator.calculatePricePoints(5);
         int myHoldBoostBasisPoints = GameService.calculateHoldBoostBasisPoints(1_200L, 600, 600, 1_000, 10_000);
-        int myEffectiveCoinRateBasisPoints = GameService.calculateEffectiveCoinRateBasisPoints(289, myHoldBoostBasisPoints);
+        int myEffectiveCoinRateBasisPoints = GameService.calculateEffectiveCoinRateBasisPoints(76, myHoldBoostBasisPoints);
         long myEstimatedCoinYield = GameService.calculateEstimatedCoinYield(myEligibleValuePoints, myEffectiveCoinRateBasisPoints);
 
         ReflectionTestUtils.setField(myEligiblePosition, "id", 501L);
@@ -880,25 +880,25 @@ class GameServiceTest {
         assertThat(response.myWarmingUpPositionCount()).isEqualTo(1);
         assertThat(response.ranks()).hasSize(200);
         assertThat(response.ranks().getFirst().rank()).isEqualTo(1);
-        assertThat(response.ranks().getFirst().coinRatePercent()).isEqualTo(3.0D);
-        assertThat(response.ranks().get(4).coinRatePercent()).isEqualTo(2.89D);
-        assertThat(response.ranks().get(19).coinRatePercent()).isEqualTo(2.51D);
-        assertThat(response.ranks().get(199).coinRatePercent()).isEqualTo(0.01D);
+        assertThat(response.ranks().getFirst().coinRatePercent()).isEqualTo(1.0D);
+        assertThat(response.ranks().get(4).coinRatePercent()).isEqualTo(0.76D);
+        assertThat(response.ranks().get(19).coinRatePercent()).isEqualTo(0.42D);
+        assertThat(response.ranks().get(199).coinRatePercent()).isZero();
         assertThat(response.positions()).hasSize(2);
         assertThat(response.positions().get(0).positionId()).isEqualTo(501L);
         assertThat(response.positions().get(0).rankEligible()).isTrue();
         assertThat(response.positions().get(0).productionActive()).isTrue();
-        assertThat(response.positions().get(0).coinRatePercent()).isEqualTo(2.89D);
+        assertThat(response.positions().get(0).coinRatePercent()).isEqualTo(0.76D);
         assertThat(response.positions().get(0).holdBoostPercent()).isEqualTo(10.0D);
-        assertThat(response.positions().get(0).effectiveCoinRatePercent()).isEqualTo(3.18D);
+        assertThat(response.positions().get(0).effectiveCoinRatePercent()).isEqualTo(0.84D);
         assertThat(response.positions().get(0).estimatedCoinYield()).isEqualTo(myEstimatedCoinYield);
         assertThat(response.positions().get(0).nextPayoutInSeconds()).isEqualTo(300L);
         assertThat(response.positions().get(1).positionId()).isEqualTo(502L);
         assertThat(response.positions().get(1).rankEligible()).isTrue();
         assertThat(response.positions().get(1).productionActive()).isFalse();
-        assertThat(response.positions().get(1).coinRatePercent()).isEqualTo(2.97D);
+        assertThat(response.positions().get(1).coinRatePercent()).isEqualTo(0.94D);
         assertThat(response.positions().get(1).holdBoostPercent()).isZero();
-        assertThat(response.positions().get(1).effectiveCoinRatePercent()).isEqualTo(2.97D);
+        assertThat(response.positions().get(1).effectiveCoinRatePercent()).isEqualTo(0.94D);
         assertThat(response.positions().get(1).estimatedCoinYield()).isZero();
         assertThat(response.positions().get(1).nextProductionInSeconds()).isEqualTo(330L);
         assertThat(response.positions().get(1).nextPayoutInSeconds()).isNull();
@@ -911,6 +911,16 @@ class GameServiceTest {
 
         assertThat(holdBoostBasisPoints).isEqualTo(10_000);
         assertThat(effectiveCoinRateBasisPoints).isEqualTo(600);
+    }
+
+    @Test
+    void resolveCoinRateUsesReducedLowerRankAnchors() {
+        assertThat(GameService.resolveCoinRateBasisPoints(1)).isEqualTo(100);
+        assertThat(GameService.resolveCoinRateBasisPoints(10)).isEqualTo(46);
+        assertThat(GameService.resolveCoinRateBasisPoints(50)).isEqualTo(30);
+        assertThat(GameService.resolveCoinRateBasisPoints(100)).isEqualTo(15);
+        assertThat(GameService.resolveCoinRateBasisPoints(150)).isEqualTo(4);
+        assertThat(GameService.resolveCoinRateBasisPoints(200)).isZero();
     }
 
     @Test
