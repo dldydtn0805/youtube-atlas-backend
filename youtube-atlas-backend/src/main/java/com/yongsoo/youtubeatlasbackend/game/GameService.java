@@ -139,7 +139,12 @@ public class GameService {
             season.getRegionCode(),
             TRENDING_CATEGORY_ID
         ).stream().map(signal -> {
-            long currentPricePoints = GamePointCalculator.calculatePricePoints(signal.getCurrentRank());
+            long basePricePoints = GamePointCalculator.calculatePricePoints(signal.getCurrentRank());
+            long currentPricePoints = GamePointCalculator.calculateMomentumAdjustedPricePoints(
+                signal.getCurrentRank(),
+                signal.getRankChange()
+            );
+            long momentumPriceDeltaPoints = currentPricePoints - basePricePoints;
             boolean alreadyOwned = ownedVideoIds.contains(signal.getId().getVideoId());
             String blockedReason = resolveBuyBlockedReason(wallet, currentPricePoints, maxOpenReached, alreadyOwned);
 
@@ -151,7 +156,11 @@ public class GameService {
                 signal.getCurrentRank(),
                 signal.getPreviousRank(),
                 signal.getRankChange(),
+                basePricePoints,
                 currentPricePoints,
+                momentumPriceDeltaPoints,
+                calculateMomentumPriceDeltaPercent(basePricePoints, momentumPriceDeltaPoints),
+                resolveMomentumPriceType(momentumPriceDeltaPoints),
                 signal.getCurrentViewCount(),
                 signal.getViewCountDelta(),
                 signal.isNew(),
@@ -160,6 +169,27 @@ public class GameService {
                 signal.getCapturedAt()
             );
         }).toList();
+    }
+
+    private double calculateMomentumPriceDeltaPercent(long basePricePoints, long momentumPriceDeltaPoints) {
+        if (basePricePoints <= 0L || momentumPriceDeltaPoints == 0L) {
+            return 0.0D;
+        }
+
+        double percent = (double) momentumPriceDeltaPoints * 100D / basePricePoints;
+        return Math.round(percent * 10D) / 10D;
+    }
+
+    private String resolveMomentumPriceType(long momentumPriceDeltaPoints) {
+        if (momentumPriceDeltaPoints > 0L) {
+            return "PREMIUM";
+        }
+
+        if (momentumPriceDeltaPoints < 0L) {
+            return "DISCOUNT";
+        }
+
+        return "NONE";
     }
 
     @Transactional
@@ -336,7 +366,10 @@ public class GameService {
         }
 
         TrendSignal signal = requireTrendSignal(regionCode, categoryId, videoId);
-        long currentPricePoints = GamePointCalculator.calculatePricePoints(signal.getCurrentRank());
+        long currentPricePoints = GamePointCalculator.calculateMomentumAdjustedPricePoints(
+            signal.getCurrentRank(),
+            signal.getRankChange()
+        );
         if (quotedPricePoints != currentPricePoints) {
             throw new IllegalArgumentException("현재 가격이 변경되었습니다. 최신 시세로 다시 시도해 주세요.");
         }
@@ -589,7 +622,7 @@ public class GameService {
 
     private CoinPositionCandidate toCoinPositionCandidate(GamePosition position, TrendSignal signal, Instant now) {
         OpenPositionSnapshot snapshot = signal != null
-            ? new OpenPositionSnapshot(signal.getCurrentRank(), signal.getCapturedAt(), false)
+            ? new OpenPositionSnapshot(signal.getCurrentRank(), signal.getRankChange(), signal.getCapturedAt(), false)
             : resolveOpenPositionSnapshot(position);
         Integer currentRank = snapshot != null ? snapshot.currentRank() : null;
         boolean rankEligible = currentRank != null
@@ -729,7 +762,7 @@ public class GameService {
     private PositionResponse toOpenPositionResponse(GamePosition position, TrendSignal signal) {
         return toOpenPositionResponse(
             position,
-            new OpenPositionSnapshot(signal.getCurrentRank(), signal.getCapturedAt(), false)
+            new OpenPositionSnapshot(signal.getCurrentRank(), signal.getRankChange(), signal.getCapturedAt(), false)
         );
     }
 
@@ -867,7 +900,7 @@ public class GameService {
 
             if (signal != null) {
                 markedValue = GamePointCalculator.calculatePositionPoints(
-                    GamePointCalculator.calculatePricePoints(signal.getCurrentRank()),
+                    GamePointCalculator.calculateMomentumAdjustedPricePoints(signal.getCurrentRank(), signal.getRankChange()),
                     getPositionQuantity(position)
                 );
             } else {
@@ -1005,7 +1038,13 @@ public class GameService {
         TrendSignalId signalId = new TrendSignalId(position.getRegionCode(), position.getCategoryId(), position.getVideoId());
         TrendSignal signal = trendSignalRepository.findById(signalId).orElse(null);
         if (signal != null) {
-            return new SellSnapshot(signal.getCurrentRunId(), signal.getCurrentRank(), signal.getCapturedAt(), false);
+            return new SellSnapshot(
+                signal.getCurrentRunId(),
+                signal.getCurrentRank(),
+                signal.getRankChange(),
+                signal.getCapturedAt(),
+                false
+            );
         }
 
         LatestTrendRun latestTrendRun = getLatestTrendRun(position.getRegionCode(), position.getCategoryId());
@@ -1018,7 +1057,13 @@ public class GameService {
             .findFirst()
             .orElse(null);
         if (latestSnapshot != null) {
-            return new SellSnapshot(latestTrendRun.run().getId(), latestSnapshot.getRank(), latestTrendRun.run().getCapturedAt(), false);
+            return new SellSnapshot(
+                latestTrendRun.run().getId(),
+                latestSnapshot.getRank(),
+                null,
+                latestTrendRun.run().getCapturedAt(),
+                false
+            );
         }
 
         ensureLatestRunLooksHealthy(
@@ -1033,14 +1078,14 @@ public class GameService {
             .max(Integer::compareTo)
             .map(rank -> rank + 1)
             .orElse(DEFAULT_FALLBACK_RANK);
-        return new SellSnapshot(latestTrendRun.run().getId(), fallbackRank, latestTrendRun.run().getCapturedAt(), true);
+        return new SellSnapshot(latestTrendRun.run().getId(), fallbackRank, null, latestTrendRun.run().getCapturedAt(), true);
     }
 
     private OpenPositionSnapshot resolveOpenPositionSnapshot(GamePosition position) {
         TrendSignalId signalId = new TrendSignalId(position.getRegionCode(), position.getCategoryId(), position.getVideoId());
         TrendSignal signal = trendSignalRepository.findById(signalId).orElse(null);
         if (signal != null) {
-            return new OpenPositionSnapshot(signal.getCurrentRank(), signal.getCapturedAt(), false);
+            return new OpenPositionSnapshot(signal.getCurrentRank(), signal.getRankChange(), signal.getCapturedAt(), false);
         }
 
         LatestTrendRun latestTrendRun = getLatestTrendRun(position.getRegionCode(), position.getCategoryId());
@@ -1053,7 +1098,7 @@ public class GameService {
             .findFirst()
             .orElse(null);
         if (latestSnapshot != null) {
-            return new OpenPositionSnapshot(latestSnapshot.getRank(), latestTrendRun.run().getCapturedAt(), false);
+            return new OpenPositionSnapshot(latestSnapshot.getRank(), null, latestTrendRun.run().getCapturedAt(), false);
         }
 
         if (!latestRunLooksHealthy(
@@ -1070,7 +1115,7 @@ public class GameService {
             .max(Integer::compareTo)
             .map(rank -> rank + 1)
             .orElse(DEFAULT_FALLBACK_RANK);
-        return new OpenPositionSnapshot(fallbackRank, latestTrendRun.run().getCapturedAt(), true);
+        return new OpenPositionSnapshot(fallbackRank, null, latestTrendRun.run().getCapturedAt(), true);
     }
 
     private LatestTrendRun getLatestTrendRun(String regionCode, String categoryId) {
@@ -1247,13 +1292,13 @@ public class GameService {
     private long resolveOpenPositionUnitPricePoints(OpenPositionSnapshot snapshot) {
         return snapshot.chartOut()
             ? GamePointCalculator.calculateChartOutUnitPricePoints()
-            : GamePointCalculator.calculatePricePoints(snapshot.currentRank());
+            : GamePointCalculator.calculateMomentumAdjustedPricePoints(snapshot.currentRank(), snapshot.rankChange());
     }
 
     private long resolveSellUnitPricePoints(SellSnapshot sellSnapshot) {
         return sellSnapshot.chartOut()
             ? GamePointCalculator.calculateChartOutUnitPricePoints()
-            : GamePointCalculator.calculatePricePoints(sellSnapshot.rank());
+            : GamePointCalculator.calculateMomentumAdjustedPricePoints(sellSnapshot.rank(), sellSnapshot.rankChange());
     }
 
     static int resolveCoinRateBasisPoints(int rank) {
@@ -1433,10 +1478,10 @@ public class GameService {
     ) {
     }
 
-    private record SellSnapshot(Long runId, int rank, Instant capturedAt, boolean chartOut) {
+    private record SellSnapshot(Long runId, int rank, Integer rankChange, Instant capturedAt, boolean chartOut) {
     }
 
-    private record OpenPositionSnapshot(int currentRank, Instant capturedAt, boolean chartOut) {
+    private record OpenPositionSnapshot(int currentRank, Integer rankChange, Instant capturedAt, boolean chartOut) {
     }
 
     private record LatestTrendRun(TrendRun run, List<TrendSnapshot> snapshots) {

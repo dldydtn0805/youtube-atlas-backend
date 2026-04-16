@@ -189,7 +189,7 @@ public class GameSettlementService {
             );
 
             long currentValuePoints = GamePointCalculator.calculatePositionPoints(
-                GamePointCalculator.calculatePricePoints(rank),
+                GamePointCalculator.calculateMomentumAdjustedPricePoints(rank, signal.getRankChange()),
                 position.getQuantity() == null || position.getQuantity() < GamePointCalculator.MIN_QUANTITY
                     ? GamePointCalculator.QUANTITY_SCALE
                     : position.getQuantity()
@@ -336,11 +336,12 @@ public class GameSettlementService {
             .orElseThrow(() -> new IllegalArgumentException("지갑 정보를 찾을 수 없습니다."));
 
         int sellRank = signal != null ? signal.getCurrentRank() : fallbackRank;
+        Integer rankChange = signal != null ? signal.getRankChange() : null;
         Long sellRunId = signal != null ? signal.getCurrentRunId() : fallbackRunId;
         Instant sellCapturedAt = signal != null ? signal.getCapturedAt() : fallbackCapturedAt;
         int rankDiff = position.getBuyRank() - sellRank;
         long sellPricePoints = GamePointCalculator.calculatePositionPoints(
-            GamePointCalculator.calculatePricePoints(sellRank),
+            GamePointCalculator.calculateMomentumAdjustedPricePoints(sellRank, rankChange),
             position.getQuantity() == null || position.getQuantity() < GamePointCalculator.MIN_QUANTITY
                 ? GamePointCalculator.QUANTITY_SCALE
                 : position.getQuantity()

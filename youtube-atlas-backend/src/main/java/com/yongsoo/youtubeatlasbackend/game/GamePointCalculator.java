@@ -9,6 +9,9 @@ final class GamePointCalculator {
     private static final long CHART_OUT_DELISTING_PENALTY_POINTS = 100L;
     private static final long SELL_FEE_NUMERATOR = 3L;
     private static final long SELL_FEE_DENOMINATOR = 1_000L;
+    private static final int MAX_MOMENTUM_RANK_CHANGE = 30;
+    private static final double UPWARD_MOMENTUM_COEFFICIENT = 0.006D;
+    private static final double DOWNWARD_MOMENTUM_COEFFICIENT = 0.003D;
 
     private static final PriceAnchor[] PRICE_ANCHORS = {
         new PriceAnchor(1, 2_000_000L),
@@ -66,6 +69,22 @@ final class GamePointCalculator {
         }
 
         return PRICE_ANCHORS[PRICE_ANCHORS.length - 1].pricePoints();
+    }
+
+    static long calculateMomentumAdjustedPricePoints(int rank, Integer rankChange) {
+        long basePricePoints = calculatePricePoints(rank);
+        if (basePricePoints <= 0L || rankChange == null || rankChange == 0) {
+            return basePricePoints;
+        }
+
+        int cappedRankChange = Math.max(
+            -MAX_MOMENTUM_RANK_CHANGE,
+            Math.min(MAX_MOMENTUM_RANK_CHANGE, rankChange)
+        );
+        double coefficient = cappedRankChange > 0
+            ? UPWARD_MOMENTUM_COEFFICIENT
+            : DOWNWARD_MOMENTUM_COEFFICIENT;
+        return Math.max(0L, Math.round(basePricePoints * Math.exp(coefficient * cappedRankChange)));
     }
 
     static long calculateChartOutUnitPricePoints() {

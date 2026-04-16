@@ -112,7 +112,7 @@ class GameServiceTest {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
-        TrendSignal signal = signal("video-1", 170, 3);
+        TrendSignal signal = signal("video-1", 170, 0);
         long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
@@ -153,7 +153,7 @@ class GameServiceTest {
         AppUser appUser = user(7L);
         long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
         GameWallet wallet = wallet(season, appUser, 20_000L, buyPricePoints, 0L);
-        TrendSignal signal = signal("video-1", 170, 3);
+        TrendSignal signal = signal("video-1", 170, 0);
         GamePosition existingPosition = openPosition(
             season,
             appUser,
@@ -201,7 +201,7 @@ class GameServiceTest {
         AppUser appUser = user(7L);
         long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
         GameWallet wallet = wallet(season, appUser, 30_000L, 0L, 0L);
-        TrendSignal signal = signal("video-1", 170, 3);
+        TrendSignal signal = signal("video-1", 170, 0);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
@@ -249,7 +249,7 @@ class GameServiceTest {
             buyPricePoints,
             Instant.parse("2026-04-01T05:45:00Z")
         );
-        TrendSignal latestSignal = signal("video-1", 160, 5);
+        TrendSignal latestSignal = signal("video-1", 160, 0);
 
         when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
         when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
@@ -268,6 +268,81 @@ class GameServiceTest {
         assertThat(response.balancePoints()).isEqualTo((10_000L - buyPricePoints) + settledPoints);
         assertThat(wallet.getReservedPoints()).isZero();
         assertThat(wallet.getRealizedPnlPoints()).isEqualTo(pnlPoints);
+    }
+
+    @Test
+    void sellSettlesLossWhenRankFalls() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(160);
+        long sellPricePoints = GamePointCalculator.calculatePricePoints(170);
+        long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
+        long pnlPoints = GamePointCalculator.calculateProfitPoints(buyPricePoints, settledPoints);
+        GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            160,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        TrendSignal latestSignal = signal("video-1", 170, 0);
+
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.save(position)).thenReturn(position);
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = gameService.sell(authenticatedUser(), 300L);
+
+        assertThat(sellPricePoints).isLessThan(buyPricePoints);
+        assertThat(response.sellRank()).isEqualTo(170);
+        assertThat(response.sellPricePoints()).isEqualTo(sellPricePoints);
+        assertThat(response.rankDiff()).isEqualTo(-10);
+        assertThat(response.pnlPoints()).isEqualTo(pnlPoints).isNegative();
+        assertThat(response.settledPoints()).isEqualTo(settledPoints);
+        assertThat(response.balancePoints()).isEqualTo((10_000L - buyPricePoints) + settledPoints);
+        assertThat(wallet.getReservedPoints()).isZero();
+        assertThat(wallet.getRealizedPnlPoints()).isEqualTo(pnlPoints);
+    }
+
+    @Test
+    void sellAppliesRealtimeSurgingPremiumToSellPrice() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(171);
+        long baseSellPricePoints = GamePointCalculator.calculatePricePoints(171);
+        long premiumSellPricePoints = GamePointCalculator.calculateMomentumAdjustedPricePoints(171, 20);
+        long settledPoints = GamePointCalculator.calculateSettledPoints(premiumSellPricePoints);
+        long pnlPoints = GamePointCalculator.calculateProfitPoints(buyPricePoints, settledPoints);
+        GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            171,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        TrendSignal latestSignal = signal("video-1", 171, 20);
+
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.save(position)).thenReturn(position);
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = gameService.sell(authenticatedUser(), 300L);
+
+        assertThat(premiumSellPricePoints).isGreaterThan(baseSellPricePoints);
+        assertThat(response.sellRank()).isEqualTo(171);
+        assertThat(response.sellPricePoints()).isEqualTo(premiumSellPricePoints);
+        assertThat(response.pnlPoints()).isEqualTo(pnlPoints);
+        assertThat(response.settledPoints()).isEqualTo(settledPoints);
     }
 
     @Test
@@ -302,7 +377,7 @@ class GameServiceTest {
             buyPricePoints,
             Instant.parse("2026-04-01T05:50:00Z")
         );
-        TrendSignal latestSignal = signal("video-1", 160, 5);
+        TrendSignal latestSignal = signal("video-1", 160, 0);
 
         ReflectionTestUtils.setField(firstPosition, "id", 301L);
         ReflectionTestUtils.setField(secondPosition, "id", 302L);
@@ -495,8 +570,8 @@ class GameServiceTest {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
-        TrendSignal ownedSignal = signal("video-1", 170, 2);
-        TrendSignal openSignal = signal("video-2", 180, 1);
+        TrendSignal ownedSignal = signal("video-1", 170, 0);
+        TrendSignal openSignal = signal("video-2", 180, 0);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
@@ -511,7 +586,11 @@ class GameServiceTest {
 
         assertThat(response).hasSize(2);
         assertThat(response.get(0).videoId()).isEqualTo("video-1");
+        assertThat(response.get(0).basePricePoints()).isEqualTo(GamePointCalculator.calculatePricePoints(170));
         assertThat(response.get(0).currentPricePoints()).isEqualTo(GamePointCalculator.calculatePricePoints(170));
+        assertThat(response.get(0).momentumPriceDeltaPoints()).isZero();
+        assertThat(response.get(0).momentumPriceDeltaPercent()).isEqualTo(0.0D);
+        assertThat(response.get(0).momentumPriceType()).isEqualTo("NONE");
         assertThat(response.get(0).canBuy()).isTrue();
         assertThat(response.get(0).buyBlockedReason()).isNull();
         assertThat(response.get(1).videoId()).isEqualTo("video-2");
@@ -521,12 +600,53 @@ class GameServiceTest {
     }
 
     @Test
+    void getMarketAppliesMomentumPremiumAndDiscountToCurrentPrice() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        TrendSignal surgingSignal = signal("video-1", 171, 20);
+        TrendSignal fallingSignal = signal("video-2", 171, -20);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(0L);
+        when(gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(1L, 7L, PositionStatus.OPEN))
+            .thenReturn(List.of());
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
+            .thenReturn(List.of(surgingSignal, fallingSignal));
+
+        var response = gameService.getMarket(authenticatedUser(), "KR");
+
+        long basePricePoints = GamePointCalculator.calculatePricePoints(171);
+        long premiumPricePoints = GamePointCalculator.calculateMomentumAdjustedPricePoints(171, 20);
+        long discountPricePoints = GamePointCalculator.calculateMomentumAdjustedPricePoints(171, -20);
+        assertThat(response).hasSize(2);
+        assertThat(response.get(0).basePricePoints()).isEqualTo(basePricePoints);
+        assertThat(response.get(0).currentPricePoints())
+            .isEqualTo(premiumPricePoints)
+            .isGreaterThan(basePricePoints);
+        assertThat(response.get(0).momentumPriceDeltaPoints()).isEqualTo(premiumPricePoints - basePricePoints);
+        assertThat(response.get(0).momentumPriceDeltaPercent())
+            .isEqualTo(roundPercent(premiumPricePoints - basePricePoints, basePricePoints));
+        assertThat(response.get(0).momentumPriceType()).isEqualTo("PREMIUM");
+        assertThat(response.get(1).basePricePoints()).isEqualTo(basePricePoints);
+        assertThat(response.get(1).currentPricePoints())
+            .isEqualTo(discountPricePoints)
+            .isLessThan(basePricePoints);
+        assertThat(response.get(1).momentumPriceDeltaPoints()).isEqualTo(discountPricePoints - basePricePoints);
+        assertThat(response.get(1).momentumPriceDeltaPercent())
+            .isEqualTo(roundPercent(discountPricePoints - basePricePoints, basePricePoints));
+        assertThat(response.get(1).momentumPriceType()).isEqualTo("DISCOUNT");
+    }
+
+    @Test
     void buyAllowsSameVideoPastDistinctVideoLimitWhenWalletCanCoverIt() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
         GameWallet wallet = wallet(season, appUser, buyPricePoints * 3, buyPricePoints, 0L);
-        TrendSignal signal = signal("video-1", 170, 3);
+        TrendSignal signal = signal("video-1", 170, 0);
         GamePosition existingPosition = openPosition(
             season,
             appUser,
@@ -570,7 +690,7 @@ class GameServiceTest {
         AppUser appUser = user(7L);
         long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
         GameWallet wallet = wallet(season, appUser, buyPricePoints - 1, 0L, 0L);
-        TrendSignal signal = signal("video-1", 170, 3);
+        TrendSignal signal = signal("video-1", 170, 0);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
@@ -656,8 +776,8 @@ class GameServiceTest {
             rivalBuyPricePoints,
             Instant.parse("2026-04-01T05:40:00Z")
         );
-        TrendSignal mySignal = signal("video-1", 180, -3);
-        TrendSignal rivalSignal = signal("video-2", 170, 4);
+        TrendSignal mySignal = signal("video-1", 180, 0);
+        TrendSignal rivalSignal = signal("video-2", 170, 0);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
@@ -743,9 +863,9 @@ class GameServiceTest {
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
             .thenReturn(List.of(
-                signal("video-2", 2, 4),
-                signal("video-1", 5, 7),
-                signal("video-3", 10, 5)
+                signal("video-2", 2, 0),
+                signal("video-1", 5, 0),
+                signal("video-3", 10, 0)
             ));
         when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN))
             .thenReturn(List.of(myEligiblePosition, myWarmupPosition, rivalEligiblePosition));
@@ -1113,6 +1233,10 @@ class GameServiceTest {
         signal.setCapturedAt(Instant.parse("2026-04-01T06:00:00Z"));
         signal.setUpdatedAt(Instant.parse("2026-04-01T06:00:00Z"));
         return signal;
+    }
+
+    private double roundPercent(long deltaPoints, long basePoints) {
+        return Math.round((double) deltaPoints * 1_000D / basePoints) / 10D;
     }
 
     private TrendRun trendRun(Long id, Instant capturedAt) {

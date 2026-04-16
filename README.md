@@ -157,7 +157,10 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 
 ```text
 anchorPrices = {200: 3000, 190: 4000, ..., 20: 750000, 10: 1050000, 2: 1333333, 1: 2000000}
-currentPricePoints = anchorPrices 를 기준으로 rank 구간별 기하보간
+basePricePoints = anchorPrices 를 기준으로 rank 구간별 기하보간
+momentumRankChange = clamp(rankChange, -30, 30)
+momentumMultiplier = rankChange > 0 이면 exp(0.006 * momentumRankChange), rankChange < 0 이면 exp(0.003 * momentumRankChange)
+currentPricePoints = round(basePricePoints * momentumMultiplier)
 buyPricePoints = buy 시점 currentPricePoints
 sellPricePoints = sell 시점 currentPricePoints
 sellFeePoints = floor(sellPricePoints * 0.003)
@@ -165,14 +168,35 @@ settledPoints = max(0, sellPricePoints - sellFeePoints)
 profitPoints = settledPoints - buyPricePoints
 ```
 
+- `rankChange > 0` 인 실시간 급상승 영상은 프리미엄 가격이 적용됩니다.
+- `rankChange < 0` 인 실시간 급하락 영상은 세일 가격이 적용됩니다.
+- 프리미엄/세일은 마켓 가격, 매수 가격 검증, 오픈 포지션 평가, 매도 정산에 동일하게 반영됩니다.
+- 랭킹 스냅샷만 있고 `rankChange` 를 알 수 없는 fallback 정산은 기존 순위 기반 가격을 사용합니다.
+
 예시:
 
 - `170위` 매수 -> `160위` 매도
+- 순위가 `10`단계 상승했으므로 가격은 `7500 -> 10000`으로 보정
 - `buyPricePoints = 7500`
 - `sellPricePoints = 10000`
 - `sellFeePoints = 30`
 - `settledPoints = 9970`
 - `profitPoints = 2470`
+
+반대 방향도 동일하게 적용됩니다.
+
+- `160위` 매수 -> `170위` 매도
+- 순위가 `10`단계 하락했으므로 가격은 `10000 -> 7500`으로 보정
+- `buyPricePoints = 10000`
+- `sellPricePoints = 7500`
+- `sellFeePoints = 22`
+- `settledPoints = 7478`
+- `profitPoints = -2522`
+
+실시간 모멘텀 예시:
+
+- `171위`, `rankChange = 20`이면 기본 순위 가격에 약 `12.8%` 프리미엄 적용
+- `171위`, `rankChange = -20`이면 기본 순위 가격에 약 `5.8%` 세일 적용
 
 ## 프론트 연동 순서
 
@@ -277,7 +301,11 @@ values
       "currentRank": 3,
       "previousRank": 5,
       "rankChange": 2,
+      "basePricePoints": 1320000,
       "currentPricePoints": 1320000,
+      "momentumPriceDeltaPoints": 0,
+      "momentumPriceDeltaPercent": 0.0,
+      "momentumPriceType": "NONE",
       "currentViewCount": 123456,
       "viewCountDelta": 3456,
       "isNew": false,
@@ -287,6 +315,11 @@ values
   }
 ]
 ```
+
+- `basePricePoints` 는 현재 순위만 반영한 기본 가격입니다.
+- `currentPricePoints` 는 급상승 프리미엄/급하락 세일까지 반영한 실제 거래 가격입니다.
+- `momentumPriceType` 은 `PREMIUM`, `DISCOUNT`, `NONE` 중 하나입니다.
+- 프론트 배지는 `momentumPriceType != NONE` 일 때 `momentumPriceDeltaPercent` 로 표시하면 됩니다.
 
 `buyBlockedReason` 예시:
 

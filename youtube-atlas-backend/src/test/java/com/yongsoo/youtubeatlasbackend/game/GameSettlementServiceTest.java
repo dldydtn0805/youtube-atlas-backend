@@ -470,8 +470,8 @@ class GameSettlementServiceTest {
         signal.setCurrentRunId(55L);
         signal.setPreviousRunId(54L);
         signal.setCurrentRank(currentRank);
-        signal.setPreviousRank(currentRank + 1);
-        signal.setRankChange(1);
+        signal.setPreviousRank(currentRank);
+        signal.setRankChange(0);
         signal.setCurrentViewCount(5_000L);
         signal.setPreviousViewCount(4_500L);
         signal.setViewCountDelta(500L);
