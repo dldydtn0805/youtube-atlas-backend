@@ -1,0 +1,63 @@
+name: Deploy backend to EC2
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend-ec2
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSH
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/youtube-atlas-backend.pem
+          chmod 600 ~/.ssh/youtube-atlas-backend.pem
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy on EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/youtube-atlas-backend.pem ec2-user@"$EC2_HOST" <<'EOF'
+            set -euo pipefail
+            cd /home/ec2-user/youtube-atlas-backend
+
+            git fetch --prune origin
+            git checkout master
+            git reset --hard origin/master
+
+            sudo docker build -t youtube-atlas-backend:latest .
+            sudo docker rm -f youtube-atlas-backend || true
+            sudo docker run -d \
+              --name youtube-atlas-backend \
+              --restart unless-stopped \
+              --env-file .env \
+              -p 8080:8080 \
+              youtube-atlas-backend:latest
+
+            for attempt in $(seq 1 30); do
+              if curl -fsS 'http://127.0.0.1:8080/api/trending/realtime-surging?regionCode=KR' >/dev/null; then
+                echo "Backend is healthy"
+                exit 0
+              fi
+              echo "Waiting for backend... ($attempt/30)"
+              sleep 2
+            done
+
+            echo "Backend did not become healthy in time"
+            sudo docker logs --tail 120 youtube-atlas-backend
+            exit 1
+          EOF
