@@ -14,6 +14,8 @@ import org.springframework.util.StringUtils;
 
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshot;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotRepository;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeApiClient.RemoteVideoCategoryItem;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeApiClient.RemoteVideoPage;
 import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategoryResponse;
@@ -28,22 +30,27 @@ import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasVideoCategory;
 public class YouTubeCatalogService {
 
     private static final int MIN_VIDEOS_PER_SOURCE_PAGE = 12;
+    private static final int SNAPSHOT_PAGE_SIZE = 50;
+    private static final String TRENDING_CATEGORY_ID = CategoryCatalog.ALL_VIDEO_CATEGORY_ID;
 
     private final CategoryCatalog categoryCatalog;
     private final CatalogResponseCache catalogResponseCache;
     private final YouTubeApiClient youTubeApiClient;
     private final TrendSignalRepository trendSignalRepository;
+    private final TrendSnapshotRepository trendSnapshotRepository;
 
     public YouTubeCatalogService(
         CategoryCatalog categoryCatalog,
         CatalogResponseCache catalogResponseCache,
         YouTubeApiClient youTubeApiClient,
-        TrendSignalRepository trendSignalRepository
+        TrendSignalRepository trendSignalRepository,
+        TrendSnapshotRepository trendSnapshotRepository
     ) {
         this.categoryCatalog = categoryCatalog;
         this.catalogResponseCache = catalogResponseCache;
         this.youTubeApiClient = youTubeApiClient;
         this.trendSignalRepository = trendSignalRepository;
+        this.trendSnapshotRepository = trendSnapshotRepository;
     }
 
     public List<VideoCategoryResponse> getCategories(String regionCode) {
@@ -153,15 +160,27 @@ public class YouTubeCatalogService {
     }
 
     private VideoCategorySectionResponse loadPopularVideosByCategory(String normalizedRegionCode, String categoryId, String pageToken) {
+        VideoCategorySectionResponse snapshotBackedSection = loadSnapshotBackedVideosByCategory(
+            normalizedRegionCode,
+            categoryId,
+            pageToken
+        );
+        if (snapshotBackedSection != null) {
+            return snapshotBackedSection;
+        }
+
+        return emptySnapshotVideoSection(normalizedRegionCode, categoryId);
+    }
+
+    private VideoCategorySectionResponse emptySnapshotVideoSection(String normalizedRegionCode, String categoryId) {
         if (CategoryCatalog.ALL_VIDEO_CATEGORY_ID.equals(categoryId)) {
-            RemoteVideoPage page = fetchPopularVideosPageForSource(normalizedRegionCode, null, pageToken);
             return new VideoCategorySectionResponse(
                 categoryId,
                 categoryCatalog.allCategory().label(),
                 categoryCatalog.allCategory().description(),
                 List.of(),
-                page.items().stream().map(this::toVideoResponse).toList(),
-                page.nextPageToken()
+                List.of(),
+                null
             );
         }
 
@@ -171,22 +190,13 @@ public class YouTubeCatalogService {
             .map(item -> new AtlasVideoCategory(item.id(), item.label(), item.description(), item.sourceIds()))
             .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 카테고리입니다: " + categoryId));
 
-        String sourceCategoryId = category.sourceIds().isEmpty() ? category.id() : category.sourceIds().getFirst();
-        RemoteVideoPage page;
-
-        try {
-            page = fetchPopularVideosPageForSource(normalizedRegionCode, sourceCategoryId, pageToken);
-        } catch (UnsupportedSourceCategoryException exception) {
-            throw unsupportedCategoryException(normalizedRegionCode);
-        }
-
         return new VideoCategorySectionResponse(
             category.id(),
             category.label(),
             category.description(),
             List.of(),
-            page.items().stream().map(this::toVideoResponse).toList(),
-            page.nextPageToken()
+            List.of(),
+            null
         );
     }
 
@@ -301,6 +311,147 @@ public class YouTubeCatalogService {
         return new ArrayList<>(uniqueItems.values());
     }
 
+    private VideoCategorySectionResponse loadSnapshotBackedVideosByCategory(
+        String regionCode,
+        String categoryId,
+        String pageToken
+    ) {
+        Integer startIndex = parseSnapshotPageToken(pageToken);
+        if (startIndex == null) {
+            return null;
+        }
+
+        List<TrendSnapshot> snapshots = dedupeSnapshotsByVideoId(
+            trendSnapshotRepository.findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc(
+                regionCode,
+                TRENDING_CATEGORY_ID
+            )
+        ).stream()
+            .filter(snapshot -> matchesSnapshotCategory(snapshot, categoryId))
+            .toList();
+        if (snapshots.isEmpty()) {
+            return null;
+        }
+
+        int endIndex = Math.min(startIndex + SNAPSHOT_PAGE_SIZE, snapshots.size());
+        List<TrendSnapshot> pageSnapshots = startIndex < snapshots.size()
+            ? snapshots.subList(startIndex, endIndex)
+            : List.of();
+        String nextPageToken = endIndex < snapshots.size() ? Integer.toString(endIndex) : null;
+        Map<String, TrendSignal> signalsByVideoId = loadTrendSignalsByVideoId(regionCode, pageSnapshots);
+
+        return new VideoCategorySectionResponse(
+            categoryId,
+            resolveSnapshotCategoryLabel(categoryId, snapshots),
+            resolveSnapshotCategoryDescription(categoryId, snapshots),
+            List.of(),
+            pageSnapshots.stream()
+                .map(snapshot -> toSnapshotVideoResponse(snapshot, signalsByVideoId.get(snapshot.getVideoId())))
+                .toList(),
+            nextPageToken
+        );
+    }
+
+    private Integer parseSnapshotPageToken(String pageToken) {
+        if (!StringUtils.hasText(pageToken)) {
+            return 0;
+        }
+
+        try {
+            int parsedPageToken = Integer.parseInt(pageToken.trim());
+            return parsedPageToken < 0 ? null : parsedPageToken;
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private List<TrendSnapshot> dedupeSnapshotsByVideoId(List<TrendSnapshot> snapshots) {
+        Map<String, TrendSnapshot> uniqueSnapshots = new LinkedHashMap<>();
+        for (TrendSnapshot snapshot : snapshots) {
+            uniqueSnapshots.putIfAbsent(snapshot.getVideoId(), snapshot);
+        }
+        return new ArrayList<>(uniqueSnapshots.values());
+    }
+
+    private boolean matchesSnapshotCategory(TrendSnapshot snapshot, String categoryId) {
+        return CategoryCatalog.ALL_VIDEO_CATEGORY_ID.equals(categoryId)
+            || categoryId.equals(snapshot.getVideoCategoryId());
+    }
+
+    private Map<String, TrendSignal> loadTrendSignalsByVideoId(String regionCode, List<TrendSnapshot> snapshots) {
+        if (snapshots.isEmpty()) {
+            return Map.of();
+        }
+
+        List<String> videoIds = snapshots.stream()
+            .map(TrendSnapshot::getVideoId)
+            .toList();
+        Map<String, TrendSignal> signalsByVideoId = new HashMap<>();
+        for (TrendSignal signal : trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn(
+            regionCode,
+            TRENDING_CATEGORY_ID,
+            videoIds
+        )) {
+            signalsByVideoId.put(signal.getId().getVideoId(), signal);
+        }
+        return signalsByVideoId;
+    }
+
+    private String resolveSnapshotCategoryLabel(String categoryId, List<TrendSnapshot> snapshots) {
+        if (CategoryCatalog.ALL_VIDEO_CATEGORY_ID.equals(categoryId)) {
+            return categoryCatalog.allCategory().label();
+        }
+
+        return snapshots.stream()
+            .map(TrendSnapshot::getVideoCategoryLabel)
+            .filter(StringUtils::hasText)
+            .findFirst()
+            .orElse(categoryId);
+    }
+
+    private String resolveSnapshotCategoryDescription(String categoryId, List<TrendSnapshot> snapshots) {
+        if (CategoryCatalog.ALL_VIDEO_CATEGORY_ID.equals(categoryId)) {
+            return categoryCatalog.allCategory().description();
+        }
+
+        String label = resolveSnapshotCategoryLabel(categoryId, snapshots);
+        return label + " 카테고리 인기 영상을 확인할 수 있습니다.";
+    }
+
+    private VideoItemResponse toSnapshotVideoResponse(TrendSnapshot snapshot, TrendSignal signal) {
+        VideoItemResponse.ThumbnailResponse thumbnail = new VideoItemResponse.ThumbnailResponse(
+            snapshot.getThumbnailUrl(),
+            null,
+            null
+        );
+
+        return new VideoItemResponse(
+            snapshot.getVideoId(),
+            new VideoItemResponse.ContentDetailsResponse(""),
+            new VideoItemResponse.SnippetResponse(
+                snapshot.getTitle(),
+                snapshot.getChannelTitle(),
+                snapshot.getChannelId(),
+                snapshot.getVideoCategoryId(),
+                snapshot.getVideoCategoryLabel(),
+                snapshot.getPublishedAt() != null ? snapshot.getPublishedAt().toString() : null,
+                new VideoItemResponse.ThumbnailsResponse(thumbnail, thumbnail, thumbnail, thumbnail, thumbnail)
+            ),
+            new VideoItemResponse.StatisticsResponse(snapshot.getViewCount()),
+            signal != null ? toTrendResponse(signal) : new VideoItemResponse.TrendResponse(
+                snapshot.getVideoCategoryLabel(),
+                snapshot.getRank(),
+                null,
+                null,
+                snapshot.getViewCount(),
+                null,
+                null,
+                false,
+                snapshot.getRun().getCapturedAt()
+            )
+        );
+    }
+
     private VideoCategoryResponse toResponse(AtlasVideoCategory category) {
         return new VideoCategoryResponse(category.id(), category.label(), category.description(), category.sourceIds());
     }
@@ -351,7 +502,7 @@ public class YouTubeCatalogService {
             item.contentDetails(),
             item.snippet(),
             item.statistics(),
-            signal != null ? toTrendResponse(signal) : null
+            signal != null ? toTrendResponse(signal) : item.trend()
         );
     }
 

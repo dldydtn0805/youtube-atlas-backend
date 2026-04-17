@@ -94,17 +94,15 @@ public class TrendingService {
     public RealtimeSurgingResponse getRealtimeSurging(String regionCode) {
         String normalizedRegionCode = regionCode.trim().toUpperCase();
         int rankChangeThreshold = atlasProperties.getTrending().getRealtimeSurgingRankChangeThreshold();
-        List<TrendSignalResponse> items = trendSignalRepository
-            .findByIdRegionCodeAndIdCategoryIdAndRankChangeGreaterThanEqualOrderByRankChangeDescCurrentRankAsc(
-                normalizedRegionCode,
-                TRENDING_CATEGORY_ID,
-                rankChangeThreshold
-            )
-            .stream()
-            .map(this::toResponse)
+        List<TrendSnapshot> snapshots = loadLatestSnapshots(normalizedRegionCode);
+        Map<String, TrendSignal> signalsByVideoId = loadSignalsByVideoId(normalizedRegionCode);
+        List<TrendSignalResponse> items = snapshots.stream()
+            .map(snapshot -> toSnapshotSignalResponse(snapshot, signalsByVideoId.get(snapshot.getVideoId())))
+            .filter(item -> item.rankChange() != null && item.rankChange() >= rankChangeThreshold)
+            .sorted(Comparator
+                .comparing(TrendSignalResponse::rankChange, Comparator.reverseOrder())
+                .thenComparing(TrendSignalResponse::currentRank))
             .toList();
-
-        Instant capturedAt = resolveLatestCapturedAt(normalizedRegionCode, items);
 
         return new RealtimeSurgingResponse(
             normalizedRegionCode,
@@ -112,7 +110,7 @@ public class TrendingService {
             TRENDING_CATEGORY_LABEL,
             rankChangeThreshold,
             items.size(),
-            capturedAt,
+            resolveSnapshotCapturedAt(snapshots, items),
             items
         );
     }
@@ -120,14 +118,15 @@ public class TrendingService {
     @Transactional(readOnly = true)
     public TopRankRisersResponse getTopRankRisers(String regionCode) {
         String normalizedRegionCode = regionCode.trim().toUpperCase();
-        List<TrendSignalResponse> risingItems = trendSignalRepository
-            .findTop10ByIdRegionCodeAndIdCategoryIdAndRankChangeGreaterThanOrderByRankChangeDescCurrentRankAsc(
-                normalizedRegionCode,
-                TRENDING_CATEGORY_ID,
-                0
-            )
-            .stream()
-            .map(this::toResponse)
+        List<TrendSnapshot> snapshots = loadLatestSnapshots(normalizedRegionCode);
+        Map<String, TrendSignal> signalsByVideoId = loadSignalsByVideoId(normalizedRegionCode);
+        List<TrendSignalResponse> risingItems = snapshots.stream()
+            .map(snapshot -> toSnapshotSignalResponse(snapshot, signalsByVideoId.get(snapshot.getVideoId())))
+            .filter(item -> item.rankChange() != null && item.rankChange() > 0)
+            .sorted(Comparator
+                .comparing(TrendSignalResponse::rankChange, Comparator.reverseOrder())
+                .thenComparing(TrendSignalResponse::currentRank))
+            .limit(TOP_RANK_RISERS_LIMIT)
             .toList();
         List<TrendSignalResponse> items = new ArrayList<>(risingItems);
 
@@ -136,11 +135,9 @@ public class TrendingService {
                 .map(TrendSignalResponse::videoId)
                 .collect(LinkedHashSet::new, Set::add, Set::addAll);
 
-            trendSignalRepository.findNewEntriesByRegionCodeAndCategoryId(
-                normalizedRegionCode,
-                TRENDING_CATEGORY_ID
-            ).stream()
-                .map(this::toResponse)
+            snapshots.stream()
+                .map(snapshot -> toSnapshotSignalResponse(snapshot, signalsByVideoId.get(snapshot.getVideoId())))
+                .filter(TrendSignalResponse::isNew)
                 .filter(item -> !includedVideoIds.contains(item.videoId()))
                 .limit(TOP_RANK_RISERS_LIMIT - items.size())
                 .forEach(item -> {
@@ -155,7 +152,7 @@ public class TrendingService {
             TRENDING_CATEGORY_LABEL,
             TOP_RANK_RISERS_LIMIT,
             items.size(),
-            resolveLatestCapturedAt(normalizedRegionCode, items),
+            resolveSnapshotCapturedAt(snapshots, items),
             items
         );
     }
@@ -163,11 +160,11 @@ public class TrendingService {
     @Transactional(readOnly = true)
     public NewChartEntriesResponse getNewChartEntries(String regionCode) {
         String normalizedRegionCode = regionCode.trim().toUpperCase();
-        List<TrendSignalResponse> items = trendSignalRepository.findNewEntriesByRegionCodeAndCategoryId(
-            normalizedRegionCode,
-            TRENDING_CATEGORY_ID
-        ).stream()
-            .map(this::toResponse)
+        List<TrendSnapshot> snapshots = loadLatestSnapshots(normalizedRegionCode);
+        Map<String, TrendSignal> signalsByVideoId = loadSignalsByVideoId(normalizedRegionCode);
+        List<TrendSignalResponse> items = snapshots.stream()
+            .map(snapshot -> toSnapshotSignalResponse(snapshot, signalsByVideoId.get(snapshot.getVideoId())))
+            .filter(TrendSignalResponse::isNew)
             .toList();
 
         return new NewChartEntriesResponse(
@@ -175,7 +172,7 @@ public class TrendingService {
             TRENDING_CATEGORY_ID,
             TRENDING_CATEGORY_LABEL,
             items.size(),
-            resolveLatestCapturedAt(normalizedRegionCode, items),
+            resolveSnapshotCapturedAt(snapshots, items),
             items
         );
     }
@@ -197,11 +194,11 @@ public class TrendingService {
     ) {
         String normalizedRegionCode = regionCode.trim().toUpperCase();
         int startIndex = parseTopVideosPageToken(pageToken);
-        TrendRun latestRun = trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc(
-            normalizedRegionCode,
-            TRENDING_CATEGORY_ID
-        ).orElseThrow(() -> new IllegalArgumentException("최신 트렌드 스냅샷이 없습니다."));
-        List<TrendSnapshot> allSnapshots = trendSnapshotRepository.findByRunIdOrderByRankAsc(latestRun.getId());
+        List<TrendSnapshot> allSnapshots = trendSnapshotRepository
+            .findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc(
+                normalizedRegionCode,
+                TRENDING_CATEGORY_ID
+            );
 
         if (allSnapshots.isEmpty()) {
             throw new IllegalArgumentException("최신 트렌드 스냅샷이 없습니다.");
@@ -238,7 +235,7 @@ public class TrendingService {
         }
 
         List<VideoItemResponse> items = limitedSnapshots.subList(startIndex, endIndex).stream()
-            .map(snapshot -> toTopVideoResponse(snapshot, latestRun, signalsByVideoId.get(snapshot.getVideoId()), categoryLabelById))
+            .map(snapshot -> toTopVideoResponse(snapshot, snapshot.getRun(), signalsByVideoId.get(snapshot.getVideoId()), categoryLabelById))
             .toList();
 
         String nextPageToken = endIndex < limitedSnapshots.size() ? Integer.toString(endIndex) : null;
@@ -585,6 +582,56 @@ public class TrendingService {
             signal.getThumbnailUrl(),
             signal.getCapturedAt()
         );
+    }
+
+    private TrendSignalResponse toSnapshotSignalResponse(TrendSnapshot snapshot, TrendSignal signal) {
+        return new TrendSignalResponse(
+            snapshot.getRegionCode(),
+            snapshot.getCategoryId(),
+            TRENDING_CATEGORY_LABEL,
+            snapshot.getVideoId(),
+            snapshot.getRank(),
+            signal != null ? signal.getPreviousRank() : null,
+            signal != null ? signal.getRankChange() : null,
+            snapshot.getViewCount(),
+            signal != null ? signal.getPreviousViewCount() : null,
+            signal != null ? signal.getViewCountDelta() : null,
+            signal != null && signal.isNew(),
+            snapshot.getTitle(),
+            snapshot.getChannelTitle(),
+            snapshot.getChannelId(),
+            snapshot.getThumbnailUrl(),
+            snapshot.getRun().getCapturedAt()
+        );
+    }
+
+    private List<TrendSnapshot> loadLatestSnapshots(String regionCode) {
+        return dedupeSnapshotsByVideoId(
+            trendSnapshotRepository.findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc(
+                regionCode,
+                TRENDING_CATEGORY_ID
+            )
+        ).stream()
+            .limit(TOP_VIDEOS_MAX_COUNT)
+            .toList();
+    }
+
+    private Map<String, TrendSignal> loadSignalsByVideoId(String regionCode) {
+        return trendSignalRepository.findByIdRegionCodeAndIdCategoryId(
+            regionCode,
+            TRENDING_CATEGORY_ID
+        ).stream().collect(Collectors.toMap(signal -> signal.getId().getVideoId(), Function.identity(), (left, right) -> left));
+    }
+
+    private Instant resolveSnapshotCapturedAt(List<TrendSnapshot> snapshots, List<TrendSignalResponse> items) {
+        if (!items.isEmpty()) {
+            return items.getFirst().capturedAt();
+        }
+
+        return snapshots.stream()
+            .findFirst()
+            .map(snapshot -> snapshot.getRun().getCapturedAt())
+            .orElse(null);
     }
 
     private Instant resolveLatestCapturedAt(String regionCode, List<TrendSignalResponse> items) {

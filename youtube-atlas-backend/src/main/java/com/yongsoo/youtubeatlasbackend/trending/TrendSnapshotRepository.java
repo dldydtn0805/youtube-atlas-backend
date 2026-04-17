@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 public interface TrendSnapshotRepository extends JpaRepository<TrendSnapshot, Long> {
 
@@ -12,6 +13,24 @@ public interface TrendSnapshotRepository extends JpaRepository<TrendSnapshot, Lo
     List<TrendSnapshot> findByRunId(Long runId);
 
     List<TrendSnapshot> findByRunIdOrderByRankAsc(Long runId);
+
+    @Query("""
+        select snapshot
+        from TrendSnapshot snapshot
+        where snapshot.regionCode = :regionCode
+          and snapshot.categoryId = :categoryId
+          and snapshot.run.id = (
+              select max(candidate.run.id)
+              from TrendSnapshot candidate
+              where candidate.regionCode = :regionCode
+                and candidate.categoryId = :categoryId
+          )
+        order by snapshot.rank asc
+        """)
+    List<TrendSnapshot> findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc(
+        String regionCode,
+        String categoryId
+    );
 
     void deleteByRun_IdIn(List<Long> runIds);
 

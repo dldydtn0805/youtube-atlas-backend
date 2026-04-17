@@ -10,7 +10,7 @@ final class GamePointCalculator {
     private static final long SELL_FEE_NUMERATOR = 3L;
     private static final long SELL_FEE_DENOMINATOR = 1_000L;
     private static final int MAX_MOMENTUM_RANK_CHANGE = 30;
-    private static final double UPWARD_MOMENTUM_COEFFICIENT = 0.006D;
+    private static final double UPWARD_MOMENTUM_COEFFICIENT = 0.002D;
     private static final double DOWNWARD_MOMENTUM_COEFFICIENT = 0.003D;
 
     private static final PriceAnchor[] PRICE_ANCHORS = {

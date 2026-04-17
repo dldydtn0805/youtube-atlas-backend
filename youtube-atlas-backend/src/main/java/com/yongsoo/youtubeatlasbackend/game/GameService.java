@@ -164,15 +164,21 @@ public class GameService {
             .map(GamePosition::getVideoId)
             .collect(Collectors.toSet());
         boolean maxOpenReached = openDistinctVideoCount >= season.getMaxOpenPositions();
-        TrendRun latestRun = trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc(
-            season.getRegionCode(),
-            TRENDING_CATEGORY_ID
-        ).orElseThrow(() -> new IllegalArgumentException("최신 트렌드 스냅샷이 없습니다."));
         Map<String, TrendSignal> signalsByVideoId = trendSignalRepository.findByIdRegionCodeAndIdCategoryId(
             season.getRegionCode(),
             TRENDING_CATEGORY_ID
         ).stream().collect(Collectors.toMap(signal -> signal.getId().getVideoId(), Function.identity(), (left, right) -> left));
-        List<TrendSnapshot> buyableSnapshots = trendSnapshotRepository.findByRunIdOrderByRankAsc(latestRun.getId()).stream()
+        List<TrendSnapshot> latestSnapshots = trendSnapshotRepository
+            .findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc(
+                season.getRegionCode(),
+                TRENDING_CATEGORY_ID
+            );
+
+        if (latestSnapshots.isEmpty()) {
+            throw new IllegalArgumentException("최신 트렌드 스냅샷이 없습니다.");
+        }
+
+        List<TrendSnapshot> buyableSnapshots = latestSnapshots.stream()
             .limit(BUYABLE_CHART_MAX_COUNT)
             .filter(snapshot -> {
                 long snapshotUnitPricePoints = GamePointCalculator.calculatePricePoints(snapshot.getRank());
@@ -194,7 +200,7 @@ public class GameService {
 
         int endIndex = Math.min(startIndex + BUYABLE_CHART_PAGE_SIZE, buyableSnapshots.size());
         List<VideoItemResponse> items = buyableSnapshots.subList(startIndex, endIndex).stream()
-            .map(snapshot -> toBuyableChartVideoResponse(snapshot, latestRun, signalsByVideoId.get(snapshot.getVideoId())))
+            .map(snapshot -> toBuyableChartVideoResponse(snapshot, snapshot.getRun(), signalsByVideoId.get(snapshot.getVideoId())))
             .toList();
 
         return new VideoCategorySectionResponse(

@@ -159,7 +159,7 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 anchorPrices = {200: 3000, 190: 4000, ..., 20: 750000, 10: 1050000, 2: 1333333, 1: 2000000}
 basePricePoints = anchorPrices 를 기준으로 rank 구간별 기하보간
 momentumRankChange = clamp(rankChange, -30, 30)
-momentumMultiplier = rankChange > 0 이면 exp(0.006 * momentumRankChange), rankChange < 0 이면 exp(0.003 * momentumRankChange)
+momentumMultiplier = rankChange > 0 이면 exp(0.002 * momentumRankChange), rankChange < 0 이면 exp(0.003 * momentumRankChange)
 currentPricePoints = round(basePricePoints * momentumMultiplier)
 buyPricePoints = buy 시점 currentPricePoints
 sellPricePoints = sell 시점 currentPricePoints
@@ -195,7 +195,7 @@ profitPoints = settledPoints - buyPricePoints
 
 실시간 모멘텀 예시:
 
-- `171위`, `rankChange = 20`이면 기본 순위 가격에 약 `12.8%` 프리미엄 적용
+- `171위`, `rankChange = 20`이면 기본 순위 가격에 약 `4.1%` 프리미엄 적용
 - `171위`, `rankChange = -20`이면 기본 순위 가격에 약 `5.8%` 세일 적용
 
 ## 프론트 연동 순서

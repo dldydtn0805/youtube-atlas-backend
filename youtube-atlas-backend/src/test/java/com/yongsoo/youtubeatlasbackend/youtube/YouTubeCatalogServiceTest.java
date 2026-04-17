@@ -20,6 +20,9 @@ import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalId;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
+import com.yongsoo.youtubeatlasbackend.trending.TrendRun;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshot;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotRepository;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeApiClient.RemoteCategorySnippet;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeApiClient.RemoteVideoCategoryItem;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeApiClient.RemoteVideoPage;
@@ -32,12 +35,14 @@ class YouTubeCatalogServiceTest {
 
     private YouTubeApiClient youTubeApiClient;
     private TrendSignalRepository trendSignalRepository;
+    private TrendSnapshotRepository trendSnapshotRepository;
     private YouTubeCatalogService youTubeCatalogService;
 
     @BeforeEach
     void setUp() {
         youTubeApiClient = org.mockito.Mockito.mock(YouTubeApiClient.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
+        trendSnapshotRepository = org.mockito.Mockito.mock(TrendSnapshotRepository.class);
         when(youTubeApiClient.isIgnorableCategoryFetchError(any())).thenAnswer(invocation -> {
             RuntimeException exception = invocation.getArgument(0);
             String message = exception.getMessage();
@@ -46,7 +51,6 @@ class YouTubeCatalogServiceTest {
                     || message.contains("Requested entity was not found.")
             );
         });
-
         AtlasProperties atlasProperties = new AtlasProperties();
         atlasProperties.getYoutube().getCache().setCategoriesTtlSeconds(60);
         atlasProperties.getYoutube().getCache().setVideoSectionsTtlSeconds(60);
@@ -55,7 +59,8 @@ class YouTubeCatalogServiceTest {
             new CategoryCatalog(),
             new CatalogResponseCache(atlasProperties),
             youTubeApiClient,
-            trendSignalRepository
+            trendSignalRepository,
+            trendSnapshotRepository
         );
     }
 
@@ -72,29 +77,26 @@ class YouTubeCatalogServiceTest {
     }
 
     @Test
-    void getPopularVideosByCategoryCachesRepeatedSelections() {
+    void getPopularVideosByCategoryReturnsEmptySectionWhenNoSnapshotExists() {
         when(youTubeApiClient.fetchVideoCategories("KR")).thenReturn(List.of(
             new RemoteVideoCategoryItem("10", new RemoteCategorySnippet(true, "Music"))
         ));
-        when(youTubeApiClient.fetchMostPopularVideos("KR", "10", null)).thenReturn(
-            new RemoteVideoPage(List.of(video("video-1", "10")), null)
-        );
-        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "10", List.of("video-1")))
-            .thenReturn(List.of());
 
-        assertThat(youTubeCatalogService.getPopularVideosByCategory("kr", "10", null).items()).hasSize(1);
-        assertThat(youTubeCatalogService.getPopularVideosByCategory("KR", "10", null).items()).hasSize(1);
+        assertThat(youTubeCatalogService.getPopularVideosByCategory("kr", "10", null).items()).isEmpty();
+        assertThat(youTubeCatalogService.getPopularVideosByCategory("KR", "10", null).items()).isEmpty();
 
         verify(youTubeApiClient, times(1)).fetchVideoCategories("KR");
-        verify(youTubeApiClient, times(1)).fetchMostPopularVideos("KR", "10", null);
+        org.mockito.Mockito.verify(youTubeApiClient, org.mockito.Mockito.never()).fetchMostPopularVideos("KR", "10", null);
         org.mockito.Mockito.verifyNoInteractions(trendSignalRepository);
     }
 
     @Test
     void getPopularVideosByCategoryAddsTrendSignalToAllCategoryItems() {
-        when(youTubeApiClient.fetchMostPopularVideos("KR", null, null)).thenReturn(
-            new RemoteVideoPage(List.of(video("video-1", "10")), null)
-        );
+        TrendRun latestRun = trendRun(10L, Instant.parse("2026-04-17T08:00:00Z"));
+        TrendSnapshot snapshot = snapshot(latestRun, "video-1", 1, "10", "Music");
+
+        when(trendSnapshotRepository.findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc("KR", "0"))
+            .thenReturn(List.of(snapshot));
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn(eq("KR"), eq("0"), eq(List.of("video-1"))))
             .thenReturn(List.of(trendSignal("KR", "0", "video-1")));
 
@@ -108,19 +110,55 @@ class YouTubeCatalogServiceTest {
     }
 
     @Test
-    void getPopularVideosByCategoryDoesNotAttachTrendSignalForNonAllCategory() {
-        when(youTubeApiClient.fetchVideoCategories("KR")).thenReturn(List.of(
-            new RemoteVideoCategoryItem("10", new RemoteCategorySnippet(true, "Music"))
-        ));
-        when(youTubeApiClient.fetchMostPopularVideos("KR", "10", null)).thenReturn(
-            new RemoteVideoPage(List.of(video("video-1", "10")), null)
-        );
+    void getPopularVideosByCategoryUsesLatestSnapshotWhenAvailable() {
+        TrendRun latestRun = trendRun(10L, Instant.parse("2026-04-17T08:00:00Z"));
+        TrendSnapshot first = snapshot(latestRun, "video-1", 1, "10", "Music");
+        TrendSnapshot second = snapshot(latestRun, "video-2", 2, "24", "Entertainment");
+
+        when(trendSnapshotRepository.findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc("KR", "0"))
+            .thenReturn(List.of(first, second));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "0", List.of("video-1", "video-2")))
+            .thenReturn(List.of(trendSignal("KR", "0", "video-1")));
+
+        var response = youTubeCatalogService.getPopularVideosByCategory("KR", "0", null);
+
+        assertThat(response.items()).extracting("id").containsExactly("video-1", "video-2");
+        assertThat(response.items().getFirst().trend().rankChange()).isEqualTo(2);
+        assertThat(response.items().get(1).trend().currentRank()).isEqualTo(2);
+        org.mockito.Mockito.verifyNoInteractions(youTubeApiClient);
+    }
+
+    @Test
+    void getPopularVideosByCategoryFiltersLatestSnapshotByVideoCategory() {
+        TrendRun latestRun = trendRun(10L, Instant.parse("2026-04-17T08:00:00Z"));
+        TrendSnapshot music = snapshot(latestRun, "video-1", 1, "10", "Music");
+        TrendSnapshot entertainment = snapshot(latestRun, "video-2", 2, "24", "Entertainment");
+
+        when(trendSnapshotRepository.findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc("KR", "0"))
+            .thenReturn(List.of(music, entertainment));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "0", List.of("video-1")))
+            .thenReturn(List.of());
+
+        var response = youTubeCatalogService.getPopularVideosByCategory("KR", "10", null);
+
+        assertThat(response.categoryId()).isEqualTo("10");
+        assertThat(response.label()).isEqualTo("Music");
+        assertThat(response.items()).extracting("id").containsExactly("video-1");
+        org.mockito.Mockito.verifyNoInteractions(youTubeApiClient);
+    }
+
+    @Test
+    void getPopularVideosByCategoryIncludesSnapshotTrendForNonAllCategory() {
+        TrendRun latestRun = trendRun(10L, Instant.parse("2026-04-17T08:00:00Z"));
+        TrendSnapshot snapshot = snapshot(latestRun, "video-1", 1, "10", "Music");
+
+        when(trendSnapshotRepository.findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc("KR", "0"))
+            .thenReturn(List.of(snapshot));
 
         var response = youTubeCatalogService.getPopularVideosByCategory("KR", "10", null);
 
         assertThat(response.items()).hasSize(1);
-        assertThat(response.items().getFirst().trend()).isNull();
-        org.mockito.Mockito.verifyNoInteractions(trendSignalRepository);
+        assertThat(response.items().getFirst().trend().currentRank()).isEqualTo(1);
     }
 
     @Test
@@ -169,16 +207,15 @@ class YouTubeCatalogServiceTest {
     }
 
     @Test
-    void getPopularVideosByCategoryThrowsWhenSourceCategoryIsUnsupported() {
+    void getPopularVideosByCategoryReturnsEmptySectionForSupportedCategoryWithoutSnapshots() {
         when(youTubeApiClient.fetchVideoCategories("KR")).thenReturn(List.of(
             new RemoteVideoCategoryItem("24", new RemoteCategorySnippet(true, "Entertainment"))
         ));
-        when(youTubeApiClient.fetchMostPopularVideos("KR", "24", null))
-            .thenThrow(new ExternalServiceException("Requested entity was not found."));
 
-        assertThatThrownBy(() -> youTubeCatalogService.getPopularVideosByCategory("KR", "24", null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("현재 KR에서는 요청한 카테고리 인기 차트를 지원하지 않습니다.");
+        var response = youTubeCatalogService.getPopularVideosByCategory("KR", "24", null);
+
+        assertThat(response.items()).isEmpty();
+        org.mockito.Mockito.verify(youTubeApiClient, org.mockito.Mockito.never()).fetchMostPopularVideos("KR", "24", null);
     }
 
     @Test
@@ -257,5 +294,37 @@ class YouTubeCatalogServiceTest {
         signal.setCapturedAt(Instant.parse("2026-03-24T12:00:00Z"));
         signal.setUpdatedAt(Instant.parse("2026-03-24T12:30:00Z"));
         return signal;
+    }
+
+    private TrendRun trendRun(Long id, Instant capturedAt) {
+        TrendRun run = org.mockito.Mockito.mock(TrendRun.class);
+        when(run.getId()).thenReturn(id);
+        when(run.getCapturedAt()).thenReturn(capturedAt);
+        return run;
+    }
+
+    private TrendSnapshot snapshot(
+        TrendRun run,
+        String videoId,
+        int rank,
+        String videoCategoryId,
+        String videoCategoryLabel
+    ) {
+        TrendSnapshot snapshot = new TrendSnapshot();
+        snapshot.setRun(run);
+        snapshot.setRegionCode("KR");
+        snapshot.setCategoryId("0");
+        snapshot.setVideoCategoryId(videoCategoryId);
+        snapshot.setVideoCategoryLabel(videoCategoryLabel);
+        snapshot.setVideoId(videoId);
+        snapshot.setRank(rank);
+        snapshot.setTitle("Title " + videoId);
+        snapshot.setChannelTitle("Channel");
+        snapshot.setChannelId("channel-1");
+        snapshot.setThumbnailUrl("https://example.com/thumb.jpg");
+        snapshot.setViewCount(100L);
+        snapshot.setPublishedAt(Instant.parse("2026-03-24T10:00:00Z"));
+        snapshot.setCreatedAt(Instant.parse("2026-04-17T08:00:00Z"));
+        return snapshot;
     }
 }
