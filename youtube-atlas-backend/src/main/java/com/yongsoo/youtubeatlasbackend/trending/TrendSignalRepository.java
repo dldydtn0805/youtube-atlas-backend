@@ -23,6 +23,12 @@ public interface TrendSignalRepository extends JpaRepository<TrendSignal, TrendS
         Integer rankChange
     );
 
+    List<TrendSignal> findTop10ByIdRegionCodeAndIdCategoryIdAndRankChangeGreaterThanOrderByRankChangeDescCurrentRankAsc(
+        String regionCode,
+        String categoryId,
+        Integer rankChange
+    );
+
     @Query("""
         select signal
         from TrendSignal signal

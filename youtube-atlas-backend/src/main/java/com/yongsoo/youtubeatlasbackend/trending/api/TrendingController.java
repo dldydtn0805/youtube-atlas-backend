@@ -38,6 +38,11 @@ public class TrendingController {
         return trendingService.getRealtimeSurging(regionCode);
     }
 
+    @GetMapping("/top-rank-risers")
+    public TopRankRisersResponse getTopRankRisers(@RequestParam String regionCode) {
+        return trendingService.getTopRankRisers(regionCode);
+    }
+
     @GetMapping("/new-entries")
     public NewChartEntriesResponse getNewChartEntries(@RequestParam String regionCode) {
         return trendingService.getNewChartEntries(regionCode);

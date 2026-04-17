@@ -125,6 +125,101 @@ class TrendingServiceTest {
     }
 
     @Test
+    void getTopRankRisersReturnsTopTenPositiveRankChangesFromAllCategory() {
+        Instant capturedAt = Instant.parse("2026-04-01T05:30:00Z");
+        TrendSignal first = trendSignal("KR", "0", "video-1", 2, 12, "Top rise 1", capturedAt);
+        TrendSignal second = trendSignal("KR", "0", "video-2", 5, 9, "Top rise 2", capturedAt);
+
+        when(
+            trendSignalRepository.findTop10ByIdRegionCodeAndIdCategoryIdAndRankChangeGreaterThanOrderByRankChangeDescCurrentRankAsc(
+                "KR",
+                "0",
+                0
+            )
+        ).thenReturn(List.of(first, second));
+        when(trendSignalRepository.findNewEntriesByRegionCodeAndCategoryId("KR", "0"))
+            .thenReturn(List.of());
+
+        var response = trendingService.getTopRankRisers("kr");
+
+        verify(trendSignalRepository)
+            .findTop10ByIdRegionCodeAndIdCategoryIdAndRankChangeGreaterThanOrderByRankChangeDescCurrentRankAsc(
+                "KR",
+                "0",
+                0
+            );
+        verify(trendSignalRepository).findNewEntriesByRegionCodeAndCategoryId("KR", "0");
+        assertThat(response.regionCode()).isEqualTo("KR");
+        assertThat(response.categoryId()).isEqualTo("0");
+        assertThat(response.limit()).isEqualTo(10);
+        assertThat(response.totalCount()).isEqualTo(2);
+        assertThat(response.capturedAt()).isEqualTo(capturedAt);
+        assertThat(response.items()).extracting("videoId", "rankChange")
+            .containsExactly(
+                org.assertj.core.groups.Tuple.tuple("video-1", 12),
+                org.assertj.core.groups.Tuple.tuple("video-2", 9)
+            );
+    }
+
+    @Test
+    void getTopRankRisersFillsRemainingSlotsWithNewEntriesOrderedByCurrentRank() {
+        Instant capturedAt = Instant.parse("2026-04-01T05:30:00Z");
+        TrendSignal rising = trendSignal("KR", "0", "video-1", 2, 12, "Top rise 1", capturedAt);
+        TrendSignal newEntryHigher = trendSignal("KR", "0", "video-3", 4, null, "New 1", capturedAt);
+        newEntryHigher.setNew(true);
+        TrendSignal newEntryLower = trendSignal("KR", "0", "video-4", 7, null, "New 2", capturedAt);
+        newEntryLower.setNew(true);
+
+        when(
+            trendSignalRepository.findTop10ByIdRegionCodeAndIdCategoryIdAndRankChangeGreaterThanOrderByRankChangeDescCurrentRankAsc(
+                "KR",
+                "0",
+                0
+            )
+        ).thenReturn(List.of(rising));
+        when(trendSignalRepository.findNewEntriesByRegionCodeAndCategoryId("KR", "0"))
+            .thenReturn(List.of(newEntryHigher, newEntryLower));
+
+        var response = trendingService.getTopRankRisers("KR");
+
+        assertThat(response.items()).extracting("videoId", "currentRank", "isNew")
+            .containsExactly(
+                org.assertj.core.groups.Tuple.tuple("video-1", 2, false),
+                org.assertj.core.groups.Tuple.tuple("video-3", 4, true),
+                org.assertj.core.groups.Tuple.tuple("video-4", 7, true)
+            );
+    }
+
+    @Test
+    void getTopRankRisersFallsBackToLatestRunCapturedAtWhenEmpty() {
+        TrendRun latestRun = new TrendRun();
+        latestRun.setRegionCode("KR");
+        latestRun.setCategoryId("0");
+        latestRun.setCategoryLabel("전체");
+        latestRun.setSourceCategoryIds(List.of());
+        latestRun.setSource("youtube-mostPopular");
+        latestRun.setCapturedAt(Instant.parse("2026-04-01T06:00:00Z"));
+
+        when(
+            trendSignalRepository.findTop10ByIdRegionCodeAndIdCategoryIdAndRankChangeGreaterThanOrderByRankChangeDescCurrentRankAsc(
+                "KR",
+                "0",
+                0
+            )
+        ).thenReturn(List.of());
+        when(trendSignalRepository.findNewEntriesByRegionCodeAndCategoryId("KR", "0"))
+            .thenReturn(List.of());
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0"))
+            .thenReturn(Optional.of(latestRun));
+
+        var response = trendingService.getTopRankRisers("KR");
+
+        assertThat(response.items()).isEmpty();
+        assertThat(response.totalCount()).isZero();
+        assertThat(response.capturedAt()).isEqualTo(latestRun.getCapturedAt());
+    }
+
+    @Test
     void getNewChartEntriesUsesAllCategoryId() {
         Instant capturedAt = Instant.parse("2026-04-01T05:30:00Z");
         TrendSignal signal = trendSignal("KR", "0", "video-2", 7, null, "New entry", capturedAt);

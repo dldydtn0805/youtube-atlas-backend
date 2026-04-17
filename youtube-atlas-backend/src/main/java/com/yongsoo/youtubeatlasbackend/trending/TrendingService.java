@@ -24,6 +24,7 @@ import com.yongsoo.youtubeatlasbackend.trending.api.NewChartEntriesResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.RealtimeSurgingResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.SyncTrendingRequest;
 import com.yongsoo.youtubeatlasbackend.trending.api.SyncTrendingResponse;
+import com.yongsoo.youtubeatlasbackend.trending.api.TopRankRisersResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.TrendSignalResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.VideoRankHistoryPointResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.VideoRankHistoryResponse;
@@ -46,6 +47,7 @@ import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasVideo;
 @Service
 public class TrendingService {
 
+    private static final int TOP_RANK_RISERS_LIMIT = 10;
     private static final int TOP_VIDEOS_PAGE_SIZE = 50;
     private static final int TOP_VIDEOS_MAX_COUNT = 200;
     private static final String TRENDING_CATEGORY_ID = CategoryCatalog.ALL_VIDEO_CATEGORY_ID;
@@ -111,6 +113,49 @@ public class TrendingService {
             rankChangeThreshold,
             items.size(),
             capturedAt,
+            items
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public TopRankRisersResponse getTopRankRisers(String regionCode) {
+        String normalizedRegionCode = regionCode.trim().toUpperCase();
+        List<TrendSignalResponse> risingItems = trendSignalRepository
+            .findTop10ByIdRegionCodeAndIdCategoryIdAndRankChangeGreaterThanOrderByRankChangeDescCurrentRankAsc(
+                normalizedRegionCode,
+                TRENDING_CATEGORY_ID,
+                0
+            )
+            .stream()
+            .map(this::toResponse)
+            .toList();
+        List<TrendSignalResponse> items = new ArrayList<>(risingItems);
+
+        if (items.size() < TOP_RANK_RISERS_LIMIT) {
+            Set<String> includedVideoIds = items.stream()
+                .map(TrendSignalResponse::videoId)
+                .collect(LinkedHashSet::new, Set::add, Set::addAll);
+
+            trendSignalRepository.findNewEntriesByRegionCodeAndCategoryId(
+                normalizedRegionCode,
+                TRENDING_CATEGORY_ID
+            ).stream()
+                .map(this::toResponse)
+                .filter(item -> !includedVideoIds.contains(item.videoId()))
+                .limit(TOP_RANK_RISERS_LIMIT - items.size())
+                .forEach(item -> {
+                    includedVideoIds.add(item.videoId());
+                    items.add(item);
+                });
+        }
+
+        return new TopRankRisersResponse(
+            normalizedRegionCode,
+            TRENDING_CATEGORY_ID,
+            TRENDING_CATEGORY_LABEL,
+            TOP_RANK_RISERS_LIMIT,
+            items.size(),
+            resolveLatestCapturedAt(normalizedRegionCode, items),
             items
         );
     }
