@@ -9,6 +9,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -177,6 +178,7 @@ public class GameService {
         if (latestSnapshots.isEmpty()) {
             throw new IllegalArgumentException("최신 트렌드 스냅샷이 없습니다.");
         }
+        PreviousSnapshotContext previousSnapshotContext = loadPreviousSnapshotContext(latestSnapshots);
 
         List<TrendSnapshot> buyableSnapshots = latestSnapshots.stream()
             .limit(BUYABLE_CHART_MAX_COUNT)
@@ -200,7 +202,13 @@ public class GameService {
 
         int endIndex = Math.min(startIndex + BUYABLE_CHART_PAGE_SIZE, buyableSnapshots.size());
         List<VideoItemResponse> items = buyableSnapshots.subList(startIndex, endIndex).stream()
-            .map(snapshot -> toBuyableChartVideoResponse(snapshot, snapshot.getRun(), signalsByVideoId.get(snapshot.getVideoId())))
+            .map(snapshot -> toBuyableChartVideoResponse(
+                snapshot,
+                snapshot.getRun(),
+                signalsByVideoId.get(snapshot.getVideoId()),
+                previousSnapshotContext.snapshotsByVideoId().get(snapshot.getVideoId()),
+                previousSnapshotContext.hasPreviousRun()
+            ))
             .toList();
 
         return new VideoCategorySectionResponse(
@@ -232,39 +240,103 @@ public class GameService {
             .map(GamePosition::getVideoId)
             .collect(Collectors.toSet());
         boolean maxOpenReached = openDistinctVideoCount >= season.getMaxOpenPositions();
-
-        return trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
+        List<TrendSignal> rankedSignals = trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
             season.getRegionCode(),
             TRENDING_CATEGORY_ID
-        ).stream().map(signal -> {
-            long basePricePoints = GamePointCalculator.calculatePricePoints(signal.getCurrentRank());
+        );
+        Map<String, TrendSignal> signalsByVideoId = rankedSignals.stream()
+            .collect(Collectors.toMap(signal -> signal.getId().getVideoId(), Function.identity(), (left, right) -> left));
+        List<TrendSnapshot> latestSnapshots = trendSnapshotRepository.findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc(
+            season.getRegionCode(),
+            TRENDING_CATEGORY_ID
+        );
+
+        if (latestSnapshots.isEmpty()) {
+            return rankedSignals.stream()
+                .map(signal -> {
+                    long basePricePoints = GamePointCalculator.calculatePricePoints(signal.getCurrentRank());
+                    long currentPricePoints = GamePointCalculator.calculateMomentumAdjustedPricePoints(
+                        signal.getCurrentRank(),
+                        signal.getRankChange()
+                    );
+                    long momentumPriceDeltaPoints = currentPricePoints - basePricePoints;
+                    boolean alreadyOwned = ownedVideoIds.contains(signal.getId().getVideoId());
+                    String blockedReason = resolveBuyBlockedReason(wallet, currentPricePoints, maxOpenReached, alreadyOwned);
+
+                    return new MarketVideoResponse(
+                        signal.getId().getVideoId(),
+                        signal.getTitle(),
+                        signal.getChannelTitle(),
+                        signal.getThumbnailUrl(),
+                        signal.getCurrentRank(),
+                        signal.getPreviousRank(),
+                        signal.getRankChange(),
+                        basePricePoints,
+                        currentPricePoints,
+                        momentumPriceDeltaPoints,
+                        calculateMomentumPriceDeltaPercent(basePricePoints, momentumPriceDeltaPoints),
+                        resolveMomentumPriceType(momentumPriceDeltaPoints),
+                        signal.getCurrentViewCount(),
+                        signal.getViewCountDelta(),
+                        signal.isNew(),
+                        blockedReason == null,
+                        blockedReason,
+                        signal.getCapturedAt()
+                    );
+                })
+                .toList();
+        }
+
+        PreviousSnapshotContext previousSnapshotContext = loadPreviousSnapshotContext(latestSnapshots);
+
+        return latestSnapshots.stream().map(snapshot -> {
+            TrendSignal signal = signalsByVideoId.get(snapshot.getVideoId());
+            TrendSnapshot previousSnapshot = previousSnapshotContext.snapshotsByVideoId().get(snapshot.getVideoId());
+            boolean currentSignal = isCurrentSignalForSnapshot(
+                signal,
+                snapshot,
+                previousSnapshot,
+                previousSnapshotContext.hasPreviousRun()
+            );
+            int currentRank = currentSignal ? signal.getCurrentRank() : snapshot.getRank();
+            Integer previousRank = currentSignal ? signal.getPreviousRank() : previousSnapshot != null ? previousSnapshot.getRank() : null;
+            Integer rankChange = currentSignal ? signal.getRankChange() : previousSnapshot != null ? previousSnapshot.getRank() - snapshot.getRank() : null;
+            Long currentViewCount = currentSignal ? signal.getCurrentViewCount() : snapshot.getViewCount();
+            Long viewCountDelta = currentSignal
+                ? signal.getViewCountDelta()
+                : previousSnapshot != null && previousSnapshot.getViewCount() != null && snapshot.getViewCount() != null
+                    ? snapshot.getViewCount() - previousSnapshot.getViewCount()
+                    : null;
+            boolean isNew = currentSignal ? signal.isNew() : previousSnapshotContext.hasPreviousRun() && previousSnapshot == null;
+            String videoId = currentSignal ? signal.getId().getVideoId() : snapshot.getVideoId();
+            long basePricePoints = GamePointCalculator.calculatePricePoints(currentRank);
             long currentPricePoints = GamePointCalculator.calculateMomentumAdjustedPricePoints(
-                signal.getCurrentRank(),
-                signal.getRankChange()
+                currentRank,
+                rankChange
             );
             long momentumPriceDeltaPoints = currentPricePoints - basePricePoints;
-            boolean alreadyOwned = ownedVideoIds.contains(signal.getId().getVideoId());
+            boolean alreadyOwned = ownedVideoIds.contains(videoId);
             String blockedReason = resolveBuyBlockedReason(wallet, currentPricePoints, maxOpenReached, alreadyOwned);
 
             return new MarketVideoResponse(
-                signal.getId().getVideoId(),
-                signal.getTitle(),
-                signal.getChannelTitle(),
-                signal.getThumbnailUrl(),
-                signal.getCurrentRank(),
-                signal.getPreviousRank(),
-                signal.getRankChange(),
+                videoId,
+                currentSignal ? signal.getTitle() : snapshot.getTitle(),
+                currentSignal ? signal.getChannelTitle() : snapshot.getChannelTitle(),
+                currentSignal ? signal.getThumbnailUrl() : snapshot.getThumbnailUrl(),
+                currentRank,
+                previousRank,
+                rankChange,
                 basePricePoints,
                 currentPricePoints,
                 momentumPriceDeltaPoints,
                 calculateMomentumPriceDeltaPercent(basePricePoints, momentumPriceDeltaPoints),
                 resolveMomentumPriceType(momentumPriceDeltaPoints),
-                signal.getCurrentViewCount(),
-                signal.getViewCountDelta(),
-                signal.isNew(),
+                currentViewCount,
+                viewCountDelta,
+                isNew,
                 blockedReason == null,
                 blockedReason,
-                signal.getCapturedAt()
+                currentSignal ? signal.getCapturedAt() : snapshot.getRun().getCapturedAt()
             );
         }).toList();
     }
@@ -272,9 +344,12 @@ public class GameService {
     private VideoItemResponse toBuyableChartVideoResponse(
         TrendSnapshot snapshot,
         TrendRun run,
-        TrendSignal signal
+        TrendSignal signal,
+        TrendSnapshot previousSnapshot,
+        boolean hasPreviousRun
     ) {
         ThumbnailResponse thumbnail = new ThumbnailResponse(snapshot.getThumbnailUrl(), null, null);
+        boolean currentSignal = isCurrentSignalForSnapshot(signal, snapshot, previousSnapshot, hasPreviousRun);
 
         return new VideoItemResponse(
             snapshot.getVideoId(),
@@ -289,7 +364,7 @@ public class GameService {
                 new ThumbnailsResponse(thumbnail, thumbnail, thumbnail, thumbnail, thumbnail)
             ),
             new StatisticsResponse(snapshot.getViewCount()),
-            signal != null && snapshot.getRank().equals(signal.getCurrentRank())
+            currentSignal
                 ? new TrendResponse(
                     "전체",
                     signal.getCurrentRank(),
@@ -304,15 +379,81 @@ public class GameService {
                 : new TrendResponse(
                     "전체",
                     snapshot.getRank(),
-                    null,
-                    null,
+                    previousSnapshot != null ? previousSnapshot.getRank() : null,
+                    previousSnapshot != null ? previousSnapshot.getRank() - snapshot.getRank() : null,
                     snapshot.getViewCount(),
-                    null,
-                    null,
-                    false,
+                    previousSnapshot != null ? previousSnapshot.getViewCount() : null,
+                    previousSnapshot != null && previousSnapshot.getViewCount() != null && snapshot.getViewCount() != null
+                        ? snapshot.getViewCount() - previousSnapshot.getViewCount()
+                        : null,
+                    hasPreviousRun && previousSnapshot == null,
                     run.getCapturedAt()
                 )
         );
+    }
+
+    private PreviousSnapshotContext loadPreviousSnapshotContext(List<TrendSnapshot> currentSnapshots) {
+        if (currentSnapshots.isEmpty()) {
+            return new PreviousSnapshotContext(false, Map.of());
+        }
+
+        TrendRun currentRun = currentSnapshots.getFirst().getRun();
+        TrendRun previousRun = trendRunRepository
+            .findTopByRegionCodeAndCategoryIdAndSourceAndCapturedAtBeforeOrderByCapturedAtDescIdDesc(
+                currentRun.getRegionCode(),
+                currentRun.getCategoryId(),
+                currentRun.getSource(),
+                currentRun.getCapturedAt()
+            )
+            .orElse(null);
+        if (previousRun == null) {
+            return new PreviousSnapshotContext(false, Map.of());
+        }
+
+        Map<String, TrendSnapshot> snapshotsByVideoId = trendSnapshotRepository.findByRunId(previousRun.getId()).stream()
+            .collect(Collectors.toMap(TrendSnapshot::getVideoId, Function.identity(), (left, right) -> left));
+        return new PreviousSnapshotContext(true, snapshotsByVideoId);
+    }
+
+    private boolean isCurrentSignalForSnapshot(
+        TrendSignal signal,
+        TrendSnapshot snapshot,
+        TrendSnapshot previousSnapshot,
+        boolean hasPreviousRun
+    ) {
+        if (signal == null) {
+            return false;
+        }
+
+        if (signal.getCurrentRunId() != null
+            && signal.getPreviousRunId() != null
+            && signal.getCurrentRunId().equals(signal.getPreviousRunId())) {
+            return false;
+        }
+
+        boolean currentSnapshotMatches = signal != null
+            && signal.getCurrentRank() != null
+            && signal.getCurrentRank().equals(snapshot.getRank())
+            && (
+                signal.getCurrentRunId() != null && signal.getCurrentRunId().equals(snapshot.getRun().getId())
+                    || signal.getCapturedAt() != null && signal.getCapturedAt().equals(snapshot.getRun().getCapturedAt())
+            );
+
+        if (!currentSnapshotMatches) {
+            return false;
+        }
+
+        if (previousSnapshot == null && !hasPreviousRun) {
+            return true;
+        }
+
+        Integer expectedPreviousRank = previousSnapshot != null ? previousSnapshot.getRank() : null;
+        Integer expectedRankChange = previousSnapshot != null ? previousSnapshot.getRank() - snapshot.getRank() : null;
+        boolean expectedIsNew = hasPreviousRun && previousSnapshot == null;
+
+        return Objects.equals(signal.getPreviousRank(), expectedPreviousRank)
+            && Objects.equals(signal.getRankChange(), expectedRankChange)
+            && signal.isNew() == expectedIsNew;
     }
 
     private int parseBuyableChartPageToken(String pageToken) {
@@ -1661,6 +1802,9 @@ public class GameService {
     }
 
     private record LatestTrendRun(TrendRun run, List<TrendSnapshot> snapshots) {
+    }
+
+    private record PreviousSnapshotContext(boolean hasPreviousRun, Map<String, TrendSnapshot> snapshotsByVideoId) {
     }
 
     private record PositionHistoryWindow(Long startRunId, Long endRunId, Integer latestRank, Instant latestCapturedAt) {

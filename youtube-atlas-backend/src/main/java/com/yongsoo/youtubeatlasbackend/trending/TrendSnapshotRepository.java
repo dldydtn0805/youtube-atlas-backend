@@ -24,6 +24,12 @@ public interface TrendSnapshotRepository extends JpaRepository<TrendSnapshot, Lo
               from TrendSnapshot candidate
               where candidate.regionCode = :regionCode
                 and candidate.categoryId = :categoryId
+                and candidate.run.capturedAt = (
+                    select max(latest.run.capturedAt)
+                    from TrendSnapshot latest
+                    where latest.regionCode = :regionCode
+                      and latest.categoryId = :categoryId
+                )
           )
         order by snapshot.rank asc
         """)

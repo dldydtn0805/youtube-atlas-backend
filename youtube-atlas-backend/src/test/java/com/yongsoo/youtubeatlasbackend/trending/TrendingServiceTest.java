@@ -62,12 +62,57 @@ class TrendingServiceTest {
 
     @Test
     void getSignalsAlwaysUsesAllCategoryId() {
-        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "0", List.of("video-1")))
-            .thenReturn(List.of());
+        TrendRun latestRun = trendRun(88L, Instant.parse("2026-04-17T12:00:00Z"));
+        TrendSnapshot latestSnapshot = snapshot(latestRun, "video-1", 1);
+        TrendSignal signal = trendSignal("KR", "0", "video-1", 1, 0, "Signal", latestRun.getCapturedAt());
+        signal.setCurrentRunId(latestRun.getId());
+        signal.setPreviousRunId(87L);
+        signal.setPreviousRank(1);
+        signal.setRankChange(0);
+
+        when(trendSnapshotRepository.findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc("KR", "0"))
+            .thenReturn(List.of(latestSnapshot));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryId("KR", "0"))
+            .thenReturn(List.of(signal));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndSourceAndCapturedAtBeforeOrderByCapturedAtDescIdDesc(
+            "KR", "0", "youtube-mostPopular", latestRun.getCapturedAt()
+        )).thenReturn(Optional.empty());
 
         trendingService.getSignals("kr", "10", List.of("video-1"));
 
-        verify(trendSignalRepository).findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn("KR", "0", List.of("video-1"));
+        verify(trendSnapshotRepository).findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc("KR", "0");
+        verify(trendSignalRepository).findByIdRegionCodeAndIdCategoryId("KR", "0");
+    }
+
+    @Test
+    void getSignalsFallsBackToSnapshotDerivedNewWhenSignalPointsToSameRun() {
+        TrendRun latestRun = trendRun(90L, Instant.parse("2026-04-17T12:00:00Z"));
+        TrendRun previousRun = trendRun(89L, Instant.parse("2026-04-17T11:00:00Z"));
+        TrendSnapshot latestSnapshot = snapshot(latestRun, "video-1", 2);
+        TrendSignal brokenSignal = trendSignal("KR", "0", "video-1", 2, 0, "Broken", latestRun.getCapturedAt());
+        brokenSignal.setCurrentRunId(latestRun.getId());
+        brokenSignal.setPreviousRunId(latestRun.getId());
+        brokenSignal.setPreviousRank(2);
+        brokenSignal.setRankChange(0);
+        brokenSignal.setNew(false);
+
+        when(trendSnapshotRepository.findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc("KR", "0"))
+            .thenReturn(List.of(latestSnapshot));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryId("KR", "0"))
+            .thenReturn(List.of(brokenSignal));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndSourceAndCapturedAtBeforeOrderByCapturedAtDescIdDesc(
+            "KR", "0", "youtube-mostPopular", latestRun.getCapturedAt()
+        )).thenReturn(Optional.of(previousRun));
+        when(trendSnapshotRepository.findByRunId(previousRun.getId())).thenReturn(List.of());
+
+        var response = trendingService.getSignals("KR", "0", List.of("video-1"));
+
+        assertThat(response).singleElement().satisfies(item -> {
+            assertThat(item.currentRank()).isEqualTo(2);
+            assertThat(item.previousRank()).isNull();
+            assertThat(item.rankChange()).isNull();
+            assertThat(item.isNew()).isTrue();
+        });
     }
 
     @Test
@@ -110,13 +155,13 @@ class TrendingServiceTest {
     }
 
     @Test
-    void getTopRankRisersReturnsTopTenPositiveRankChangesFromAllCategory() {
+    void getTopRankRisersReturnsTopTenLargestRankChangesFromAllCategory() {
         Instant capturedAt = Instant.parse("2026-04-01T05:30:00Z");
         TrendRun latestRun = trendRun(12L, capturedAt);
         TrendSnapshot firstSnapshot = snapshot(latestRun, "video-1", 2);
         TrendSnapshot secondSnapshot = snapshot(latestRun, "video-2", 5);
         TrendSignal first = trendSignal("KR", "0", "video-1", 2, 12, "Top rise 1", capturedAt);
-        TrendSignal second = trendSignal("KR", "0", "video-2", 5, 9, "Top rise 2", capturedAt);
+        TrendSignal second = trendSignal("KR", "0", "video-2", 5, -15, "Top drop 2", capturedAt);
 
         when(trendSnapshotRepository.findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc("KR", "0"))
             .thenReturn(List.of(firstSnapshot, secondSnapshot));
@@ -132,8 +177,8 @@ class TrendingServiceTest {
         assertThat(response.capturedAt()).isEqualTo(capturedAt);
         assertThat(response.items()).extracting("videoId", "rankChange")
             .containsExactly(
-                org.assertj.core.groups.Tuple.tuple("video-1", 12),
-                org.assertj.core.groups.Tuple.tuple("video-2", 9)
+                org.assertj.core.groups.Tuple.tuple("video-2", -15),
+                org.assertj.core.groups.Tuple.tuple("video-1", 12)
             );
     }
 
@@ -312,6 +357,34 @@ class TrendingServiceTest {
     }
 
     @Test
+    void getTopVideosDerivesRankDropFromPreviousSnapshotWhenSignalIsStale() {
+        TrendRun previousRun = trendRun(24L, Instant.parse("2026-04-02T07:00:00Z"));
+        TrendRun latestRun = trendRun(25L, Instant.parse("2026-04-02T08:00:00Z"));
+        TrendSnapshot latestSnapshot = snapshot(latestRun, "video-1", 5);
+        TrendSignal staleSignal = trendSignal("KR", "0", "video-1", 3, 0, "Stale", previousRun.getCapturedAt());
+
+        when(trendSnapshotRepository.findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc("KR", "0"))
+            .thenReturn(List.of(latestSnapshot));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryId("KR", "0"))
+            .thenReturn(List.of(staleSignal));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndSourceAndCapturedAtBeforeOrderByCapturedAtDescIdDesc(
+            "KR", "0", "youtube-mostPopular", latestRun.getCapturedAt()
+        ))
+            .thenReturn(Optional.of(previousRun));
+        when(trendSnapshotRepository.findByRunId(previousRun.getId()))
+            .thenReturn(List.of(snapshot(previousRun, "video-1", 3)));
+
+        var response = trendingService.getTopVideos("KR", null);
+
+        assertThat(response.items()).singleElement().satisfies(item -> {
+            assertThat(item.trend().currentRank()).isEqualTo(5);
+            assertThat(item.trend().previousRank()).isEqualTo(3);
+            assertThat(item.trend().rankChange()).isEqualTo(-2);
+            assertThat(item.trend().isNew()).isFalse();
+        });
+    }
+
+    @Test
     void getMusicTopVideosUsesLatestStoredSnapshots() {
         TrendRun latestRun = trendRun(24L, Instant.parse("2026-04-02T08:30:00Z"));
         TrendSnapshot music = snapshot(latestRun, "music-1", 1, "10", "음악");
@@ -360,7 +433,7 @@ class TrendingServiceTest {
 
         when(trendSnapshotRepository.findByRegionCodeAndCategoryIdAndVideoIdOrderByRun_IdAsc("KR", "0", "video-1"))
             .thenReturn(List.of(snapshot));
-        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0"))
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByCapturedAtDescIdDesc("KR", "0"))
             .thenReturn(Optional.of(latestRun));
         when(trendRunRepository.findByRegionCodeAndCategoryIdAndIdBetweenOrderByIdAsc("KR", "0", 11L, 12L))
             .thenReturn(List.of(firstRun, latestRun));
@@ -384,7 +457,9 @@ class TrendingServiceTest {
             .thenReturn(Optional.empty());
         when(youTubeCatalogService.fetchMergedCategoryVideos("KR", List.of(), 3))
             .thenReturn(List.of(video("video-1")));
-        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc(eq("KR"), eq("0"), any()))
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndSourceAndCapturedAtBeforeOrderByCapturedAtDescIdDesc(
+            eq("KR"), eq("0"), eq("youtube-mostPopular"), any()
+        ))
             .thenReturn(Optional.empty());
         when(trendRunRepository.findIdsByRegionCodeAndCategoryIdAndCapturedAtBefore(eq("KR"), eq("0"), any()))
             .thenReturn(List.of());
@@ -415,7 +490,9 @@ class TrendingServiceTest {
             .thenReturn(Optional.empty());
         when(youTubeCatalogService.fetchMergedCategoryVideos("US", List.of(), 3))
             .thenReturn(List.of(video("video-1")));
-        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc(eq("US"), eq("0"), any()))
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndSourceAndCapturedAtBeforeOrderByCapturedAtDescIdDesc(
+            eq("US"), eq("0"), eq("youtube-mostPopular"), any()
+        ))
             .thenReturn(Optional.empty());
         when(trendRunRepository.findIdsByRegionCodeAndCategoryIdAndCapturedAtBefore(eq("US"), eq("0"), any()))
             .thenReturn(List.of(4L, 5L));
@@ -437,7 +514,9 @@ class TrendingServiceTest {
             .thenReturn(Optional.of(existingRun));
         when(youTubeCatalogService.fetchMergedCategoryVideos("KR", List.of(), 3))
             .thenReturn(List.of(video("video-1")));
-        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc("KR", "0", 31L))
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndSourceAndCapturedAtBeforeOrderByCapturedAtDescIdDesc(
+            "KR", "0", "youtube-mostPopular", existingRun.getCapturedAt()
+        ))
             .thenReturn(Optional.empty());
         when(trendRunRepository.findIdsByRegionCodeAndCategoryIdAndCapturedAtBefore(eq("KR"), eq("0"), any()))
             .thenReturn(List.of());
@@ -452,6 +531,37 @@ class TrendingServiceTest {
     }
 
     @Test
+    void syncComparesAgainstPreviousCapturedSlotForRankChange() {
+        TrendRun currentRun = trendRun(51L, Instant.parse("2026-04-10T09:00:00Z"));
+        TrendRun previousRun = trendRun(49L, Instant.parse("2026-04-10T08:00:00Z"));
+
+        when(trendRunRepository.findByRegionCodeAndCategoryIdAndSourceAndCapturedAt(eq("KR"), eq("0"), eq("youtube-mostPopular"), any()))
+            .thenReturn(Optional.of(currentRun));
+        when(youTubeCatalogService.fetchMergedCategoryVideos("KR", List.of(), 3))
+            .thenReturn(List.of(video("video-1")));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndSourceAndCapturedAtBeforeOrderByCapturedAtDescIdDesc(
+            "KR", "0", "youtube-mostPopular", currentRun.getCapturedAt()
+        ))
+            .thenReturn(Optional.of(previousRun));
+        when(trendSnapshotRepository.findByRunId(previousRun.getId()))
+            .thenReturn(List.of(snapshot(previousRun, "video-1", 4)));
+        when(trendRunRepository.findIdsByRegionCodeAndCategoryIdAndCapturedAtBefore(eq("KR"), eq("0"), any()))
+            .thenReturn(List.of());
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryId("KR", "0"))
+            .thenReturn(List.of());
+        when(trendSignalRepository.findById(any())).thenReturn(Optional.empty());
+
+        trendingService.sync(new SyncTrendingRequest("KR", "0", "전체", List.of()));
+
+        ArgumentCaptor<TrendSignal> signalCaptor = ArgumentCaptor.forClass(TrendSignal.class);
+        verify(trendSignalRepository).save(signalCaptor.capture());
+        assertThat(signalCaptor.getValue().getPreviousRunId()).isEqualTo(previousRun.getId());
+        assertThat(signalCaptor.getValue().getPreviousRank()).isEqualTo(4);
+        assertThat(signalCaptor.getValue().getCurrentRank()).isEqualTo(1);
+        assertThat(signalCaptor.getValue().getRankChange()).isEqualTo(3);
+    }
+
+    @Test
     void getVideoHistoryCollapsesDuplicateRunsInSameCaptureSlot() {
         TrendRun firstRun = trendRun(41L, Instant.parse("2026-04-10T07:00:03Z"));
         TrendRun secondRun = trendRun(42L, Instant.parse("2026-04-10T07:04:55Z"));
@@ -463,7 +573,7 @@ class TrendingServiceTest {
                 snapshot(secondRun, "video-1", 133),
                 snapshot(latestRun, "video-1", 128)
             ));
-        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0"))
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByCapturedAtDescIdDesc("KR", "0"))
             .thenReturn(Optional.of(latestRun));
         when(trendRunRepository.findByRegionCodeAndCategoryIdAndIdBetweenOrderByIdAsc("KR", "0", 41L, 43L))
             .thenReturn(List.of(firstRun, secondRun, latestRun));

@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -83,11 +84,33 @@ public class TrendingService {
             return List.of();
         }
 
-        return trendSignalRepository.findByIdRegionCodeAndIdCategoryIdAndIdVideoIdIn(
-            regionCode.trim().toUpperCase(),
-            TRENDING_CATEGORY_ID,
-            videoIds
-        ).stream().map(this::toResponse).toList();
+        String normalizedRegionCode = regionCode.trim().toUpperCase();
+        List<TrendSnapshot> latestSnapshots = loadLatestSnapshots(normalizedRegionCode);
+        Map<String, TrendSnapshot> latestSnapshotsByVideoId = latestSnapshots.stream()
+            .collect(Collectors.toMap(TrendSnapshot::getVideoId, Function.identity(), (left, right) -> left));
+        Map<String, TrendSignal> signalsByVideoId = loadSignalsByVideoId(normalizedRegionCode);
+        PreviousSnapshotContext previousSnapshotContext = loadPreviousSnapshotContext(latestSnapshots);
+
+        return videoIds.stream()
+            .map(this::normalizeVideoId)
+            .distinct()
+            .map(videoId -> {
+                TrendSnapshot snapshot = latestSnapshotsByVideoId.get(videoId);
+
+                if (snapshot != null) {
+                    return toSnapshotSignalResponse(
+                        snapshot,
+                        signalsByVideoId.get(videoId),
+                        previousSnapshotContext.snapshotsByVideoId().get(videoId),
+                        previousSnapshotContext.hasPreviousRun()
+                    );
+                }
+
+                TrendSignal signal = signalsByVideoId.get(videoId);
+                return signal != null ? toResponse(signal) : null;
+            })
+            .filter(Objects::nonNull)
+            .toList();
     }
 
     @Transactional(readOnly = true)
@@ -96,8 +119,14 @@ public class TrendingService {
         int rankChangeThreshold = atlasProperties.getTrending().getRealtimeSurgingRankChangeThreshold();
         List<TrendSnapshot> snapshots = loadLatestSnapshots(normalizedRegionCode);
         Map<String, TrendSignal> signalsByVideoId = loadSignalsByVideoId(normalizedRegionCode);
+        PreviousSnapshotContext previousSnapshotContext = loadPreviousSnapshotContext(snapshots);
         List<TrendSignalResponse> items = snapshots.stream()
-            .map(snapshot -> toSnapshotSignalResponse(snapshot, signalsByVideoId.get(snapshot.getVideoId())))
+            .map(snapshot -> toSnapshotSignalResponse(
+                snapshot,
+                signalsByVideoId.get(snapshot.getVideoId()),
+                previousSnapshotContext.snapshotsByVideoId().get(snapshot.getVideoId()),
+                previousSnapshotContext.hasPreviousRun()
+            ))
             .filter(item -> item.rankChange() != null && item.rankChange() >= rankChangeThreshold)
             .sorted(Comparator
                 .comparing(TrendSignalResponse::rankChange, Comparator.reverseOrder())
@@ -120,11 +149,19 @@ public class TrendingService {
         String normalizedRegionCode = regionCode.trim().toUpperCase();
         List<TrendSnapshot> snapshots = loadLatestSnapshots(normalizedRegionCode);
         Map<String, TrendSignal> signalsByVideoId = loadSignalsByVideoId(normalizedRegionCode);
+        PreviousSnapshotContext previousSnapshotContext = loadPreviousSnapshotContext(snapshots);
         List<TrendSignalResponse> risingItems = snapshots.stream()
-            .map(snapshot -> toSnapshotSignalResponse(snapshot, signalsByVideoId.get(snapshot.getVideoId())))
-            .filter(item -> item.rankChange() != null && item.rankChange() > 0)
+            .map(snapshot -> toSnapshotSignalResponse(
+                snapshot,
+                signalsByVideoId.get(snapshot.getVideoId()),
+                previousSnapshotContext.snapshotsByVideoId().get(snapshot.getVideoId()),
+                previousSnapshotContext.hasPreviousRun()
+            ))
+            .filter(item -> item.rankChange() != null && item.rankChange() != 0)
             .sorted(Comparator
-                .comparing(TrendSignalResponse::rankChange, Comparator.reverseOrder())
+                .comparingInt((TrendSignalResponse item) -> Math.abs(item.rankChange()))
+                .reversed()
+                .thenComparing(TrendSignalResponse::rankChange, Comparator.reverseOrder())
                 .thenComparing(TrendSignalResponse::currentRank))
             .limit(TOP_RANK_RISERS_LIMIT)
             .toList();
@@ -136,7 +173,12 @@ public class TrendingService {
                 .collect(LinkedHashSet::new, Set::add, Set::addAll);
 
             snapshots.stream()
-                .map(snapshot -> toSnapshotSignalResponse(snapshot, signalsByVideoId.get(snapshot.getVideoId())))
+                .map(snapshot -> toSnapshotSignalResponse(
+                    snapshot,
+                    signalsByVideoId.get(snapshot.getVideoId()),
+                    previousSnapshotContext.snapshotsByVideoId().get(snapshot.getVideoId()),
+                    previousSnapshotContext.hasPreviousRun()
+                ))
                 .filter(TrendSignalResponse::isNew)
                 .filter(item -> !includedVideoIds.contains(item.videoId()))
                 .limit(TOP_RANK_RISERS_LIMIT - items.size())
@@ -162,8 +204,14 @@ public class TrendingService {
         String normalizedRegionCode = regionCode.trim().toUpperCase();
         List<TrendSnapshot> snapshots = loadLatestSnapshots(normalizedRegionCode);
         Map<String, TrendSignal> signalsByVideoId = loadSignalsByVideoId(normalizedRegionCode);
+        PreviousSnapshotContext previousSnapshotContext = loadPreviousSnapshotContext(snapshots);
         List<TrendSignalResponse> items = snapshots.stream()
-            .map(snapshot -> toSnapshotSignalResponse(snapshot, signalsByVideoId.get(snapshot.getVideoId())))
+            .map(snapshot -> toSnapshotSignalResponse(
+                snapshot,
+                signalsByVideoId.get(snapshot.getVideoId()),
+                previousSnapshotContext.snapshotsByVideoId().get(snapshot.getVideoId()),
+                previousSnapshotContext.hasPreviousRun()
+            ))
             .filter(TrendSignalResponse::isNew)
             .toList();
 
@@ -226,6 +274,7 @@ public class TrendingService {
         }
 
         Map<String, TrendSignal> signalsByVideoId = new HashMap<>();
+        PreviousSnapshotContext previousSnapshotContext = loadPreviousSnapshotContext(limitedSnapshots);
         Map<String, String> categoryLabelById = loadCategoryLabels(normalizedRegionCode);
         for (TrendSignal signal : trendSignalRepository.findByIdRegionCodeAndIdCategoryId(
             normalizedRegionCode,
@@ -235,7 +284,14 @@ public class TrendingService {
         }
 
         List<VideoItemResponse> items = limitedSnapshots.subList(startIndex, endIndex).stream()
-            .map(snapshot -> toTopVideoResponse(snapshot, snapshot.getRun(), signalsByVideoId.get(snapshot.getVideoId()), categoryLabelById))
+            .map(snapshot -> toTopVideoResponse(
+                snapshot,
+                snapshot.getRun(),
+                signalsByVideoId.get(snapshot.getVideoId()),
+                previousSnapshotContext.snapshotsByVideoId().get(snapshot.getVideoId()),
+                previousSnapshotContext.hasPreviousRun(),
+                categoryLabelById
+            ))
             .toList();
 
         String nextPageToken = endIndex < limitedSnapshots.size() ? Integer.toString(endIndex) : null;
@@ -264,7 +320,7 @@ public class TrendingService {
             throw new IllegalArgumentException("해당 영상의 랭킹 기록을 찾을 수 없습니다.");
         }
 
-        TrendRun latestRun = trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc(
+        TrendRun latestRun = trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByCapturedAtDescIdDesc(
             normalizedRegionCode,
             TRENDING_CATEGORY_ID
         ).orElse(null);
@@ -383,10 +439,11 @@ public class TrendingService {
         }
 
         trendSnapshotRepository.saveAll(snapshots);
-        TrendRun previousRun = trendRunRepository.findTopByRegionCodeAndCategoryIdAndIdLessThanOrderByIdDesc(
+        TrendRun previousRun = trendRunRepository.findTopByRegionCodeAndCategoryIdAndSourceAndCapturedAtBeforeOrderByCapturedAtDescIdDesc(
             regionCode,
             categoryId,
-            currentRun.getId()
+            source,
+            currentRun.getCapturedAt()
         ).orElse(null);
         List<TrendSnapshot> previousSnapshots = previousRun != null
             ? trendSnapshotRepository.findByRunId(previousRun.getId())
@@ -584,19 +641,30 @@ public class TrendingService {
         );
     }
 
-    private TrendSignalResponse toSnapshotSignalResponse(TrendSnapshot snapshot, TrendSignal signal) {
+    private TrendSignalResponse toSnapshotSignalResponse(
+        TrendSnapshot snapshot,
+        TrendSignal signal,
+        TrendSnapshot previousSnapshot,
+        boolean hasPreviousRun
+    ) {
+        if (isCurrentSignalForSnapshot(signal, snapshot, previousSnapshot, hasPreviousRun)) {
+            return toResponse(signal);
+        }
+
         return new TrendSignalResponse(
             snapshot.getRegionCode(),
             snapshot.getCategoryId(),
             TRENDING_CATEGORY_LABEL,
             snapshot.getVideoId(),
             snapshot.getRank(),
-            signal != null ? signal.getPreviousRank() : null,
-            signal != null ? signal.getRankChange() : null,
+            previousSnapshot != null ? previousSnapshot.getRank() : null,
+            previousSnapshot != null ? previousSnapshot.getRank() - snapshot.getRank() : null,
             snapshot.getViewCount(),
-            signal != null ? signal.getPreviousViewCount() : null,
-            signal != null ? signal.getViewCountDelta() : null,
-            signal != null && signal.isNew(),
+            previousSnapshot != null ? previousSnapshot.getViewCount() : null,
+            previousSnapshot != null && previousSnapshot.getViewCount() != null && snapshot.getViewCount() != null
+                ? snapshot.getViewCount() - previousSnapshot.getViewCount()
+                : null,
+            hasPreviousRun && previousSnapshot == null,
             snapshot.getTitle(),
             snapshot.getChannelTitle(),
             snapshot.getChannelId(),
@@ -623,6 +691,70 @@ public class TrendingService {
         ).stream().collect(Collectors.toMap(signal -> signal.getId().getVideoId(), Function.identity(), (left, right) -> left));
     }
 
+    private PreviousSnapshotContext loadPreviousSnapshotContext(List<TrendSnapshot> currentSnapshots) {
+        if (currentSnapshots.isEmpty()) {
+            return new PreviousSnapshotContext(false, Map.of());
+        }
+
+        TrendRun currentRun = currentSnapshots.getFirst().getRun();
+        TrendRun previousRun = trendRunRepository
+            .findTopByRegionCodeAndCategoryIdAndSourceAndCapturedAtBeforeOrderByCapturedAtDescIdDesc(
+                currentRun.getRegionCode(),
+                currentRun.getCategoryId(),
+                currentRun.getSource(),
+                currentRun.getCapturedAt()
+            )
+            .orElse(null);
+        if (previousRun == null) {
+            return new PreviousSnapshotContext(false, Map.of());
+        }
+
+        Map<String, TrendSnapshot> snapshotsByVideoId = trendSnapshotRepository.findByRunId(previousRun.getId()).stream()
+            .collect(Collectors.toMap(TrendSnapshot::getVideoId, Function.identity(), (left, right) -> left));
+        return new PreviousSnapshotContext(true, snapshotsByVideoId);
+    }
+
+    private boolean isCurrentSignalForSnapshot(
+        TrendSignal signal,
+        TrendSnapshot snapshot,
+        TrendSnapshot previousSnapshot,
+        boolean hasPreviousRun
+    ) {
+        if (signal == null) {
+            return false;
+        }
+
+        if (signal.getCurrentRunId() != null
+            && signal.getPreviousRunId() != null
+            && signal.getCurrentRunId().equals(signal.getPreviousRunId())) {
+            return false;
+        }
+
+        boolean currentSnapshotMatches = signal != null
+            && signal.getCurrentRank() != null
+            && signal.getCurrentRank().equals(snapshot.getRank())
+            && (
+                signal.getCurrentRunId() != null && signal.getCurrentRunId().equals(snapshot.getRun().getId())
+                    || signal.getCapturedAt() != null && signal.getCapturedAt().equals(snapshot.getRun().getCapturedAt())
+            );
+
+        if (!currentSnapshotMatches) {
+            return false;
+        }
+
+        if (previousSnapshot == null && !hasPreviousRun) {
+            return true;
+        }
+
+        Integer expectedPreviousRank = previousSnapshot != null ? previousSnapshot.getRank() : null;
+        Integer expectedRankChange = previousSnapshot != null ? previousSnapshot.getRank() - snapshot.getRank() : null;
+        boolean expectedIsNew = hasPreviousRun && previousSnapshot == null;
+
+        return Objects.equals(signal.getPreviousRank(), expectedPreviousRank)
+            && Objects.equals(signal.getRankChange(), expectedRankChange)
+            && signal.isNew() == expectedIsNew;
+    }
+
     private Instant resolveSnapshotCapturedAt(List<TrendSnapshot> snapshots, List<TrendSignalResponse> items) {
         if (!items.isEmpty()) {
             return items.getFirst().capturedAt();
@@ -638,7 +770,7 @@ public class TrendingService {
         return items.stream()
             .map(TrendSignalResponse::capturedAt)
             .findFirst()
-            .orElseGet(() -> trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc(
+            .orElseGet(() -> trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByCapturedAtDescIdDesc(
                 regionCode,
                 TRENDING_CATEGORY_ID
             ).map(TrendRun::getCapturedAt).orElse(null));
@@ -675,6 +807,8 @@ public class TrendingService {
         TrendSnapshot snapshot,
         TrendRun run,
         TrendSignal signal,
+        TrendSnapshot previousSnapshot,
+        boolean hasPreviousRun,
         Map<String, String> categoryLabelById
     ) {
         ThumbnailResponse thumbnail = new ThumbnailResponse(snapshot.getThumbnailUrl(), null, null);
@@ -699,7 +833,13 @@ public class TrendingService {
                 new ThumbnailsResponse(thumbnail, thumbnail, thumbnail, thumbnail, thumbnail)
             ),
             new StatisticsResponse(snapshot.getViewCount()),
-            toTrendResponse(snapshot, run, signal != null && snapshot.getRank().equals(signal.getCurrentRank()) ? signal : null)
+            toTrendResponse(
+                snapshot,
+                run,
+                isCurrentSignalForSnapshot(signal, snapshot, previousSnapshot, hasPreviousRun) ? signal : null,
+                previousSnapshot,
+                hasPreviousRun
+            )
         );
     }
 
@@ -782,7 +922,13 @@ public class TrendingService {
             .collect(Collectors.toMap(VideoCategoryResponse::id, VideoCategoryResponse::label, (left, right) -> left));
     }
 
-    private TrendResponse toTrendResponse(TrendSnapshot snapshot, TrendRun run, TrendSignal signal) {
+    private TrendResponse toTrendResponse(
+        TrendSnapshot snapshot,
+        TrendRun run,
+        TrendSignal signal,
+        TrendSnapshot previousSnapshot,
+        boolean hasPreviousRun
+    ) {
         if (signal != null) {
             return new TrendResponse(
                 signal.getCategoryLabel(),
@@ -800,14 +946,19 @@ public class TrendingService {
         return new TrendResponse(
             TRENDING_CATEGORY_LABEL,
             snapshot.getRank(),
-            null,
-            null,
+            previousSnapshot != null ? previousSnapshot.getRank() : null,
+            previousSnapshot != null ? previousSnapshot.getRank() - snapshot.getRank() : null,
             snapshot.getViewCount(),
-            null,
-            null,
-            false,
+            previousSnapshot != null ? previousSnapshot.getViewCount() : null,
+            previousSnapshot != null && previousSnapshot.getViewCount() != null && snapshot.getViewCount() != null
+                ? snapshot.getViewCount() - previousSnapshot.getViewCount()
+                : null,
+            hasPreviousRun && previousSnapshot == null,
             run.getCapturedAt()
         );
+    }
+
+    private record PreviousSnapshotContext(boolean hasPreviousRun, Map<String, TrendSnapshot> snapshotsByVideoId) {
     }
 
     private int parseTopVideosPageToken(String pageToken) {

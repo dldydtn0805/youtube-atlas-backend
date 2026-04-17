@@ -641,6 +641,47 @@ class GameServiceTest {
     }
 
     @Test
+    void getMarketFallsBackToSnapshotDerivedNewWhenSignalPointsToSameRun() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        TrendRun latestRun = trendRun(55L, Instant.parse("2026-04-17T12:00:00Z"));
+        TrendRun previousRun = trendRun(54L, Instant.parse("2026-04-17T11:00:00Z"));
+        TrendSnapshot latestSnapshot = snapshot(latestRun, "video-1", 2);
+        TrendSignal brokenSignal = signal("video-1", 2, 0);
+        brokenSignal.setCurrentRunId(latestRun.getId());
+        brokenSignal.setPreviousRunId(latestRun.getId());
+        brokenSignal.setPreviousRank(2);
+        brokenSignal.setRankChange(0);
+        brokenSignal.setNew(false);
+        brokenSignal.setCapturedAt(latestRun.getCapturedAt());
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(0L);
+        when(gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(1L, 7L, PositionStatus.OPEN))
+            .thenReturn(List.of());
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryId("KR", "0"))
+            .thenReturn(List.of(brokenSignal));
+        when(trendSnapshotRepository.findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc("KR", "0"))
+            .thenReturn(List.of(latestSnapshot));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndSourceAndCapturedAtBeforeOrderByCapturedAtDescIdDesc(
+            "KR", "0", "youtube-mostPopular", latestRun.getCapturedAt()
+        )).thenReturn(Optional.of(previousRun));
+        when(trendSnapshotRepository.findByRunId(previousRun.getId())).thenReturn(List.of());
+
+        var response = gameService.getMarket(authenticatedUser(), "KR");
+
+        assertThat(response).singleElement().satisfies(item -> {
+            assertThat(item.currentRank()).isEqualTo(2);
+            assertThat(item.previousRank()).isNull();
+            assertThat(item.rankChange()).isNull();
+            assertThat(item.isNew()).isTrue();
+        });
+    }
+
+    @Test
     void getBuyableMarketChartReturnsOnlyCurrentlyBuyableTopVideos() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
@@ -702,6 +743,7 @@ class GameServiceTest {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        TrendRun previousRun = trendRun(54L, Instant.parse("2026-04-01T05:00:00Z"));
         TrendRun latestRun = trendRun(55L, Instant.parse("2026-04-01T06:00:00Z"));
         TrendSignal staleSignal = signal("video-1", 120, 0);
 
@@ -716,12 +758,20 @@ class GameServiceTest {
             .thenReturn(List.of(staleSignal));
         when(trendSnapshotRepository.findLatestSnapshotRunByRegionCodeAndCategoryIdOrderByRankAsc("KR", "0"))
             .thenReturn(List.of(snapshot(latestRun, "video-1", 190)));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdAndSourceAndCapturedAtBeforeOrderByCapturedAtDescIdDesc(
+            "KR", "0", "youtube-mostPopular", latestRun.getCapturedAt()
+        ))
+            .thenReturn(Optional.of(previousRun));
+        when(trendSnapshotRepository.findByRunId(previousRun.getId()))
+            .thenReturn(List.of(snapshot(previousRun, "video-1", 170)));
 
         var response = gameService.getBuyableMarketChart(authenticatedUser(), "KR", null);
 
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().getFirst().id()).isEqualTo("video-1");
         assertThat(response.items().getFirst().trend().currentRank()).isEqualTo(190);
+        assertThat(response.items().getFirst().trend().previousRank()).isEqualTo(170);
+        assertThat(response.items().getFirst().trend().rankChange()).isEqualTo(-20);
     }
 
     @Test
