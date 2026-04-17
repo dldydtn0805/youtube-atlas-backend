@@ -1,5 +1,6 @@
 package com.yongsoo.youtubeatlasbackend.trending;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -60,5 +61,20 @@ public interface TrendSnapshotRepository extends JpaRepository<TrendSnapshot, Lo
         String regionCode,
         String categoryId,
         String videoId
+    );
+
+    @Query("""
+        select snapshot
+        from TrendSnapshot snapshot
+        join fetch snapshot.run run
+        where snapshot.createdAt >= :startAt
+          and snapshot.createdAt <= :endAt
+          and (:regionCode is null or upper(snapshot.regionCode) = upper(:regionCode))
+        order by snapshot.createdAt desc, run.id desc, snapshot.rank asc
+        """)
+    List<TrendSnapshot> findByCreatedAtBetweenAndRegionCodeOrderByCreatedAtDesc(
+        Instant startAt,
+        Instant endAt,
+        String regionCode
     );
 }

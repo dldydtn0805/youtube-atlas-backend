@@ -19,6 +19,7 @@ import com.yongsoo.youtubeatlasbackend.admin.AdminDashboardService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminPositionService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminSeasonService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminTradeHistoryService;
+import com.yongsoo.youtubeatlasbackend.admin.AdminTrendSnapshotHistoryService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminUserService;
 
 @RestController
@@ -32,6 +33,7 @@ public class AdminController {
     private final AdminUserService adminUserService;
     private final AdminSeasonService adminSeasonService;
     private final AdminTradeHistoryService adminTradeHistoryService;
+    private final AdminTrendSnapshotHistoryService adminTrendSnapshotHistoryService;
 
     public AdminController(
         AdminAccessService adminAccessService,
@@ -40,7 +42,8 @@ public class AdminController {
         AdminPositionService adminPositionService,
         AdminUserService adminUserService,
         AdminSeasonService adminSeasonService,
-        AdminTradeHistoryService adminTradeHistoryService
+        AdminTradeHistoryService adminTradeHistoryService,
+        AdminTrendSnapshotHistoryService adminTrendSnapshotHistoryService
     ) {
         this.adminAccessService = adminAccessService;
         this.adminCommentService = adminCommentService;
@@ -49,12 +52,24 @@ public class AdminController {
         this.adminUserService = adminUserService;
         this.adminSeasonService = adminSeasonService;
         this.adminTradeHistoryService = adminTradeHistoryService;
+        this.adminTrendSnapshotHistoryService = adminTrendSnapshotHistoryService;
     }
 
     @GetMapping("/dashboard")
     public AdminDashboardResponse getDashboard(@RequestHeader("Authorization") String authorizationHeader) {
         adminAccessService.requireAdmin(authorizationHeader);
         return adminDashboardService.getDashboard();
+    }
+
+    @GetMapping("/trend-snapshots")
+    public AdminTrendSnapshotHistoryResponse getTrendSnapshots(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam java.time.Instant startAt,
+        @RequestParam java.time.Instant endAt,
+        @RequestParam(required = false) String regionCode
+    ) {
+        adminAccessService.requireAdmin(authorizationHeader);
+        return adminTrendSnapshotHistoryService.getSnapshotsBySavedAtRange(startAt, endAt, regionCode);
     }
 
     @PostMapping("/comments/purge")
