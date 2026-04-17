@@ -155,7 +155,7 @@ class TrendingServiceTest {
     }
 
     @Test
-    void getTopRankRisersReturnsTopTenLargestRankChangesFromAllCategory() {
+    void getTopRankRisersReturnsOnlyPositiveRankChangesFromAllCategory() {
         Instant capturedAt = Instant.parse("2026-04-01T05:30:00Z");
         TrendRun latestRun = trendRun(12L, capturedAt);
         TrendSnapshot firstSnapshot = snapshot(latestRun, "video-1", 2);
@@ -173,17 +173,14 @@ class TrendingServiceTest {
         assertThat(response.regionCode()).isEqualTo("KR");
         assertThat(response.categoryId()).isEqualTo("0");
         assertThat(response.limit()).isEqualTo(10);
-        assertThat(response.totalCount()).isEqualTo(2);
+        assertThat(response.totalCount()).isEqualTo(1);
         assertThat(response.capturedAt()).isEqualTo(capturedAt);
         assertThat(response.items()).extracting("videoId", "rankChange")
-            .containsExactly(
-                org.assertj.core.groups.Tuple.tuple("video-2", -15),
-                org.assertj.core.groups.Tuple.tuple("video-1", 12)
-            );
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("video-1", 12));
     }
 
     @Test
-    void getTopRankRisersFillsRemainingSlotsWithNewEntriesOrderedByCurrentRank() {
+    void getTopRankRisersDoesNotFillRemainingSlotsWithNewEntries() {
         Instant capturedAt = Instant.parse("2026-04-01T05:30:00Z");
         TrendRun latestRun = trendRun(13L, capturedAt);
         TrendSnapshot risingSnapshot = snapshot(latestRun, "video-1", 2);
@@ -202,12 +199,9 @@ class TrendingServiceTest {
 
         var response = trendingService.getTopRankRisers("KR");
 
+        assertThat(response.totalCount()).isEqualTo(1);
         assertThat(response.items()).extracting("videoId", "currentRank", "isNew")
-            .containsExactly(
-                org.assertj.core.groups.Tuple.tuple("video-1", 2, false),
-                org.assertj.core.groups.Tuple.tuple("video-3", 4, true),
-                org.assertj.core.groups.Tuple.tuple("video-4", 7, true)
-            );
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("video-1", 2, false));
     }
 
     @Test

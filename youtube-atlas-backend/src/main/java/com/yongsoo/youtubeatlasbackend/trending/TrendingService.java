@@ -150,43 +150,19 @@ public class TrendingService {
         List<TrendSnapshot> snapshots = loadLatestSnapshots(normalizedRegionCode);
         Map<String, TrendSignal> signalsByVideoId = loadSignalsByVideoId(normalizedRegionCode);
         PreviousSnapshotContext previousSnapshotContext = loadPreviousSnapshotContext(snapshots);
-        List<TrendSignalResponse> risingItems = snapshots.stream()
+        List<TrendSignalResponse> items = snapshots.stream()
             .map(snapshot -> toSnapshotSignalResponse(
                 snapshot,
                 signalsByVideoId.get(snapshot.getVideoId()),
                 previousSnapshotContext.snapshotsByVideoId().get(snapshot.getVideoId()),
                 previousSnapshotContext.hasPreviousRun()
             ))
-            .filter(item -> item.rankChange() != null && item.rankChange() != 0)
+            .filter(item -> item.rankChange() != null && item.rankChange() > 0)
             .sorted(Comparator
-                .comparingInt((TrendSignalResponse item) -> Math.abs(item.rankChange()))
-                .reversed()
-                .thenComparing(TrendSignalResponse::rankChange, Comparator.reverseOrder())
+                .comparing(TrendSignalResponse::rankChange, Comparator.reverseOrder())
                 .thenComparing(TrendSignalResponse::currentRank))
             .limit(TOP_RANK_RISERS_LIMIT)
             .toList();
-        List<TrendSignalResponse> items = new ArrayList<>(risingItems);
-
-        if (items.size() < TOP_RANK_RISERS_LIMIT) {
-            Set<String> includedVideoIds = items.stream()
-                .map(TrendSignalResponse::videoId)
-                .collect(LinkedHashSet::new, Set::add, Set::addAll);
-
-            snapshots.stream()
-                .map(snapshot -> toSnapshotSignalResponse(
-                    snapshot,
-                    signalsByVideoId.get(snapshot.getVideoId()),
-                    previousSnapshotContext.snapshotsByVideoId().get(snapshot.getVideoId()),
-                    previousSnapshotContext.hasPreviousRun()
-                ))
-                .filter(TrendSignalResponse::isNew)
-                .filter(item -> !includedVideoIds.contains(item.videoId()))
-                .limit(TOP_RANK_RISERS_LIMIT - items.size())
-                .forEach(item -> {
-                    includedVideoIds.add(item.videoId());
-                    items.add(item);
-                });
-        }
 
         return new TopRankRisersResponse(
             normalizedRegionCode,
