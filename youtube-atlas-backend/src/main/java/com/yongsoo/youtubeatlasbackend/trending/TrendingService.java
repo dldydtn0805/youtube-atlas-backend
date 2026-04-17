@@ -162,7 +162,7 @@ public class TrendingService {
             throw new IllegalArgumentException("최신 트렌드 스냅샷이 없습니다.");
         }
 
-        List<TrendSnapshot> limitedSnapshots = allSnapshots.stream()
+        List<TrendSnapshot> limitedSnapshots = dedupeSnapshotsByVideoId(allSnapshots).stream()
             .limit(TOP_VIDEOS_MAX_COUNT)
             .filter(snapshot -> matchesVideoCategory(snapshot, videoCategoryIdFilter))
             .toList();
@@ -289,7 +289,7 @@ public class TrendingService {
     }
 
     @Transactional
-    public SyncTrendingResponse sync(SyncTrendingRequest request) {
+    public synchronized SyncTrendingResponse sync(SyncTrendingRequest request) {
         String regionCode = request.regionCode().trim().toUpperCase();
         String categoryId = TRENDING_CATEGORY_ID;
         String categoryLabel = TRENDING_CATEGORY_LABEL;
@@ -307,11 +307,11 @@ public class TrendingService {
 
         trendSnapshotRepository.deleteByRun_Id(currentRun.getId());
 
-        List<AtlasVideo> videos = youTubeCatalogService.fetchMergedCategoryVideos(
+        List<AtlasVideo> videos = dedupeVideosById(youTubeCatalogService.fetchMergedCategoryVideos(
             regionCode,
             sourceCategoryIds,
             atlasProperties.getTrending().getSyncMaxPagesPerSource()
-        );
+        ));
         Map<String, String> categoryLabelById = loadCategoryLabels(regionCode);
         List<TrendSnapshot> snapshots = new ArrayList<>();
 
@@ -607,8 +607,28 @@ public class TrendingService {
                 new ThumbnailsResponse(thumbnail, thumbnail, thumbnail, thumbnail, thumbnail)
             ),
             new StatisticsResponse(snapshot.getViewCount()),
-            toTrendResponse(snapshot, run, signal)
+            toTrendResponse(snapshot, run, signal != null && snapshot.getRank().equals(signal.getCurrentRank()) ? signal : null)
         );
+    }
+
+    private List<AtlasVideo> dedupeVideosById(List<AtlasVideo> videos) {
+        Map<String, AtlasVideo> uniqueVideos = new LinkedHashMap<>();
+
+        for (AtlasVideo video : videos) {
+            uniqueVideos.putIfAbsent(video.id(), video);
+        }
+
+        return new ArrayList<>(uniqueVideos.values());
+    }
+
+    private List<TrendSnapshot> dedupeSnapshotsByVideoId(List<TrendSnapshot> snapshots) {
+        Map<String, TrendSnapshot> uniqueSnapshots = new LinkedHashMap<>();
+
+        for (TrendSnapshot snapshot : snapshots) {
+            uniqueSnapshots.putIfAbsent(snapshot.getVideoId(), snapshot);
+        }
+
+        return new ArrayList<>(uniqueSnapshots.values());
     }
 
     private List<AvailableCategoryResponse> buildAvailableCategories(String regionCode, List<TrendSnapshot> snapshots) {

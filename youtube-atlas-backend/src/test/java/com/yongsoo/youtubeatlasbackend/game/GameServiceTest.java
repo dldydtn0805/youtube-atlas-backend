@@ -641,6 +641,66 @@ class GameServiceTest {
     }
 
     @Test
+    void getBuyableMarketChartReturnsOnlyCurrentlyBuyableTopVideos() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        TrendRun latestRun = trendRun(55L, Instant.parse("2026-04-01T06:00:00Z"));
+        TrendSignal blockedSignal = signal("video-2", 1, 0);
+        TrendSignal affordableSignal = signal("video-1", 170, 0);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN))
+            .thenReturn(0L);
+        when(gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(1L, 7L, PositionStatus.OPEN))
+            .thenReturn(List.of());
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
+            .thenReturn(List.of(blockedSignal, affordableSignal));
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0"))
+            .thenReturn(Optional.of(latestRun));
+        when(trendSnapshotRepository.findByRunIdOrderByRankAsc(55L))
+            .thenReturn(List.of(snapshot(latestRun, "video-2", 1), snapshot(latestRun, "video-1", 170)));
+
+        var response = gameService.getBuyableMarketChart(authenticatedUser(), "KR", null);
+
+        assertThat(response.categoryId()).isEqualTo("buyable-market");
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().id()).isEqualTo("video-1");
+        assertThat(response.items().getFirst().trend().currentRank()).isEqualTo(170);
+    }
+
+    @Test
+    void getBuyableMarketChartFiltersUsingSnapshotRankEvenWhenSignalRankIsStale() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        TrendRun latestRun = trendRun(55L, Instant.parse("2026-04-01T06:00:00Z"));
+        TrendSignal staleSignal = signal("video-1", 120, 0);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN))
+            .thenReturn(0L);
+        when(gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(1L, 7L, PositionStatus.OPEN))
+            .thenReturn(List.of());
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0"))
+            .thenReturn(Optional.of(latestRun));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryId("KR", "0"))
+            .thenReturn(List.of(staleSignal));
+        when(trendSnapshotRepository.findByRunIdOrderByRankAsc(55L))
+            .thenReturn(List.of(snapshot(latestRun, "video-1", 190)));
+
+        var response = gameService.getBuyableMarketChart(authenticatedUser(), "KR", null);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().id()).isEqualTo("video-1");
+        assertThat(response.items().getFirst().trend().currentRank()).isEqualTo(190);
+    }
+
+    @Test
     void buyAllowsSameVideoPastDistinctVideoLimitWhenWalletCanCoverIt() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);

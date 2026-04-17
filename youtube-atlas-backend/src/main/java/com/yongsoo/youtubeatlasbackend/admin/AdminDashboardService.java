@@ -23,7 +23,7 @@ import com.yongsoo.youtubeatlasbackend.game.GameSeasonRepository;
 import com.yongsoo.youtubeatlasbackend.game.SeasonStatus;
 import com.yongsoo.youtubeatlasbackend.trending.TrendRun;
 import com.yongsoo.youtubeatlasbackend.trending.TrendRunRepository;
-import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotRepository;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotMaintenanceService;
 
 @Service
 public class AdminDashboardService {
@@ -35,7 +35,7 @@ public class AdminDashboardService {
     private final GamePositionRepository gamePositionRepository;
     private final GameSeasonRepository gameSeasonRepository;
     private final TrendRunRepository trendRunRepository;
-    private final TrendSnapshotRepository trendSnapshotRepository;
+    private final TrendSnapshotMaintenanceService trendSnapshotMaintenanceService;
 
     public AdminDashboardService(
         AppUserRepository appUserRepository,
@@ -45,7 +45,7 @@ public class AdminDashboardService {
         GamePositionRepository gamePositionRepository,
         GameSeasonRepository gameSeasonRepository,
         TrendRunRepository trendRunRepository,
-        TrendSnapshotRepository trendSnapshotRepository
+        TrendSnapshotMaintenanceService trendSnapshotMaintenanceService
     ) {
         this.appUserRepository = appUserRepository;
         this.adminAccessService = adminAccessService;
@@ -54,10 +54,10 @@ public class AdminDashboardService {
         this.gamePositionRepository = gamePositionRepository;
         this.gameSeasonRepository = gameSeasonRepository;
         this.trendRunRepository = trendRunRepository;
-        this.trendSnapshotRepository = trendSnapshotRepository;
+        this.trendSnapshotMaintenanceService = trendSnapshotMaintenanceService;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AdminDashboardResponse getDashboard() {
         TrendRun latestTrendRun = trendRunRepository.findTopByOrderByCapturedAtDesc().orElse(null);
         List<AdminSeasonSummaryResponse> activeSeasons = gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE).stream()
@@ -94,7 +94,8 @@ public class AdminDashboardService {
                 latestTrendRun.getCategoryLabel(),
                 latestTrendRun.getSource(),
                 latestTrendRun.getCapturedAt(),
-                trendSnapshotRepository.findTop8ByRun_IdOrderByRankAsc(latestTrendRun.getId()).stream()
+                trendSnapshotMaintenanceService.sanitizeRunSnapshots(latestTrendRun.getId()).stream()
+                    .limit(8)
                     .map(snapshot -> new AdminTrendSnapshotResponse(
                         snapshot.getRank(),
                         snapshot.getVideoId(),

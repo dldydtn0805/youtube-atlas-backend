@@ -46,11 +46,24 @@ import com.yongsoo.youtubeatlasbackend.trending.TrendSignalId;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshot;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotRepository;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategorySectionResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse.ContentDetailsResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse.SnippetResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse.StatisticsResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse.ThumbnailResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse.ThumbnailsResponse;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoItemResponse.TrendResponse;
 
 @Service
 public class GameService {
 
     private static final String TRENDING_CATEGORY_ID = "0";
+    private static final String BUYABLE_CHART_CATEGORY_ID = "buyable-market";
+    private static final String BUYABLE_CHART_LABEL = "매수 가능";
+    private static final String BUYABLE_CHART_DESCRIPTION = "현재 지갑과 보유 상태 기준으로 바로 매수 가능한 영상만 모았습니다.";
+    private static final int BUYABLE_CHART_MAX_COUNT = 200;
+    private static final int BUYABLE_CHART_PAGE_SIZE = BUYABLE_CHART_MAX_COUNT;
     private static final int DEFAULT_FALLBACK_RANK = 201;
     private static final int COIN_ELIGIBLE_RANK_CUTOFF = 200;
     private static final CoinRateAnchor[] COIN_RATE_ANCHORS = {
@@ -125,6 +138,80 @@ public class GameService {
     public List<MarketVideoResponse> getMarket(AuthenticatedUser authenticatedUser, String regionCode) {
         GameSeason season = requireActiveSeason(regionCode);
         GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
+        return buildMarketVideos(season, authenticatedUser, wallet);
+    }
+
+    @Transactional
+    public VideoCategorySectionResponse getBuyableMarketChart(
+        AuthenticatedUser authenticatedUser,
+        String regionCode,
+        String pageToken
+    ) {
+        GameSeason season = requireActiveSeason(regionCode);
+        GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
+        int startIndex = parseBuyableChartPageToken(pageToken);
+        long openDistinctVideoCount = gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(
+            season.getId(),
+            authenticatedUser.id(),
+            PositionStatus.OPEN
+        );
+        List<GamePosition> openPositions = gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(
+            season.getId(),
+            authenticatedUser.id(),
+            PositionStatus.OPEN
+        );
+        java.util.Set<String> ownedVideoIds = openPositions.stream()
+            .map(GamePosition::getVideoId)
+            .collect(Collectors.toSet());
+        boolean maxOpenReached = openDistinctVideoCount >= season.getMaxOpenPositions();
+        TrendRun latestRun = trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc(
+            season.getRegionCode(),
+            TRENDING_CATEGORY_ID
+        ).orElseThrow(() -> new IllegalArgumentException("최신 트렌드 스냅샷이 없습니다."));
+        Map<String, TrendSignal> signalsByVideoId = trendSignalRepository.findByIdRegionCodeAndIdCategoryId(
+            season.getRegionCode(),
+            TRENDING_CATEGORY_ID
+        ).stream().collect(Collectors.toMap(signal -> signal.getId().getVideoId(), Function.identity(), (left, right) -> left));
+        List<TrendSnapshot> buyableSnapshots = trendSnapshotRepository.findByRunIdOrderByRankAsc(latestRun.getId()).stream()
+            .limit(BUYABLE_CHART_MAX_COUNT)
+            .filter(snapshot -> {
+                long snapshotUnitPricePoints = GamePointCalculator.calculatePricePoints(snapshot.getRank());
+                boolean alreadyOwned = ownedVideoIds.contains(snapshot.getVideoId());
+                return resolveBuyBlockedReason(wallet, snapshotUnitPricePoints, maxOpenReached, alreadyOwned) == null;
+            })
+            .toList();
+
+        if (startIndex >= buyableSnapshots.size()) {
+            return new VideoCategorySectionResponse(
+                BUYABLE_CHART_CATEGORY_ID,
+                BUYABLE_CHART_LABEL,
+                BUYABLE_CHART_DESCRIPTION,
+                List.of(),
+                List.of(),
+                null
+            );
+        }
+
+        int endIndex = Math.min(startIndex + BUYABLE_CHART_PAGE_SIZE, buyableSnapshots.size());
+        List<VideoItemResponse> items = buyableSnapshots.subList(startIndex, endIndex).stream()
+            .map(snapshot -> toBuyableChartVideoResponse(snapshot, latestRun, signalsByVideoId.get(snapshot.getVideoId())))
+            .toList();
+
+        return new VideoCategorySectionResponse(
+            BUYABLE_CHART_CATEGORY_ID,
+            BUYABLE_CHART_LABEL,
+            BUYABLE_CHART_DESCRIPTION,
+            List.of(),
+            items,
+            endIndex < buyableSnapshots.size() ? Integer.toString(endIndex) : null
+        );
+    }
+
+    private List<MarketVideoResponse> buildMarketVideos(
+        GameSeason season,
+        AuthenticatedUser authenticatedUser,
+        GameWallet wallet
+    ) {
         long openDistinctVideoCount = gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(
             season.getId(),
             authenticatedUser.id(),
@@ -174,6 +261,69 @@ public class GameService {
                 signal.getCapturedAt()
             );
         }).toList();
+    }
+
+    private VideoItemResponse toBuyableChartVideoResponse(
+        TrendSnapshot snapshot,
+        TrendRun run,
+        TrendSignal signal
+    ) {
+        ThumbnailResponse thumbnail = new ThumbnailResponse(snapshot.getThumbnailUrl(), null, null);
+
+        return new VideoItemResponse(
+            snapshot.getVideoId(),
+            new ContentDetailsResponse(""),
+            new SnippetResponse(
+                snapshot.getTitle(),
+                snapshot.getChannelTitle(),
+                snapshot.getChannelId(),
+                snapshot.getVideoCategoryId(),
+                snapshot.getVideoCategoryLabel(),
+                snapshot.getPublishedAt() != null ? snapshot.getPublishedAt().toString() : null,
+                new ThumbnailsResponse(thumbnail, thumbnail, thumbnail, thumbnail, thumbnail)
+            ),
+            new StatisticsResponse(snapshot.getViewCount()),
+            signal != null && snapshot.getRank().equals(signal.getCurrentRank())
+                ? new TrendResponse(
+                    "전체",
+                    signal.getCurrentRank(),
+                    signal.getPreviousRank(),
+                    signal.getRankChange(),
+                    signal.getCurrentViewCount(),
+                    signal.getPreviousViewCount(),
+                    signal.getViewCountDelta(),
+                    signal.isNew(),
+                    signal.getCapturedAt()
+                )
+                : new TrendResponse(
+                    "전체",
+                    snapshot.getRank(),
+                    null,
+                    null,
+                    snapshot.getViewCount(),
+                    null,
+                    null,
+                    false,
+                    run.getCapturedAt()
+                )
+        );
+    }
+
+    private int parseBuyableChartPageToken(String pageToken) {
+        if (!StringUtils.hasText(pageToken)) {
+            return 0;
+        }
+
+        try {
+            int parsedValue = Integer.parseInt(pageToken.trim());
+            if (parsedValue < 0) {
+                throw new IllegalArgumentException("pageToken은 0 이상이어야 합니다.");
+            }
+
+            return parsedValue;
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("pageToken 형식이 올바르지 않습니다.");
+        }
     }
 
     private double calculateMomentumPriceDeltaPercent(long basePricePoints, long momentumPriceDeltaPoints) {

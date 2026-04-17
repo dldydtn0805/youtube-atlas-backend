@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.yongsoo.youtubeatlasbackend.auth.AuthService;
 import com.yongsoo.youtubeatlasbackend.game.GameService;
+import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategorySectionResponse;
 
 @RestController
 @RequestMapping("/api/game")
@@ -50,6 +51,19 @@ public class GameController {
         @RequestParam String regionCode
     ) {
         return gameService.getMarket(authService.requireCurrentUser(authorizationHeader), regionCode);
+    }
+
+    @GetMapping("/market/buyable-chart")
+    public VideoCategorySectionResponse getBuyableMarketChart(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode,
+        @RequestParam(required = false) String pageToken
+    ) {
+        return gameService.getBuyableMarketChart(
+            authService.requireCurrentUser(authorizationHeader),
+            regionCode,
+            pageToken
+        );
     }
 
     @GetMapping("/leaderboard")

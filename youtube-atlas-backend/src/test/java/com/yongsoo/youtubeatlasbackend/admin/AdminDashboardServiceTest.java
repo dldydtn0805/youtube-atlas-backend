@@ -24,8 +24,8 @@ import com.yongsoo.youtubeatlasbackend.game.GameSeasonRepository;
 import com.yongsoo.youtubeatlasbackend.game.SeasonStatus;
 import com.yongsoo.youtubeatlasbackend.trending.TrendRun;
 import com.yongsoo.youtubeatlasbackend.trending.TrendRunRepository;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotMaintenanceService;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshot;
-import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotRepository;
 
 class AdminDashboardServiceTest {
 
@@ -36,7 +36,7 @@ class AdminDashboardServiceTest {
     private GamePositionRepository gamePositionRepository;
     private GameSeasonRepository gameSeasonRepository;
     private TrendRunRepository trendRunRepository;
-    private TrendSnapshotRepository trendSnapshotRepository;
+    private TrendSnapshotMaintenanceService trendSnapshotMaintenanceService;
     private AdminDashboardService adminDashboardService;
 
     @BeforeEach
@@ -48,7 +48,7 @@ class AdminDashboardServiceTest {
         gamePositionRepository = org.mockito.Mockito.mock(GamePositionRepository.class);
         gameSeasonRepository = org.mockito.Mockito.mock(GameSeasonRepository.class);
         trendRunRepository = org.mockito.Mockito.mock(TrendRunRepository.class);
-        trendSnapshotRepository = org.mockito.Mockito.mock(TrendSnapshotRepository.class);
+        trendSnapshotMaintenanceService = org.mockito.Mockito.mock(TrendSnapshotMaintenanceService.class);
         adminDashboardService = new AdminDashboardService(
             appUserRepository,
             adminAccessService,
@@ -57,7 +57,7 @@ class AdminDashboardServiceTest {
             gamePositionRepository,
             gameSeasonRepository,
             trendRunRepository,
-            trendSnapshotRepository
+            trendSnapshotMaintenanceService
         );
     }
 
@@ -122,7 +122,7 @@ class AdminDashboardServiceTest {
         when(favoriteStreamerRepository.findTop8ByOrderByCreatedAtDesc()).thenReturn(List.of(favorite));
         when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
         when(trendRunRepository.findTopByOrderByCapturedAtDesc()).thenReturn(Optional.of(trendRun));
-        when(trendSnapshotRepository.findTop8ByRun_IdOrderByRankAsc(5L)).thenReturn(List.of(trendSnapshot));
+        when(trendSnapshotMaintenanceService.sanitizeRunSnapshots(5L)).thenReturn(List.of(trendSnapshot));
 
         AdminDashboardResponse response = adminDashboardService.getDashboard();
 
