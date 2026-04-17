@@ -701,6 +701,44 @@ class GameServiceTest {
     }
 
     @Test
+    void getBuyableMarketChartReturnsFiftyItemsPerPage() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 1_000_000_000L, 0L, 0L);
+        TrendRun latestRun = trendRun(55L, Instant.parse("2026-04-01T06:00:00Z"));
+        List<TrendSnapshot> snapshots = java.util.stream.IntStream.rangeClosed(1, 60)
+            .mapToObj(rank -> snapshot(latestRun, "video-" + rank, 140 + rank))
+            .toList();
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN))
+            .thenReturn(0L);
+        when(gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(1L, 7L, PositionStatus.OPEN))
+            .thenReturn(List.of());
+        when(trendRunRepository.findTopByRegionCodeAndCategoryIdOrderByIdDesc("KR", "0"))
+            .thenReturn(Optional.of(latestRun));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryId("KR", "0"))
+            .thenReturn(List.of());
+        when(trendSnapshotRepository.findByRunIdOrderByRankAsc(55L))
+            .thenReturn(snapshots);
+
+        var firstPage = gameService.getBuyableMarketChart(authenticatedUser(), "KR", null);
+        var secondPage = gameService.getBuyableMarketChart(authenticatedUser(), "KR", "50");
+
+        assertThat(firstPage.items()).hasSize(50);
+        assertThat(firstPage.nextPageToken()).isEqualTo("50");
+        assertThat(firstPage.items().getFirst().id()).isEqualTo("video-1");
+        assertThat(firstPage.items().getLast().id()).isEqualTo("video-50");
+
+        assertThat(secondPage.items()).hasSize(10);
+        assertThat(secondPage.nextPageToken()).isNull();
+        assertThat(secondPage.items().getFirst().id()).isEqualTo("video-51");
+        assertThat(secondPage.items().getLast().id()).isEqualTo("video-60");
+    }
+
+    @Test
     void buyAllowsSameVideoPastDistinctVideoLimitWhenWalletCanCoverIt() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);

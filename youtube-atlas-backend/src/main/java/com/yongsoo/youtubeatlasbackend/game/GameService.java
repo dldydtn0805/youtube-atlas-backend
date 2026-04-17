@@ -63,7 +63,7 @@ public class GameService {
     private static final String BUYABLE_CHART_LABEL = "매수 가능";
     private static final String BUYABLE_CHART_DESCRIPTION = "현재 지갑과 보유 상태 기준으로 바로 매수 가능한 영상만 모았습니다.";
     private static final int BUYABLE_CHART_MAX_COUNT = 200;
-    private static final int BUYABLE_CHART_PAGE_SIZE = BUYABLE_CHART_MAX_COUNT;
+    private static final int BUYABLE_CHART_PAGE_SIZE = 50;
     private static final int DEFAULT_FALLBACK_RANK = 201;
     private static final int COIN_ELIGIBLE_RANK_CUTOFF = 200;
     private static final CoinRateAnchor[] COIN_RATE_ANCHORS = {
