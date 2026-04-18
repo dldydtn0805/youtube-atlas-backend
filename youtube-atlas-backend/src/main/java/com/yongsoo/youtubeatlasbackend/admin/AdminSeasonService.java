@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminSeasonScheduleUpdateRequest;
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminSeasonSummaryResponse;
+import com.yongsoo.youtubeatlasbackend.admin.api.AdminSeasonStartingBalanceUpdateRequest;
 import com.yongsoo.youtubeatlasbackend.game.GameSeason;
 import com.yongsoo.youtubeatlasbackend.game.GameSeasonRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameSettlementService;
@@ -37,6 +38,19 @@ public class AdminSeasonService {
 
         season.setStartAt(request.startAt());
         season.setEndAt(request.endAt());
+
+        return toSummaryResponse(gameSeasonRepository.save(season));
+    }
+
+    @Transactional
+    public AdminSeasonSummaryResponse updateStartingBalance(
+        Long seasonId,
+        AdminSeasonStartingBalanceUpdateRequest request
+    ) {
+        GameSeason season = requireSeason(seasonId);
+        validateStartingBalanceUpdateRequest(request);
+
+        season.setStartingBalancePoints(request.startingBalancePoints());
 
         return toSummaryResponse(gameSeasonRepository.save(season));
     }
@@ -82,12 +96,27 @@ public class AdminSeasonService {
         }
     }
 
+    private void validateStartingBalanceUpdateRequest(AdminSeasonStartingBalanceUpdateRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("시작 자금 수정 정보가 필요합니다.");
+        }
+
+        if (request.startingBalancePoints() == null) {
+            throw new IllegalArgumentException("startingBalancePoints는 필수입니다.");
+        }
+
+        if (request.startingBalancePoints() < 0) {
+            throw new IllegalArgumentException("startingBalancePoints는 0 이상이어야 합니다.");
+        }
+    }
+
     private AdminSeasonSummaryResponse toSummaryResponse(GameSeason season) {
         return new AdminSeasonSummaryResponse(
             season.getId(),
             season.getName(),
             season.getStatus().name(),
             season.getRegionCode(),
+            season.getStartingBalancePoints(),
             season.getStartAt(),
             season.getEndAt(),
             season.getCreatedAt()

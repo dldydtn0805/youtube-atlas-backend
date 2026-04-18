@@ -71,6 +71,7 @@ public class AdminDashboardService {
                 season.getName(),
                 season.getStatus().name(),
                 season.getRegionCode(),
+                season.getStartingBalancePoints(),
                 season.getStartAt(),
                 season.getEndAt(),
                 season.getCreatedAt()

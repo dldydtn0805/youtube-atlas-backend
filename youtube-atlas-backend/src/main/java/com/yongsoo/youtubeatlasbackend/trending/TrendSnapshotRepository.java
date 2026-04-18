@@ -69,7 +69,7 @@ public interface TrendSnapshotRepository extends JpaRepository<TrendSnapshot, Lo
         join fetch snapshot.run run
         where snapshot.createdAt >= :startAt
           and snapshot.createdAt <= :endAt
-          and (:regionCode is null or upper(snapshot.regionCode) = upper(:regionCode))
+          and upper(snapshot.regionCode) = upper(:regionCode)
         order by snapshot.createdAt desc, run.id desc, snapshot.rank asc
         """)
     List<TrendSnapshot> findByCreatedAtBetweenAndRegionCodeOrderByCreatedAtDesc(

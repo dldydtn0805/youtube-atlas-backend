@@ -67,6 +67,16 @@ class AdminTrendSnapshotHistoryServiceTest {
     }
 
     @Test
+    void getSnapshotsBySavedAtRangeRejectsBlankRegion() {
+        Instant startAt = Instant.parse("2026-04-10T00:00:00Z");
+        Instant endAt = Instant.parse("2026-04-10T23:59:59Z");
+
+        assertThatThrownBy(() -> adminTrendSnapshotHistoryService.getSnapshotsBySavedAtRange(startAt, endAt, " "))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("국가를 선택하세요.");
+    }
+
+    @Test
     void getSnapshotsBySavedAtRangeRejectsInvalidRange() {
         Instant startAt = Instant.parse("2026-04-11T00:00:00Z");
         Instant endAt = Instant.parse("2026-04-10T00:00:00Z");

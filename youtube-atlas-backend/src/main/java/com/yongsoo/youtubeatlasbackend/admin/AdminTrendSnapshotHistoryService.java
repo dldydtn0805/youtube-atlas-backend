@@ -23,6 +23,7 @@ public class AdminTrendSnapshotHistoryService {
     public AdminTrendSnapshotHistoryResponse getSnapshotsBySavedAtRange(Instant startAt, Instant endAt, String regionCode) {
         validateRange(startAt, endAt);
         String normalizedRegionCode = normalizeRegionCode(regionCode);
+        validateRegionCode(normalizedRegionCode);
 
         List<AdminTrendSnapshotHistoryItemResponse> items = trendSnapshotRepository
             .findByCreatedAtBetweenAndRegionCodeOrderByCreatedAtDesc(startAt, endAt, normalizedRegionCode)
@@ -67,5 +68,11 @@ public class AdminTrendSnapshotHistoryService {
 
         String normalized = regionCode.trim().toUpperCase();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private void validateRegionCode(String regionCode) {
+        if (regionCode == null) {
+            throw new IllegalArgumentException("국가를 선택하세요.");
+        }
     }
 }

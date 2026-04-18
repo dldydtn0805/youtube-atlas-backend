@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminSeasonScheduleUpdateRequest;
+import com.yongsoo.youtubeatlasbackend.admin.api.AdminSeasonStartingBalanceUpdateRequest;
 import com.yongsoo.youtubeatlasbackend.game.GameSeason;
 import com.yongsoo.youtubeatlasbackend.game.GameSeasonRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameSettlementService;
@@ -58,6 +59,34 @@ class AdminSeasonServiceTest {
     }
 
     @Test
+    void updateStartingBalanceOverridesSeasonSeedAmount() {
+        GameSeason season = activeSeason(3L, "KR");
+        when(gameSeasonRepository.findById(3L)).thenReturn(Optional.of(season));
+        when(gameSeasonRepository.save(season)).thenReturn(season);
+
+        var response = adminSeasonService.updateStartingBalance(
+            3L,
+            new AdminSeasonStartingBalanceUpdateRequest(25_000L)
+        );
+
+        assertThat(response.startingBalancePoints()).isEqualTo(25_000L);
+        assertThat(season.getStartingBalancePoints()).isEqualTo(25_000L);
+    }
+
+    @Test
+    void updateStartingBalanceRejectsNegativeAmount() {
+        GameSeason season = activeSeason(3L, "KR");
+        when(gameSeasonRepository.findById(3L)).thenReturn(Optional.of(season));
+
+        assertThatThrownBy(() -> adminSeasonService.updateStartingBalance(
+            3L,
+            new AdminSeasonStartingBalanceUpdateRequest(-1L)
+        ))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("0 이상");
+    }
+
+    @Test
     void updateSeasonScheduleRejectsPastEndAtForActiveSeason() {
         GameSeason season = activeSeason(3L, "KR");
         when(gameSeasonRepository.findById(3L)).thenReturn(Optional.of(season));
@@ -88,6 +117,7 @@ class AdminSeasonServiceTest {
         season.setRegionCode(regionCode);
         season.setStartAt(Instant.parse("2026-04-01T00:00:00Z"));
         season.setEndAt(Instant.parse("2026-04-12T00:00:00Z"));
+        season.setStartingBalancePoints(10_000L);
         season.setCreatedAt(Instant.parse("2026-04-01T00:00:00Z"));
         return season;
     }

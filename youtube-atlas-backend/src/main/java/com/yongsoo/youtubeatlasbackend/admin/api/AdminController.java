@@ -100,6 +100,16 @@ public class AdminController {
         return adminSeasonService.updateSeasonSchedule(seasonId, request);
     }
 
+    @PatchMapping("/seasons/{seasonId}/starting-balance")
+    public AdminSeasonSummaryResponse updateSeasonStartingBalance(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @PathVariable Long seasonId,
+        @Valid @RequestBody AdminSeasonStartingBalanceUpdateRequest request
+    ) {
+        adminAccessService.requireAdmin(authorizationHeader);
+        return adminSeasonService.updateStartingBalance(seasonId, request);
+    }
+
     @PostMapping("/seasons/{seasonId}/close")
     public void closeSeason(
         @RequestHeader("Authorization") String authorizationHeader,
