@@ -27,6 +27,12 @@ jobs:
           git checkout master
           git reset --hard origin/master
 
+          if grep -q '^GAME_COIN_HOLD_BOOST_INTERVAL_SECONDS=' .env; then
+            sed -i 's/^GAME_COIN_HOLD_BOOST_INTERVAL_SECONDS=.*/GAME_COIN_HOLD_BOOST_INTERVAL_SECONDS=3600/' .env
+          else
+            printf '\nGAME_COIN_HOLD_BOOST_INTERVAL_SECONDS=3600\n' >> .env
+          fi
+
           sudo docker build -t youtube-atlas-backend:latest .
           sudo docker rm -f youtube-atlas-backend || true
           sudo docker run -d \
