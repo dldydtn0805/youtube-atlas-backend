@@ -21,9 +21,9 @@ class CommentPresenceServiceTest {
     }
 
     @Test
-    void tracksConnectedSessionsAndPublishesPresence() {
-        commentPresenceService.handleSessionConnected("session-1");
-        commentPresenceService.handleSessionConnected("session-2");
+    void tracksUniqueParticipantsAndPublishesPresence() {
+        commentPresenceService.handleSessionConnected("session-1", "participant-1");
+        commentPresenceService.handleSessionConnected("session-2", "participant-2");
 
         assertThat(commentPresenceService.getPresence().activeCount()).isEqualTo(2);
         verify(messagingTemplate).convertAndSend(
@@ -33,9 +33,9 @@ class CommentPresenceServiceTest {
     }
 
     @Test
-    void ignoresDuplicateConnectsAndUnknownDisconnects() {
-        commentPresenceService.handleSessionConnected("session-1");
-        commentPresenceService.handleSessionConnected("session-1");
+    void ignoresDuplicateSessionConnectsAndUnknownDisconnects() {
+        commentPresenceService.handleSessionConnected("session-1", "participant-1");
+        commentPresenceService.handleSessionConnected("session-1", "participant-1");
         commentPresenceService.handleSessionDisconnected("missing-session");
 
         assertThat(commentPresenceService.getPresence().activeCount()).isEqualTo(1);
@@ -46,9 +46,17 @@ class CommentPresenceServiceTest {
     }
 
     @Test
+    void countsMultipleSessionsFromTheSameParticipantOnce() {
+        commentPresenceService.handleSessionConnected("session-1", "participant-1");
+        commentPresenceService.handleSessionConnected("session-2", "participant-1");
+
+        assertThat(commentPresenceService.getPresence().activeCount()).isEqualTo(1);
+    }
+
+    @Test
     void removesDisconnectedSessionsAndPublishesPresence() {
-        commentPresenceService.handleSessionConnected("session-1");
-        commentPresenceService.handleSessionConnected("session-2");
+        commentPresenceService.handleSessionConnected("session-1", "participant-1");
+        commentPresenceService.handleSessionConnected("session-2", "participant-2");
 
         commentPresenceService.handleSessionDisconnected("session-1");
 
@@ -57,5 +65,12 @@ class CommentPresenceServiceTest {
             CommentPresenceService.COMMENTS_PRESENCE_TOPIC,
             commentPresenceService.getPresence()
         );
+    }
+
+    @Test
+    void ignoresSessionsWithoutParticipantHeader() {
+        commentPresenceService.handleSessionConnected("session-1", null);
+
+        assertThat(commentPresenceService.getPresence().activeCount()).isEqualTo(0);
     }
 }
