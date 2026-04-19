@@ -9,7 +9,9 @@ public record AuthUserResponse(
     String email,
     String displayName,
     String pictureUrl,
+    Instant createdAt,
     Instant lastLoginAt,
+    long favoriteCount,
     PlaybackProgressResponse lastPlaybackProgress
 ) {
 }

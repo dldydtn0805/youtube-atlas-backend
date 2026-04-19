@@ -16,6 +16,7 @@ import org.springframework.util.StringUtils;
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthSessionResponse;
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthUserResponse;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
+import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
 import com.yongsoo.youtubeatlasbackend.playback.PlaybackProgressService;
 import com.yongsoo.youtubeatlasbackend.playback.api.PlaybackProgressResponse;
 
@@ -27,6 +28,7 @@ public class AuthService {
     private final GoogleAuthorizationCodeExchanger googleAuthorizationCodeExchanger;
     private final GoogleTokenVerifier googleTokenVerifier;
     private final PlaybackProgressService playbackProgressService;
+    private final FavoriteStreamerRepository favoriteStreamerRepository;
     private final CommentService commentService;
     private final Clock clock;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -37,6 +39,7 @@ public class AuthService {
         GoogleAuthorizationCodeExchanger googleAuthorizationCodeExchanger,
         GoogleTokenVerifier googleTokenVerifier,
         PlaybackProgressService playbackProgressService,
+        FavoriteStreamerRepository favoriteStreamerRepository,
         CommentService commentService,
         Clock clock
     ) {
@@ -45,6 +48,7 @@ public class AuthService {
         this.googleAuthorizationCodeExchanger = googleAuthorizationCodeExchanger;
         this.googleTokenVerifier = googleTokenVerifier;
         this.playbackProgressService = playbackProgressService;
+        this.favoriteStreamerRepository = favoriteStreamerRepository;
         this.commentService = commentService;
         this.clock = clock;
     }
@@ -185,13 +189,16 @@ public class AuthService {
     private AuthUserResponse toUserResponse(AppUser user) {
         PlaybackProgressResponse lastPlaybackProgress = playbackProgressService.getCurrentProgressForUserId(user.getId())
             .orElse(null);
+        long favoriteCount = favoriteStreamerRepository.countByUserId(user.getId());
 
         return new AuthUserResponse(
             user.getId(),
             user.getEmail(),
             user.getDisplayName(),
             user.getPictureUrl(),
+            user.getCreatedAt(),
             user.getLastLoginAt(),
+            favoriteCount,
             lastPlaybackProgress
         );
     }

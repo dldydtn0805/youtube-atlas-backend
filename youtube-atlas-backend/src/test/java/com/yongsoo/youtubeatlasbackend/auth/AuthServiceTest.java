@@ -21,6 +21,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthSessionResponse;
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthUserResponse;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
+import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
 import com.yongsoo.youtubeatlasbackend.playback.PlaybackProgressService;
 import com.yongsoo.youtubeatlasbackend.playback.api.PlaybackProgressResponse;
 
@@ -31,6 +32,7 @@ class AuthServiceTest {
     private GoogleAuthorizationCodeExchanger googleAuthorizationCodeExchanger;
     private GoogleTokenVerifier googleTokenVerifier;
     private PlaybackProgressService playbackProgressService;
+    private FavoriteStreamerRepository favoriteStreamerRepository;
     private CommentService commentService;
     private AuthService authService;
     private final Map<String, AuthSession> sessionsByHash = new HashMap<>();
@@ -42,6 +44,7 @@ class AuthServiceTest {
         googleAuthorizationCodeExchanger = org.mockito.Mockito.mock(GoogleAuthorizationCodeExchanger.class);
         googleTokenVerifier = org.mockito.Mockito.mock(GoogleTokenVerifier.class);
         playbackProgressService = org.mockito.Mockito.mock(PlaybackProgressService.class);
+        favoriteStreamerRepository = org.mockito.Mockito.mock(FavoriteStreamerRepository.class);
         commentService = org.mockito.Mockito.mock(CommentService.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-01T06:00:00Z"), ZoneOffset.UTC);
         authService = new AuthService(
@@ -50,6 +53,7 @@ class AuthServiceTest {
             googleAuthorizationCodeExchanger,
             googleTokenVerifier,
             playbackProgressService,
+            favoriteStreamerRepository,
             commentService,
             fixedClock
         );
@@ -69,6 +73,7 @@ class AuthServiceTest {
         when(authSessionRepository.findByTokenHash(anyString())).thenAnswer(invocation ->
             Optional.ofNullable(sessionsByHash.get(invocation.getArgument(0, String.class)))
         );
+        when(favoriteStreamerRepository.countByUserId(any())).thenReturn(0L);
         when(playbackProgressService.getCurrentProgressForUserId(any())).thenReturn(Optional.empty());
     }
 
@@ -100,6 +105,8 @@ class AuthServiceTest {
         assertThat(me.id()).isEqualTo(7L);
         assertThat(me.email()).isEqualTo("atlas@example.com");
         assertThat(me.displayName()).isEqualTo("Atlas User");
+        assertThat(me.createdAt()).isEqualTo(Instant.parse("2026-04-01T06:00:00Z"));
+        assertThat(me.favoriteCount()).isZero();
     }
 
     @Test
@@ -124,6 +131,20 @@ class AuthServiceTest {
         assertThat(me.lastPlaybackProgress()).isNotNull();
         assertThat(me.lastPlaybackProgress().videoId()).isEqualTo("abc123");
         assertThat(me.lastPlaybackProgress().positionSeconds()).isEqualTo(184L);
+    }
+
+    @Test
+    void getCurrentUserIncludesCreatedAtAndFavoriteCount() {
+        when(googleTokenVerifier.verify("google-id-token")).thenReturn(
+            new GoogleIdentity("google-subject-1", "atlas@example.com", "Atlas User", null)
+        );
+        when(favoriteStreamerRepository.countByUserId(7L)).thenReturn(4L);
+
+        AuthSessionResponse sessionResponse = authService.loginWithGoogle("google-id-token", 30);
+        AuthUserResponse me = authService.getCurrentUser("Bearer " + sessionResponse.accessToken());
+
+        assertThat(me.createdAt()).isEqualTo(Instant.parse("2026-04-01T06:00:00Z"));
+        assertThat(me.favoriteCount()).isEqualTo(4L);
     }
 
     @Test
