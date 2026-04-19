@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -19,7 +18,6 @@ import com.yongsoo.youtubeatlasbackend.auth.AuthService;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 
 @RestController
-@RequestMapping("/api/videos/{videoId}/comments")
 public class CommentController {
 
     private final CommentService commentService;
@@ -30,7 +28,22 @@ public class CommentController {
         this.authService = authService;
     }
 
-    @GetMapping
+    @GetMapping("/api/comments")
+    public List<ChatMessageResponse> getGlobalComments(
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant since
+    ) {
+        return commentService.getComments(since);
+    }
+
+    @PostMapping("/api/comments")
+    public ChatMessageResponse createGlobalComment(
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+        @Valid @RequestBody CreateCommentRequest request
+    ) {
+        return commentService.createComment(request, authService.getCurrentUserOrNull(authorizationHeader));
+    }
+
+    @GetMapping("/api/videos/{videoId}/comments")
     public List<ChatMessageResponse> getComments(
         @PathVariable String videoId,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant since
@@ -38,7 +51,7 @@ public class CommentController {
         return commentService.getComments(videoId, since);
     }
 
-    @PostMapping
+    @PostMapping("/api/videos/{videoId}/comments")
     public ChatMessageResponse createComment(
         @PathVariable String videoId,
         @RequestHeader(value = "Authorization", required = false) String authorizationHeader,

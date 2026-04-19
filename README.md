@@ -107,8 +107,8 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `GET /api/me/favorite-streamers`
 - `POST /api/me/favorite-streamers`
 - `DELETE /api/me/favorite-streamers/{channelId}`
-- `GET /api/videos/{videoId}/comments`
-- `POST /api/videos/{videoId}/comments`
+- `GET /api/comments`
+- `POST /api/comments`
 - `GET /api/trending/signals?regionCode=KR&categoryId=0&videoIds=abc&videoIds=def`
 - `GET /api/trending/top-videos?regionCode=KR&pageToken=50`
 - `GET /api/trending/realtime-surging?regionCode=KR`
@@ -1002,12 +1002,12 @@ Authorization: Bearer {accessToken}
 
 ## 댓글 API
 
-### `GET /api/videos/{videoId}/comments`
+### `GET /api/comments`
 
-영상의 댓글을 생성 시각 오름차순으로 반환합니다.
+전역 채팅방의 댓글을 생성 시각 오름차순으로 반환합니다.
 `since` 쿼리 파라미터에 ISO-8601 시각을 전달하면 해당 시각 이후에 생성된 댓글만 반환합니다.
 
-### `POST /api/videos/{videoId}/comments`
+### `POST /api/comments`
 
 요청 본문:
 
@@ -1024,11 +1024,12 @@ Authorization: Bearer {accessToken}
 - 같은 `clientId` 기준으로 5초 쿨다운이 있습니다.
 - 같은 `clientId` 가 같은 메시지를 30초 안에 다시 보내면 중복으로 막습니다.
 - 댓글 응답 JSON은 `snake_case` 입니다.
+- 기존 `/api/videos/{videoId}/comments` 경로도 호환용으로 유지되지만, 같은 전역 채팅방을 조회/작성합니다.
 
 실시간 브로드캐스트:
 
 - WebSocket endpoint: `/ws`
-- subscribe topic: `/topic/videos/{videoId}/comments`
+- subscribe topic: `/topic/comments`
 
 ## 급상승 API
 

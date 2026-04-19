@@ -10,11 +10,17 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
 
     List<Comment> findTop8ByOrderByCreatedAtDesc();
 
+    List<Comment> findTop8ByVideoIdOrderByCreatedAtDesc(String videoId);
+
+    long countByVideoId(String videoId);
+
     List<Comment> findByVideoIdOrderByCreatedAtAsc(String videoId);
 
     List<Comment> findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc(String videoId, Instant createdAt);
 
     long deleteByCreatedAtBefore(Instant createdAt);
+
+    long deleteByVideoIdAndCreatedAtBefore(String videoId, Instant createdAt);
 
     Optional<Comment> findTopByVideoIdAndClientIdOrderByCreatedAtDesc(String videoId, String clientId);
 

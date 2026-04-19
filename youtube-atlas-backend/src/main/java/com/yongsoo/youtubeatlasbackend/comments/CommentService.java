@@ -17,6 +17,9 @@ import com.yongsoo.youtubeatlasbackend.comments.api.CreateCommentRequest;
 @Service
 public class CommentService {
 
+    public static final String GLOBAL_ROOM_VIDEO_ID = "global";
+    private static final String GLOBAL_COMMENTS_TOPIC = "/topic/comments";
+
     static final Duration COMMENT_COOLDOWN = Duration.ofSeconds(5);
     static final Duration COMMENT_DUPLICATE_WINDOW = Duration.ofSeconds(30);
 
@@ -36,15 +39,19 @@ public class CommentService {
 
     @Transactional(readOnly = true)
     public List<ChatMessageResponse> getComments(String videoId) {
-        return getComments(videoId, null);
+        return getComments((Instant) null);
     }
 
     @Transactional(readOnly = true)
     public List<ChatMessageResponse> getComments(String videoId, Instant since) {
-        String normalizedVideoId = normalizeRequired(videoId, "videoId는 필수입니다.");
+        return getComments(since);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ChatMessageResponse> getComments(Instant since) {
         List<Comment> comments = since == null
-            ? commentRepository.findByVideoIdOrderByCreatedAtAsc(normalizedVideoId)
-            : commentRepository.findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc(normalizedVideoId, since);
+            ? commentRepository.findByVideoIdOrderByCreatedAtAsc(GLOBAL_ROOM_VIDEO_ID)
+            : commentRepository.findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc(GLOBAL_ROOM_VIDEO_ID, since);
 
         return comments.stream()
             .map(this::toResponse)
@@ -53,18 +60,27 @@ public class CommentService {
 
     @Transactional
     public ChatMessageResponse createComment(String videoId, CreateCommentRequest request) {
-        return createComment(videoId, request, null);
+        return createComment(request, null);
     }
 
     @Transactional
     public ChatMessageResponse createComment(String videoId, CreateCommentRequest request, AuthenticatedUser authenticatedUser) {
-        String normalizedVideoId = normalizeRequired(videoId, "videoId는 필수입니다.");
+        return createComment(request, authenticatedUser);
+    }
+
+    @Transactional
+    public ChatMessageResponse createComment(CreateCommentRequest request) {
+        return createComment(request, null);
+    }
+
+    @Transactional
+    public ChatMessageResponse createComment(CreateCommentRequest request, AuthenticatedUser authenticatedUser) {
         String clientId = normalizeRequired(request.clientId(), "clientId는 필수입니다.");
         String content = normalizeContent(request.content());
         String author = resolveAuthor(request.author(), authenticatedUser);
         Instant now = Instant.now(clock);
 
-        commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc(normalizedVideoId, clientId)
+        commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc(GLOBAL_ROOM_VIDEO_ID, clientId)
             .ifPresent(latestComment -> {
                 long elapsedSeconds = Duration.between(latestComment.getCreatedAt(), now).getSeconds();
 
@@ -80,7 +96,7 @@ public class CommentService {
 
         Instant duplicateWindowStart = now.minus(COMMENT_DUPLICATE_WINDOW);
         boolean hasDuplicate = commentRepository.existsByVideoIdAndClientIdAndContentAndCreatedAtAfter(
-            normalizedVideoId,
+            GLOBAL_ROOM_VIDEO_ID,
             clientId,
             content,
             duplicateWindowStart
@@ -95,14 +111,14 @@ public class CommentService {
         }
 
         Comment comment = new Comment();
-        comment.setVideoId(normalizedVideoId);
+        comment.setVideoId(GLOBAL_ROOM_VIDEO_ID);
         comment.setClientId(clientId);
         comment.setAuthor(author);
         comment.setContent(content);
         comment.setCreatedAt(now);
 
         ChatMessageResponse response = toResponse(commentRepository.save(comment));
-        messagingTemplate.convertAndSend("/topic/videos/" + normalizedVideoId + "/comments", response);
+        messagingTemplate.convertAndSend(GLOBAL_COMMENTS_TOPIC, response);
         return response;
     }
 

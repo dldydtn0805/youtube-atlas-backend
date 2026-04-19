@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminCommentCleanupRequest;
 import com.yongsoo.youtubeatlasbackend.comments.CommentRepository;
+import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 
 class AdminCommentServiceTest {
 
@@ -30,14 +31,15 @@ class AdminCommentServiceTest {
     @Test
     void deleteCommentsOlderThanPurgesRowsAndReturnsSummary() {
         Instant deleteBefore = Instant.parse("2026-04-01T00:00:00Z");
-        when(commentRepository.deleteByCreatedAtBefore(deleteBefore)).thenReturn(27L);
+        when(commentRepository.deleteByVideoIdAndCreatedAtBefore(CommentService.GLOBAL_ROOM_VIDEO_ID, deleteBefore))
+            .thenReturn(27L);
 
         var response = adminCommentService.deleteCommentsOlderThan(new AdminCommentCleanupRequest(deleteBefore));
 
         assertThat(response.deleteBefore()).isEqualTo(deleteBefore);
         assertThat(response.deletedAt()).isEqualTo(Instant.parse("2026-04-15T03:00:00Z"));
         assertThat(response.deletedCount()).isEqualTo(27L);
-        verify(commentRepository).deleteByCreatedAtBefore(deleteBefore);
+        verify(commentRepository).deleteByVideoIdAndCreatedAtBefore(CommentService.GLOBAL_ROOM_VIDEO_ID, deleteBefore);
     }
 
     @Test

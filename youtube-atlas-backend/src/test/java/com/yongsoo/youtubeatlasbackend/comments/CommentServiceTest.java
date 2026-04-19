@@ -48,24 +48,24 @@ class CommentServiceTest {
         newerComment.setContent("지금 들어온 메시지");
         newerComment.setCreatedAt(Instant.parse("2026-03-24T10:00:01Z"));
 
-        when(commentRepository.findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc("video-1", since))
+        when(commentRepository.findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc(CommentService.GLOBAL_ROOM_VIDEO_ID, since))
             .thenReturn(List.of(newerComment));
 
-        List<ChatMessageResponse> response = commentService.getComments(" video-1 ", since);
+        List<ChatMessageResponse> response = commentService.getComments(since);
 
         assertThat(response).singleElement().satisfies(message -> {
             assertThat(message.id()).isEqualTo(2L);
             assertThat(message.content()).isEqualTo("지금 들어온 메시지");
         });
-        verify(commentRepository).findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc("video-1", since);
+        verify(commentRepository).findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc(CommentService.GLOBAL_ROOM_VIDEO_ID, since);
     }
 
     @Test
     void createCommentNormalizesContentAndPublishesRealtimeMessage() {
-        when(commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc("video-1", "client-1"))
+        when(commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID, "client-1"))
             .thenReturn(Optional.empty());
         when(commentRepository.existsByVideoIdAndClientIdAndContentAndCreatedAtAfter(
-            eq("video-1"),
+            eq(CommentService.GLOBAL_ROOM_VIDEO_ID),
             eq("client-1"),
             eq("hello world"),
             any(Instant.class)
@@ -83,8 +83,8 @@ class CommentServiceTest {
 
         assertThat(response.author()).isEqualTo("익명");
         assertThat(response.content()).isEqualTo("hello world");
-        assertThat(response.videoId()).isEqualTo("video-1");
-        verify(messagingTemplate).convertAndSend("/topic/videos/video-1/comments", response);
+        assertThat(response.videoId()).isEqualTo(CommentService.GLOBAL_ROOM_VIDEO_ID);
+        verify(messagingTemplate).convertAndSend("/topic/comments", response);
     }
 
     @Test
@@ -94,7 +94,7 @@ class CommentServiceTest {
         latestComment.setClientId("client-1");
         latestComment.setCreatedAt(Instant.parse("2026-03-24T09:59:57Z"));
 
-        when(commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc("video-1", "client-1"))
+        when(commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID, "client-1"))
             .thenReturn(Optional.of(latestComment));
 
         assertThatThrownBy(() -> commentService.createComment(
@@ -110,10 +110,10 @@ class CommentServiceTest {
 
     @Test
     void createCommentUsesAuthenticatedUserDisplayName() {
-        when(commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc("video-1", "client-1"))
+        when(commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID, "client-1"))
             .thenReturn(Optional.empty());
         when(commentRepository.existsByVideoIdAndClientIdAndContentAndCreatedAtAfter(
-            eq("video-1"),
+            eq(CommentService.GLOBAL_ROOM_VIDEO_ID),
             eq("client-1"),
             eq("로그인한 사용자입니다"),
             any(Instant.class)

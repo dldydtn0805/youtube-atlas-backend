@@ -15,6 +15,7 @@ import com.yongsoo.youtubeatlasbackend.admin.api.AdminTrendRunSummaryResponse;
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminTrendSnapshotResponse;
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminUserSummaryResponse;
 import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
+import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.comments.CommentRepository;
 import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
@@ -81,7 +82,7 @@ public class AdminDashboardService {
         return new AdminDashboardResponse(
             new AdminSummaryMetricsResponse(
                 appUserRepository.count(),
-                commentRepository.count(),
+                commentRepository.countByVideoId(CommentService.GLOBAL_ROOM_VIDEO_ID),
                 favoriteStreamerRepository.count(),
                 trendRunRepository.count(),
                 gamePositionRepository.count()
@@ -118,7 +119,7 @@ public class AdminDashboardService {
                     user.getLastLoginAt()
                 ))
                 .toList(),
-            commentRepository.findTop8ByOrderByCreatedAtDesc().stream()
+            commentRepository.findTop8ByVideoIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID).stream()
                 .map(comment -> new AdminCommentSummaryResponse(
                     comment.getId(),
                     comment.getVideoId(),

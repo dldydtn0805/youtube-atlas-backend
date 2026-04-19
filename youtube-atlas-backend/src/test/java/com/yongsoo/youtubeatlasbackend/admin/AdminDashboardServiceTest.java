@@ -16,6 +16,7 @@ import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.comments.Comment;
 import com.yongsoo.youtubeatlasbackend.comments.CommentRepository;
+import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamer;
 import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
@@ -75,7 +76,7 @@ class AdminDashboardServiceTest {
         comment.setAuthor("Atlas");
         comment.setClientId("client-1");
         comment.setContent("hello admin");
-        comment.setVideoId("video-1");
+        comment.setVideoId(CommentService.GLOBAL_ROOM_VIDEO_ID);
         comment.setCreatedAt(Instant.parse("2026-04-03T00:00:00Z"));
 
         FavoriteStreamer favorite = new FavoriteStreamer();
@@ -112,13 +113,14 @@ class AdminDashboardServiceTest {
         trendSnapshot.setViewCount(123456L);
 
         when(appUserRepository.count()).thenReturn(12L);
-        when(commentRepository.count()).thenReturn(34L);
+        when(commentRepository.countByVideoId(CommentService.GLOBAL_ROOM_VIDEO_ID)).thenReturn(34L);
         when(favoriteStreamerRepository.count()).thenReturn(5L);
         when(trendRunRepository.count()).thenReturn(7L);
         when(gamePositionRepository.count()).thenReturn(21L);
         when(adminAccessService.isAdminEmail("user@example.com")).thenReturn(false);
         when(appUserRepository.findTop8ByOrderByCreatedAtDesc()).thenReturn(List.of(user));
-        when(commentRepository.findTop8ByOrderByCreatedAtDesc()).thenReturn(List.of(comment));
+        when(commentRepository.findTop8ByVideoIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID))
+            .thenReturn(List.of(comment));
         when(favoriteStreamerRepository.findTop8ByOrderByCreatedAtDesc()).thenReturn(List.of(favorite));
         when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
         when(trendRunRepository.findTopByOrderByCapturedAtDesc()).thenReturn(Optional.of(trendRun));

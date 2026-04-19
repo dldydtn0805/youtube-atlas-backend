@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminCommentCleanupRequest;
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminCommentCleanupResponse;
 import com.yongsoo.youtubeatlasbackend.comments.CommentRepository;
+import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 
 @Service
 public class AdminCommentService {
@@ -30,7 +31,10 @@ public class AdminCommentService {
             throw new IllegalArgumentException("deleteBefore는 현재 시각 이전이어야 합니다.");
         }
 
-        long deletedCount = commentRepository.deleteByCreatedAtBefore(deleteBefore);
+        long deletedCount = commentRepository.deleteByVideoIdAndCreatedAtBefore(
+            CommentService.GLOBAL_ROOM_VIDEO_ID,
+            deleteBefore
+        );
         return new AdminCommentCleanupResponse(deleteBefore, now, deletedCount);
     }
 }
