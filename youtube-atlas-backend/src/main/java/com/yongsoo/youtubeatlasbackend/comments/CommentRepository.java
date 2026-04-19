@@ -26,6 +26,8 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
 
     Optional<Comment> findTopByVideoIdAndClientIdOrderByCreatedAtDesc(String videoId, String clientId);
 
+    Optional<Comment> findTopByVideoIdAndUserIdOrderByCreatedAtDesc(String videoId, Long userId);
+
     Optional<Comment> findTopByVideoIdAndClientIdAndContentAndCreatedAtAfterOrderByCreatedAtDesc(
         String videoId,
         String clientId,
@@ -33,9 +35,23 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
         Instant createdAt
     );
 
+    Optional<Comment> findTopByVideoIdAndUserIdAndContentAndCreatedAtAfterOrderByCreatedAtDesc(
+        String videoId,
+        Long userId,
+        String content,
+        Instant createdAt
+    );
+
     boolean existsByVideoIdAndClientIdAndContentAndCreatedAtAfter(
         String videoId,
         String clientId,
+        String content,
+        Instant createdAt
+    );
+
+    boolean existsByVideoIdAndUserIdAndContentAndCreatedAtAfter(
+        String videoId,
+        Long userId,
         String content,
         Instant createdAt
     );

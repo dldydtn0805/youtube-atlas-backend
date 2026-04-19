@@ -95,6 +95,15 @@ class RateLimitFilterTest {
     }
 
     @Test
+    void skipsAdminRequests() throws Exception {
+        MockHttpServletResponse firstResponse = doRequest("GET", "/api/admin/dashboard", "203.0.113.45");
+        MockHttpServletResponse secondResponse = doRequest("GET", "/api/admin/dashboard", "203.0.113.45");
+
+        assertThat(firstResponse.getStatus()).isEqualTo(200);
+        assertThat(secondResponse.getStatus()).isEqualTo(200);
+    }
+
+    @Test
     void canBeDisabledByConfiguration() throws Exception {
         atlasProperties.getRateLimit().setEnabled(false);
 

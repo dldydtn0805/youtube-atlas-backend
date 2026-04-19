@@ -13,6 +13,7 @@ public record ChatMessageResponse(
     String author,
     String content,
     String clientId,
+    Long userId,
     Instant createdAt
 ) {
 }

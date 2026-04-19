@@ -76,8 +76,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return null;
         }
 
-        if (path.startsWith("/api/admin/")
-            || ("POST".equalsIgnoreCase(method) && "/api/trending/sync".equals(path))) {
+        if (path.equals("/api/admin") || path.startsWith("/api/admin/")) {
+            return null;
+        }
+
+        if ("POST".equalsIgnoreCase(method) && "/api/trending/sync".equals(path)) {
             return new RateLimitPolicy("sensitive", rateLimit.getSensitivePerMinute());
         }
 

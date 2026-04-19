@@ -29,6 +29,9 @@ public class Comment {
     @Column(name = "client_id", nullable = false)
     private String clientId;
 
+    @Column(name = "user_id")
+    private Long userId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -66,6 +69,14 @@ public class Comment {
 
     public void setClientId(String clientId) {
         this.clientId = clientId;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
 
     public Instant getCreatedAt() {

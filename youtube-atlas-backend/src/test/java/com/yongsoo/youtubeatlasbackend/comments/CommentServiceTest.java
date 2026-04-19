@@ -92,6 +92,7 @@ class CommentServiceTest {
         assertThat(response.author()).isEqualTo("익명");
         assertThat(response.content()).isEqualTo("hello world");
         assertThat(response.messageType()).isEqualTo(CommentService.USER_MESSAGE_TYPE);
+        assertThat(response.userId()).isNull();
         assertThat(response.videoId()).isEqualTo(CommentService.GLOBAL_ROOM_VIDEO_ID);
         verify(messagingTemplate).convertAndSend("/topic/comments", response);
     }
@@ -119,11 +120,11 @@ class CommentServiceTest {
 
     @Test
     void createCommentUsesAuthenticatedUserDisplayName() {
-        when(commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID, "client-1"))
+        when(commentRepository.findTopByVideoIdAndUserIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID, 7L))
             .thenReturn(Optional.empty());
-        when(commentRepository.existsByVideoIdAndClientIdAndContentAndCreatedAtAfter(
+        when(commentRepository.existsByVideoIdAndUserIdAndContentAndCreatedAtAfter(
             eq(CommentService.GLOBAL_ROOM_VIDEO_ID),
-            eq("client-1"),
+            eq(7L),
             eq("로그인한 사용자입니다"),
             any(Instant.class)
         )).thenReturn(false);
@@ -140,6 +141,30 @@ class CommentServiceTest {
         );
 
         assertThat(response.author()).isEqualTo("Atlas User");
+        assertThat(response.userId()).isEqualTo(7L);
+    }
+
+    @Test
+    void createCommentAppliesCooldownByAuthenticatedUserAcrossDevices() {
+        Comment latestComment = new Comment();
+        latestComment.setVideoId(CommentService.GLOBAL_ROOM_VIDEO_ID);
+        latestComment.setClientId("other-device-client");
+        latestComment.setUserId(7L);
+        latestComment.setCreatedAt(Instant.parse("2026-03-24T09:59:57Z"));
+
+        when(commentRepository.findTopByVideoIdAndUserIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID, 7L))
+            .thenReturn(Optional.of(latestComment));
+
+        assertThatThrownBy(() -> commentService.createComment(
+            "video-1",
+            new CreateCommentRequest("익명", "다음 메시지", "client-1"),
+            new AuthenticatedUser(7L, "atlas@example.com", "Atlas User", null)
+        ))
+            .isInstanceOf(CommentPolicyViolationException.class)
+            .hasMessageContaining("초 후에 다시");
+
+        verify(commentRepository, never()).save(any(Comment.class));
+        verify(messagingTemplate, never()).convertAndSend(any(String.class), any(Object.class));
     }
 
     @Test
@@ -161,6 +186,7 @@ class CommentServiceTest {
         assertThat(response.messageType()).isEqualTo(CommentService.SYSTEM_MESSAGE_TYPE);
         assertThat(response.author()).isEqualTo("시스템");
         assertThat(response.clientId()).isEqualTo("system:trade");
+        assertThat(response.userId()).isNull();
         assertThat(response.videoId()).isEqualTo(CommentService.GLOBAL_ROOM_VIDEO_ID);
         verify(messagingTemplate).convertAndSend("/topic/comments", response);
     }

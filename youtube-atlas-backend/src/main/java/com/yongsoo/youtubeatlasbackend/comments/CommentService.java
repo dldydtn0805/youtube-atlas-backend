@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -99,9 +100,10 @@ public class CommentService {
 
         String content = normalizeContent(request.content());
         String author = resolveAuthor(request.author(), authenticatedUser);
+        Long userId = authenticatedUser == null ? null : authenticatedUser.id();
         Instant now = Instant.now(clock);
 
-        commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc(GLOBAL_ROOM_VIDEO_ID, clientId)
+        findLatestUserComment(clientId, userId)
             .ifPresent(latestComment -> {
                 long elapsedSeconds = Duration.between(latestComment.getCreatedAt(), now).getSeconds();
 
@@ -116,12 +118,7 @@ public class CommentService {
             });
 
         Instant duplicateWindowStart = now.minus(COMMENT_DUPLICATE_WINDOW);
-        boolean hasDuplicate = commentRepository.existsByVideoIdAndClientIdAndContentAndCreatedAtAfter(
-            GLOBAL_ROOM_VIDEO_ID,
-            clientId,
-            content,
-            duplicateWindowStart
-        );
+        boolean hasDuplicate = hasDuplicateUserComment(clientId, userId, content, duplicateWindowStart);
 
         if (hasDuplicate) {
             throw new CommentPolicyViolationException(
@@ -134,6 +131,7 @@ public class CommentService {
         Comment comment = new Comment();
         comment.setVideoId(GLOBAL_ROOM_VIDEO_ID);
         comment.setClientId(clientId);
+        comment.setUserId(userId);
         comment.setAuthor(author);
         comment.setContent(content);
         comment.setCreatedAt(now);
@@ -180,6 +178,7 @@ public class CommentService {
         Comment comment = new Comment();
         comment.setVideoId(GLOBAL_ROOM_VIDEO_ID);
         comment.setClientId(clientId);
+        comment.setUserId(null);
         comment.setAuthor(SYSTEM_AUTHOR);
         comment.setContent(normalizedContent);
         comment.setCreatedAt(now);
@@ -205,7 +204,39 @@ public class CommentService {
             comment.getAuthor(),
             comment.getContent(),
             comment.getClientId(),
+            comment.getUserId(),
             comment.getCreatedAt()
+        );
+    }
+
+    private Optional<Comment> findLatestUserComment(String clientId, Long userId) {
+        if (userId != null) {
+            return commentRepository.findTopByVideoIdAndUserIdOrderByCreatedAtDesc(GLOBAL_ROOM_VIDEO_ID, userId);
+        }
+
+        return commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc(GLOBAL_ROOM_VIDEO_ID, clientId);
+    }
+
+    private boolean hasDuplicateUserComment(
+        String clientId,
+        Long userId,
+        String content,
+        Instant duplicateWindowStart
+    ) {
+        if (userId != null) {
+            return commentRepository.existsByVideoIdAndUserIdAndContentAndCreatedAtAfter(
+                GLOBAL_ROOM_VIDEO_ID,
+                userId,
+                content,
+                duplicateWindowStart
+            );
+        }
+
+        return commentRepository.existsByVideoIdAndClientIdAndContentAndCreatedAtAfter(
+            GLOBAL_ROOM_VIDEO_ID,
+            clientId,
+            content,
+            duplicateWindowStart
         );
     }
 
