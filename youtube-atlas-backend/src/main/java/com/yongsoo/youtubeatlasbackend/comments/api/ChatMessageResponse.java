@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 public record ChatMessageResponse(
     Long id,
     String videoId,
+    String messageType,
     String author,
     String content,
     String clientId,

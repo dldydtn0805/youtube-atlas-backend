@@ -18,10 +18,17 @@ import com.yongsoo.youtubeatlasbackend.comments.api.CreateCommentRequest;
 public class CommentService {
 
     public static final String GLOBAL_ROOM_VIDEO_ID = "global";
+    public static final String SYSTEM_MESSAGE_TYPE = "SYSTEM";
+    public static final String USER_MESSAGE_TYPE = "USER";
     private static final String GLOBAL_COMMENTS_TOPIC = "/topic/comments";
+    private static final String SYSTEM_AUTHOR = "시스템";
+    private static final String SYSTEM_CLIENT_ID_PREFIX = "system:";
+    private static final String TRADE_SYSTEM_CLIENT_ID = SYSTEM_CLIENT_ID_PREFIX + "trade";
+    private static final String LOGIN_SYSTEM_CLIENT_ID = SYSTEM_CLIENT_ID_PREFIX + "login";
 
     static final Duration COMMENT_COOLDOWN = Duration.ofSeconds(5);
     static final Duration COMMENT_DUPLICATE_WINDOW = Duration.ofSeconds(30);
+    static final Duration SYSTEM_MESSAGE_DUPLICATE_WINDOW = Duration.ofSeconds(10);
 
     private final CommentRepository commentRepository;
     private final SimpMessagingTemplate messagingTemplate;
@@ -76,6 +83,10 @@ public class CommentService {
     @Transactional
     public ChatMessageResponse createComment(CreateCommentRequest request, AuthenticatedUser authenticatedUser) {
         String clientId = normalizeRequired(request.clientId(), "clientId는 필수입니다.");
+        if (clientId.startsWith(SYSTEM_CLIENT_ID_PREFIX)) {
+            throw new CommentValidationException("사용할 수 없는 clientId입니다.");
+        }
+
         String content = normalizeContent(request.content());
         String author = resolveAuthor(request.author(), authenticatedUser);
         Instant now = Instant.now(clock);
@@ -122,6 +133,47 @@ public class CommentService {
         return response;
     }
 
+    @Transactional
+    public ChatMessageResponse publishTradeSystemMessage(String content) {
+        return publishSystemMessage(TRADE_SYSTEM_CLIENT_ID, content);
+    }
+
+    @Transactional
+    public ChatMessageResponse publishLoginSystemMessage(String content) {
+        return publishSystemMessage(LOGIN_SYSTEM_CLIENT_ID, content);
+    }
+
+    private ChatMessageResponse publishSystemMessage(String clientId, String content) {
+        String normalizedContent = normalizeContent(content);
+        Instant now = Instant.now(clock);
+        Instant duplicateWindowStart = now.minus(SYSTEM_MESSAGE_DUPLICATE_WINDOW);
+
+        ChatMessageResponse duplicateResponse = commentRepository
+            .findTopByVideoIdAndClientIdAndContentAndCreatedAtAfterOrderByCreatedAtDesc(
+                GLOBAL_ROOM_VIDEO_ID,
+                clientId,
+                normalizedContent,
+                duplicateWindowStart
+            )
+            .map(this::toResponse)
+            .orElse(null);
+
+        if (duplicateResponse != null) {
+            return duplicateResponse;
+        }
+
+        Comment comment = new Comment();
+        comment.setVideoId(GLOBAL_ROOM_VIDEO_ID);
+        comment.setClientId(clientId);
+        comment.setAuthor(SYSTEM_AUTHOR);
+        comment.setContent(normalizedContent);
+        comment.setCreatedAt(now);
+
+        ChatMessageResponse response = toResponse(commentRepository.save(comment));
+        messagingTemplate.convertAndSend(GLOBAL_COMMENTS_TOPIC, response);
+        return response;
+    }
+
     private String resolveAuthor(String requestedAuthor, AuthenticatedUser authenticatedUser) {
         if (authenticatedUser != null && StringUtils.hasText(authenticatedUser.displayName())) {
             return authenticatedUser.displayName().trim();
@@ -134,11 +186,18 @@ public class CommentService {
         return new ChatMessageResponse(
             comment.getId(),
             comment.getVideoId(),
+            resolveMessageType(comment),
             comment.getAuthor(),
             comment.getContent(),
             comment.getClientId(),
             comment.getCreatedAt()
         );
+    }
+
+    private String resolveMessageType(Comment comment) {
+        return comment.getClientId() != null && comment.getClientId().startsWith(SYSTEM_CLIENT_ID_PREFIX)
+            ? SYSTEM_MESSAGE_TYPE
+            : USER_MESSAGE_TYPE;
     }
 
     private String normalizeContent(String content) {

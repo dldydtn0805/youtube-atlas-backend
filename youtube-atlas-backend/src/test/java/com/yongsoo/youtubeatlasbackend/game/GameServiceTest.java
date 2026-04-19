@@ -21,6 +21,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
+import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.game.api.CreatePositionRequest;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPositionsRequest;
@@ -48,6 +49,7 @@ class GameServiceTest {
     private TrendSignalRepository trendSignalRepository;
     private TrendRunRepository trendRunRepository;
     private TrendSnapshotRepository trendSnapshotRepository;
+    private CommentService commentService;
     private GameService gameService;
 
     @BeforeEach
@@ -62,6 +64,7 @@ class GameServiceTest {
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
         trendRunRepository = org.mockito.Mockito.mock(TrendRunRepository.class);
         trendSnapshotRepository = org.mockito.Mockito.mock(TrendSnapshotRepository.class);
+        commentService = org.mockito.Mockito.mock(CommentService.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-01T06:00:00Z"), ZoneOffset.UTC);
         AtlasProperties atlasProperties = new AtlasProperties();
         atlasProperties.getTrending().setCaptureSlotMinutes(5);
@@ -77,6 +80,7 @@ class GameServiceTest {
             trendSignalRepository,
             trendRunRepository,
             trendSnapshotRepository,
+            commentService,
             fixedClock,
             atlasProperties
         );
@@ -145,6 +149,7 @@ class GameServiceTest {
         assertThat(response.get(0).currentPricePoints()).isEqualTo(buyPricePoints);
         assertThat(wallet.getBalancePoints()).isEqualTo(10_000L - buyPricePoints);
         assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints);
+        verify(commentService).publishTradeSystemMessage("User 7님이 [Title video-1] 1개를 매수했습니다. (7500P)");
     }
 
     @Test
@@ -268,6 +273,7 @@ class GameServiceTest {
         assertThat(response.balancePoints()).isEqualTo((10_000L - buyPricePoints) + settledPoints);
         assertThat(wallet.getReservedPoints()).isZero();
         assertThat(wallet.getRealizedPnlPoints()).isEqualTo(pnlPoints);
+        verify(commentService).publishTradeSystemMessage("User 7님이 [Title video-1] 1개를 매도했습니다. (9970P)");
     }
 
     @Test

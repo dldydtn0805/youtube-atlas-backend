@@ -20,6 +20,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthSessionResponse;
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthUserResponse;
+import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.playback.PlaybackProgressService;
 import com.yongsoo.youtubeatlasbackend.playback.api.PlaybackProgressResponse;
 
@@ -30,6 +31,7 @@ class AuthServiceTest {
     private GoogleAuthorizationCodeExchanger googleAuthorizationCodeExchanger;
     private GoogleTokenVerifier googleTokenVerifier;
     private PlaybackProgressService playbackProgressService;
+    private CommentService commentService;
     private AuthService authService;
     private final Map<String, AuthSession> sessionsByHash = new HashMap<>();
 
@@ -40,6 +42,7 @@ class AuthServiceTest {
         googleAuthorizationCodeExchanger = org.mockito.Mockito.mock(GoogleAuthorizationCodeExchanger.class);
         googleTokenVerifier = org.mockito.Mockito.mock(GoogleTokenVerifier.class);
         playbackProgressService = org.mockito.Mockito.mock(PlaybackProgressService.class);
+        commentService = org.mockito.Mockito.mock(CommentService.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-01T06:00:00Z"), ZoneOffset.UTC);
         authService = new AuthService(
             appUserRepository,
@@ -47,6 +50,7 @@ class AuthServiceTest {
             googleAuthorizationCodeExchanger,
             googleTokenVerifier,
             playbackProgressService,
+            commentService,
             fixedClock
         );
 
@@ -81,6 +85,7 @@ class AuthServiceTest {
         assertThat(response.expiresAt()).isEqualTo(Instant.parse("2026-05-01T06:00:00Z"));
         assertThat(response.user().email()).isEqualTo("atlas@example.com");
         assertThat(response.user().displayName()).isEqualTo("Atlas User");
+        verify(commentService).publishLoginSystemMessage("Atlas User님이 로그인했습니다.");
     }
 
     @Test

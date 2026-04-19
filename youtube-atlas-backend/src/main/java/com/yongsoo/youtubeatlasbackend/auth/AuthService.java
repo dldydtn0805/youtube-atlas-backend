@@ -15,6 +15,7 @@ import org.springframework.util.StringUtils;
 
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthSessionResponse;
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthUserResponse;
+import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.playback.PlaybackProgressService;
 import com.yongsoo.youtubeatlasbackend.playback.api.PlaybackProgressResponse;
 
@@ -26,6 +27,7 @@ public class AuthService {
     private final GoogleAuthorizationCodeExchanger googleAuthorizationCodeExchanger;
     private final GoogleTokenVerifier googleTokenVerifier;
     private final PlaybackProgressService playbackProgressService;
+    private final CommentService commentService;
     private final Clock clock;
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -35,6 +37,7 @@ public class AuthService {
         GoogleAuthorizationCodeExchanger googleAuthorizationCodeExchanger,
         GoogleTokenVerifier googleTokenVerifier,
         PlaybackProgressService playbackProgressService,
+        CommentService commentService,
         Clock clock
     ) {
         this.appUserRepository = appUserRepository;
@@ -42,6 +45,7 @@ public class AuthService {
         this.googleAuthorizationCodeExchanger = googleAuthorizationCodeExchanger;
         this.googleTokenVerifier = googleTokenVerifier;
         this.playbackProgressService = playbackProgressService;
+        this.commentService = commentService;
         this.clock = clock;
     }
 
@@ -76,6 +80,7 @@ public class AuthService {
         session.setCreatedAt(now);
         session.setExpiresAt(now.plusSeconds(sessionTtlDays * 24L * 60L * 60L));
         authSessionRepository.save(session);
+        publishLoginSystemMessage(savedUser);
 
         return new AuthSessionResponse(
             rawToken,
@@ -160,6 +165,11 @@ public class AuthService {
         byte[] bytes = new byte[32];
         secureRandom.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private void publishLoginSystemMessage(AppUser user) {
+        String displayName = StringUtils.hasText(user.getDisplayName()) ? user.getDisplayName().trim() : "익명";
+        commentService.publishLoginSystemMessage(displayName + "님이 로그인했습니다.");
     }
 
     private String hashToken(String token) {

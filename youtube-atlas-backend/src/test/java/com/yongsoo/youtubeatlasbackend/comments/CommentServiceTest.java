@@ -83,6 +83,7 @@ class CommentServiceTest {
 
         assertThat(response.author()).isEqualTo("익명");
         assertThat(response.content()).isEqualTo("hello world");
+        assertThat(response.messageType()).isEqualTo(CommentService.USER_MESSAGE_TYPE);
         assertThat(response.videoId()).isEqualTo(CommentService.GLOBAL_ROOM_VIDEO_ID);
         verify(messagingTemplate).convertAndSend("/topic/comments", response);
     }
@@ -131,5 +132,76 @@ class CommentServiceTest {
         );
 
         assertThat(response.author()).isEqualTo("Atlas User");
+    }
+
+    @Test
+    void publishTradeSystemMessageStoresAndPublishesSystemMessage() {
+        when(commentRepository.save(any(Comment.class))).thenAnswer(invocation -> {
+            Comment comment = invocation.getArgument(0, Comment.class);
+            ReflectionTestUtils.setField(comment, "id", 3L);
+            return comment;
+        });
+        when(commentRepository.findTopByVideoIdAndClientIdAndContentAndCreatedAtAfterOrderByCreatedAtDesc(
+            eq(CommentService.GLOBAL_ROOM_VIDEO_ID),
+            eq("system:trade"),
+            eq("Atlas User님이 [Title] 1개를 매수했습니다. (7500P)"),
+            any(Instant.class)
+        )).thenReturn(Optional.empty());
+
+        ChatMessageResponse response = commentService.publishTradeSystemMessage("Atlas User님이 [Title] 1개를 매수했습니다. (7500P)");
+
+        assertThat(response.messageType()).isEqualTo(CommentService.SYSTEM_MESSAGE_TYPE);
+        assertThat(response.author()).isEqualTo("시스템");
+        assertThat(response.clientId()).isEqualTo("system:trade");
+        assertThat(response.videoId()).isEqualTo(CommentService.GLOBAL_ROOM_VIDEO_ID);
+        verify(messagingTemplate).convertAndSend("/topic/comments", response);
+    }
+
+    @Test
+    void publishLoginSystemMessageStoresAndPublishesSystemMessage() {
+        when(commentRepository.save(any(Comment.class))).thenAnswer(invocation -> {
+            Comment comment = invocation.getArgument(0, Comment.class);
+            ReflectionTestUtils.setField(comment, "id", 4L);
+            return comment;
+        });
+        when(commentRepository.findTopByVideoIdAndClientIdAndContentAndCreatedAtAfterOrderByCreatedAtDesc(
+            eq(CommentService.GLOBAL_ROOM_VIDEO_ID),
+            eq("system:login"),
+            eq("Atlas User님이 로그인했습니다."),
+            any(Instant.class)
+        )).thenReturn(Optional.empty());
+
+        ChatMessageResponse response = commentService.publishLoginSystemMessage("Atlas User님이 로그인했습니다.");
+
+        assertThat(response.messageType()).isEqualTo(CommentService.SYSTEM_MESSAGE_TYPE);
+        assertThat(response.author()).isEqualTo("시스템");
+        assertThat(response.clientId()).isEqualTo("system:login");
+        assertThat(response.videoId()).isEqualTo(CommentService.GLOBAL_ROOM_VIDEO_ID);
+        verify(messagingTemplate).convertAndSend("/topic/comments", response);
+    }
+
+    @Test
+    void publishLoginSystemMessageDoesNotRepublishRecentDuplicate() {
+        Comment existingComment = new Comment();
+        ReflectionTestUtils.setField(existingComment, "id", 5L);
+        existingComment.setVideoId(CommentService.GLOBAL_ROOM_VIDEO_ID);
+        existingComment.setAuthor("시스템");
+        existingComment.setClientId("system:login");
+        existingComment.setContent("Atlas User님이 로그인했습니다.");
+        existingComment.setCreatedAt(Instant.parse("2026-03-24T09:59:55Z"));
+
+        when(commentRepository.findTopByVideoIdAndClientIdAndContentAndCreatedAtAfterOrderByCreatedAtDesc(
+            eq(CommentService.GLOBAL_ROOM_VIDEO_ID),
+            eq("system:login"),
+            eq("Atlas User님이 로그인했습니다."),
+            any(Instant.class)
+        )).thenReturn(Optional.of(existingComment));
+
+        ChatMessageResponse response = commentService.publishLoginSystemMessage("Atlas User님이 로그인했습니다.");
+
+        assertThat(response.id()).isEqualTo(5L);
+        assertThat(response.messageType()).isEqualTo(CommentService.SYSTEM_MESSAGE_TYPE);
+        verify(commentRepository, never()).save(any(Comment.class));
+        verify(messagingTemplate, never()).convertAndSend(any(String.class), any(Object.class));
     }
 }

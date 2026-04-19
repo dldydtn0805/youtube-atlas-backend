@@ -24,6 +24,7 @@ import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
+import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.game.api.CoinOverviewResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.CoinPositionResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.CoinRankResponse;
@@ -86,6 +87,7 @@ public class GameService {
     private final TrendSignalRepository trendSignalRepository;
     private final TrendRunRepository trendRunRepository;
     private final TrendSnapshotRepository trendSnapshotRepository;
+    private final CommentService commentService;
     private final Clock clock;
     private final CronExpression gameSettlementCron;
     private final int trendCaptureSlotMinutes;
@@ -102,6 +104,7 @@ public class GameService {
         TrendSignalRepository trendSignalRepository,
         TrendRunRepository trendRunRepository,
         TrendSnapshotRepository trendSnapshotRepository,
+        CommentService commentService,
         Clock clock,
         AtlasProperties atlasProperties
     ) {
@@ -115,6 +118,7 @@ public class GameService {
         this.trendSignalRepository = trendSignalRepository;
         this.trendRunRepository = trendRunRepository;
         this.trendSnapshotRepository = trendSnapshotRepository;
+        this.commentService = commentService;
         this.clock = clock;
         this.gameProperties = atlasProperties.getGame();
         this.gameSettlementCron = CronExpression.parse(atlasProperties.getGame().getCron());
@@ -702,6 +706,7 @@ public class GameService {
         gameWalletRepository.save(wallet);
 
         saveLedger(season, user, savedPosition, LedgerType.BUY_LOCK, -totalStakePoints, previousBalancePoints - totalStakePoints, now);
+        publishTradeSystemMessage(user, savedPosition, "매수", quantity, totalStakePoints);
 
         return List.of(toOpenPositionResponse(savedPosition, signal));
     }
@@ -1486,6 +1491,7 @@ public class GameService {
             wallet.getBalancePoints(),
             now
         );
+        publishTradeSystemMessage(settledPosition.getUser(), settledPosition, "매도", sellQuantity, settledPoints);
 
         return new SellPositionResponse(
             settledPosition.getId(),
@@ -1501,6 +1507,25 @@ public class GameService {
             wallet.getBalancePoints(),
             settledPosition.getClosedAt()
         );
+    }
+
+    private void publishTradeSystemMessage(
+        AppUser user,
+        GamePosition position,
+        String action,
+        int quantity,
+        long points
+    ) {
+        String displayName = StringUtils.hasText(user.getDisplayName()) ? user.getDisplayName().trim() : "익명";
+        commentService.publishTradeSystemMessage(
+            displayName + "님이 [" + position.getTitle() + "] " + formatQuantity(quantity)
+                + "개를 " + action + "했습니다. (" + points + "P)"
+        );
+    }
+
+    private String formatQuantity(int quantity) {
+        int wholeQuantity = quantity / GamePointCalculator.QUANTITY_SCALE;
+        return Integer.toString(wholeQuantity);
     }
 
     private void ensureLatestRunLooksHealthy(String regionCode, String categoryId, Long latestRunId, int latestSnapshotCount) {

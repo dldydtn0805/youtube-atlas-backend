@@ -24,6 +24,13 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
 
     Optional<Comment> findTopByVideoIdAndClientIdOrderByCreatedAtDesc(String videoId, String clientId);
 
+    Optional<Comment> findTopByVideoIdAndClientIdAndContentAndCreatedAtAfterOrderByCreatedAtDesc(
+        String videoId,
+        String clientId,
+        String content,
+        Instant createdAt
+    );
+
     boolean existsByVideoIdAndClientIdAndContentAndCreatedAtAfter(
         String videoId,
         String clientId,
