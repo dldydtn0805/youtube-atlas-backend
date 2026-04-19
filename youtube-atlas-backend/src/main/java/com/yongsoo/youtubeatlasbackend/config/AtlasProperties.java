@@ -14,6 +14,7 @@ public class AtlasProperties {
     private final Game game = new Game();
     private final Auth auth = new Auth();
     private final Admin admin = new Admin();
+    private final RateLimit rateLimit = new RateLimit();
 
     public Youtube getYoutube() {
         return youtube;
@@ -37,6 +38,10 @@ public class AtlasProperties {
 
     public Admin getAdmin() {
         return admin;
+    }
+
+    public RateLimit getRateLimit() {
+        return rateLimit;
     }
 
     public static class Youtube {
@@ -385,6 +390,81 @@ public class AtlasProperties {
 
         public void setAllowedEmails(List<String> allowedEmails) {
             this.allowedEmails = allowedEmails;
+        }
+    }
+
+    public static class RateLimit {
+        private boolean enabled = true;
+        private int generalPerMinute = 120;
+        private int loginPerMinute = 10;
+        private int commentPerMinute = 20;
+        private int tradePerMinute = 60;
+        private int sensitivePerMinute = 5;
+        private long maxTrackedClients = 10_000L;
+        private boolean trustForwardedHeaders;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getGeneralPerMinute() {
+            return generalPerMinute;
+        }
+
+        public void setGeneralPerMinute(int generalPerMinute) {
+            this.generalPerMinute = generalPerMinute;
+        }
+
+        public int getLoginPerMinute() {
+            return loginPerMinute;
+        }
+
+        public void setLoginPerMinute(int loginPerMinute) {
+            this.loginPerMinute = loginPerMinute;
+        }
+
+        public int getCommentPerMinute() {
+            return commentPerMinute;
+        }
+
+        public void setCommentPerMinute(int commentPerMinute) {
+            this.commentPerMinute = commentPerMinute;
+        }
+
+        public int getTradePerMinute() {
+            return tradePerMinute;
+        }
+
+        public void setTradePerMinute(int tradePerMinute) {
+            this.tradePerMinute = tradePerMinute;
+        }
+
+        public int getSensitivePerMinute() {
+            return sensitivePerMinute;
+        }
+
+        public void setSensitivePerMinute(int sensitivePerMinute) {
+            this.sensitivePerMinute = sensitivePerMinute;
+        }
+
+        public long getMaxTrackedClients() {
+            return maxTrackedClients;
+        }
+
+        public void setMaxTrackedClients(long maxTrackedClients) {
+            this.maxTrackedClients = maxTrackedClients;
+        }
+
+        public boolean isTrustForwardedHeaders() {
+            return trustForwardedHeaders;
+        }
+
+        public void setTrustForwardedHeaders(boolean trustForwardedHeaders) {
+            this.trustForwardedHeaders = trustForwardedHeaders;
         }
     }
 
