@@ -22,6 +22,9 @@ public class CommentService {
     public static final String GLOBAL_ROOM_VIDEO_ID = "global";
     public static final String SYSTEM_MESSAGE_TYPE = "SYSTEM";
     public static final String USER_MESSAGE_TYPE = "USER";
+    public static final String TRADE_SYSTEM_EVENT_TYPE = "TRADE";
+    public static final String LOGIN_SYSTEM_EVENT_TYPE = "LOGIN";
+    public static final String TIER_SYSTEM_EVENT_TYPE = "TIER";
     private static final String GLOBAL_COMMENTS_TOPIC = "/topic/comments";
     private static final String SYSTEM_AUTHOR = "시스템";
     private static final String SYSTEM_CLIENT_ID_PREFIX = "system:";
@@ -201,6 +204,7 @@ public class CommentService {
             comment.getId(),
             comment.getVideoId(),
             resolveMessageType(comment),
+            resolveSystemEventType(comment),
             comment.getAuthor(),
             comment.getContent(),
             comment.getClientId(),
@@ -244,6 +248,19 @@ public class CommentService {
         return comment.getClientId() != null && comment.getClientId().startsWith(SYSTEM_CLIENT_ID_PREFIX)
             ? SYSTEM_MESSAGE_TYPE
             : USER_MESSAGE_TYPE;
+    }
+
+    private String resolveSystemEventType(Comment comment) {
+        if (comment.getClientId() == null) {
+            return null;
+        }
+
+        return switch (comment.getClientId()) {
+            case TRADE_SYSTEM_CLIENT_ID -> TRADE_SYSTEM_EVENT_TYPE;
+            case LOGIN_SYSTEM_CLIENT_ID -> LOGIN_SYSTEM_EVENT_TYPE;
+            case TIER_SYSTEM_CLIENT_ID -> TIER_SYSTEM_EVENT_TYPE;
+            default -> null;
+        };
     }
 
     private String normalizeContent(String content) {

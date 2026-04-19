@@ -15,17 +15,29 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.yongsoo.youtubeatlasbackend.auth.AuthService;
+import com.yongsoo.youtubeatlasbackend.comments.CommentPresenceService;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 
 @RestController
 public class CommentController {
 
     private final CommentService commentService;
+    private final CommentPresenceService commentPresenceService;
     private final AuthService authService;
 
-    public CommentController(CommentService commentService, AuthService authService) {
+    public CommentController(
+        CommentService commentService,
+        CommentPresenceService commentPresenceService,
+        AuthService authService
+    ) {
         this.commentService = commentService;
+        this.commentPresenceService = commentPresenceService;
         this.authService = authService;
+    }
+
+    @GetMapping("/api/comments/presence")
+    public ChatPresenceResponse getCommentPresence() {
+        return commentPresenceService.getPresence();
     }
 
     @GetMapping("/api/comments")

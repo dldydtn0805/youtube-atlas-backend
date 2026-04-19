@@ -64,6 +64,7 @@ class CommentServiceTest {
         assertThat(response).singleElement().satisfies(message -> {
             assertThat(message.id()).isEqualTo(2L);
             assertThat(message.content()).isEqualTo("지금 들어온 메시지");
+            assertThat(message.systemEventType()).isNull();
         });
         verify(commentRepository).findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc(CommentService.GLOBAL_ROOM_VIDEO_ID, since);
     }
@@ -92,6 +93,7 @@ class CommentServiceTest {
         assertThat(response.author()).isEqualTo("익명");
         assertThat(response.content()).isEqualTo("hello world");
         assertThat(response.messageType()).isEqualTo(CommentService.USER_MESSAGE_TYPE);
+        assertThat(response.systemEventType()).isNull();
         assertThat(response.userId()).isNull();
         assertThat(response.videoId()).isEqualTo(CommentService.GLOBAL_ROOM_VIDEO_ID);
         verify(messagingTemplate).convertAndSend("/topic/comments", response);
@@ -142,6 +144,7 @@ class CommentServiceTest {
 
         assertThat(response.author()).isEqualTo("Atlas User");
         assertThat(response.userId()).isEqualTo(7L);
+        assertThat(response.systemEventType()).isNull();
     }
 
     @Test
@@ -184,6 +187,7 @@ class CommentServiceTest {
         ChatMessageResponse response = commentService.publishTradeSystemMessage("Atlas User님이 [Title] 1개를 매수했습니다. (7500P)");
 
         assertThat(response.messageType()).isEqualTo(CommentService.SYSTEM_MESSAGE_TYPE);
+        assertThat(response.systemEventType()).isEqualTo(CommentService.TRADE_SYSTEM_EVENT_TYPE);
         assertThat(response.author()).isEqualTo("시스템");
         assertThat(response.clientId()).isEqualTo("system:trade");
         assertThat(response.userId()).isNull();
@@ -208,6 +212,7 @@ class CommentServiceTest {
         ChatMessageResponse response = commentService.publishLoginSystemMessage("Atlas User님이 로그인했습니다.");
 
         assertThat(response.messageType()).isEqualTo(CommentService.SYSTEM_MESSAGE_TYPE);
+        assertThat(response.systemEventType()).isEqualTo(CommentService.LOGIN_SYSTEM_EVENT_TYPE);
         assertThat(response.author()).isEqualTo("시스템");
         assertThat(response.clientId()).isEqualTo("system:login");
         assertThat(response.videoId()).isEqualTo(CommentService.GLOBAL_ROOM_VIDEO_ID);
@@ -231,6 +236,7 @@ class CommentServiceTest {
         ChatMessageResponse response = commentService.publishTierSystemMessage("Atlas User님이 실버 티어로 상승했습니다.");
 
         assertThat(response.messageType()).isEqualTo(CommentService.SYSTEM_MESSAGE_TYPE);
+        assertThat(response.systemEventType()).isEqualTo(CommentService.TIER_SYSTEM_EVENT_TYPE);
         assertThat(response.author()).isEqualTo("시스템");
         assertThat(response.clientId()).isEqualTo("system:tier");
         assertThat(response.videoId()).isEqualTo(CommentService.GLOBAL_ROOM_VIDEO_ID);
@@ -258,6 +264,7 @@ class CommentServiceTest {
 
         assertThat(response.id()).isEqualTo(5L);
         assertThat(response.messageType()).isEqualTo(CommentService.SYSTEM_MESSAGE_TYPE);
+        assertThat(response.systemEventType()).isEqualTo(CommentService.LOGIN_SYSTEM_EVENT_TYPE);
         verify(commentRepository, never()).save(any(Comment.class));
         verify(messagingTemplate, never()).convertAndSend(any(String.class), any(Object.class));
     }
