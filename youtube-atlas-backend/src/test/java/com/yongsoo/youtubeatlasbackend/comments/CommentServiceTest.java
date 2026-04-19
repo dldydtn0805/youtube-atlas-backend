@@ -38,15 +38,23 @@ class CommentServiceTest {
     }
 
     @Test
+    void getCommentsWithoutSinceReturnsLatestTwentyInAscendingOrder() {
+        Comment latestComment = comment(22L, "client-22", "최근 메시지", Instant.parse("2026-03-24T10:00:22Z"));
+        Comment olderComment = comment(3L, "client-3", "20개 중 가장 오래된 메시지", Instant.parse("2026-03-24T10:00:03Z"));
+
+        when(commentRepository.findTop20ByVideoIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID))
+            .thenReturn(List.of(latestComment, olderComment));
+
+        List<ChatMessageResponse> response = commentService.getComments((Instant) null);
+
+        assertThat(response).extracting(ChatMessageResponse::id).containsExactly(3L, 22L);
+        verify(commentRepository).findTop20ByVideoIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID);
+    }
+
+    @Test
     void getCommentsOnlyReturnsMessagesCreatedAfterSince() {
         Instant since = Instant.parse("2026-03-24T10:00:00Z");
-        Comment newerComment = new Comment();
-        ReflectionTestUtils.setField(newerComment, "id", 2L);
-        newerComment.setVideoId("video-1");
-        newerComment.setAuthor("익명");
-        newerComment.setClientId("client-2");
-        newerComment.setContent("지금 들어온 메시지");
-        newerComment.setCreatedAt(Instant.parse("2026-03-24T10:00:01Z"));
+        Comment newerComment = comment(2L, "client-2", "지금 들어온 메시지", Instant.parse("2026-03-24T10:00:01Z"));
 
         when(commentRepository.findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc(CommentService.GLOBAL_ROOM_VIDEO_ID, since))
             .thenReturn(List.of(newerComment));
@@ -181,6 +189,29 @@ class CommentServiceTest {
     }
 
     @Test
+    void publishTierSystemMessageStoresAndPublishesSystemMessage() {
+        when(commentRepository.save(any(Comment.class))).thenAnswer(invocation -> {
+            Comment comment = invocation.getArgument(0, Comment.class);
+            ReflectionTestUtils.setField(comment, "id", 6L);
+            return comment;
+        });
+        when(commentRepository.findTopByVideoIdAndClientIdAndContentAndCreatedAtAfterOrderByCreatedAtDesc(
+            eq(CommentService.GLOBAL_ROOM_VIDEO_ID),
+            eq("system:tier"),
+            eq("Atlas User님이 실버 티어로 상승했습니다."),
+            any(Instant.class)
+        )).thenReturn(Optional.empty());
+
+        ChatMessageResponse response = commentService.publishTierSystemMessage("Atlas User님이 실버 티어로 상승했습니다.");
+
+        assertThat(response.messageType()).isEqualTo(CommentService.SYSTEM_MESSAGE_TYPE);
+        assertThat(response.author()).isEqualTo("시스템");
+        assertThat(response.clientId()).isEqualTo("system:tier");
+        assertThat(response.videoId()).isEqualTo(CommentService.GLOBAL_ROOM_VIDEO_ID);
+        verify(messagingTemplate).convertAndSend("/topic/comments", response);
+    }
+
+    @Test
     void publishLoginSystemMessageDoesNotRepublishRecentDuplicate() {
         Comment existingComment = new Comment();
         ReflectionTestUtils.setField(existingComment, "id", 5L);
@@ -203,5 +234,16 @@ class CommentServiceTest {
         assertThat(response.messageType()).isEqualTo(CommentService.SYSTEM_MESSAGE_TYPE);
         verify(commentRepository, never()).save(any(Comment.class));
         verify(messagingTemplate, never()).convertAndSend(any(String.class), any(Object.class));
+    }
+
+    private Comment comment(Long id, String clientId, String content, Instant createdAt) {
+        Comment comment = new Comment();
+        ReflectionTestUtils.setField(comment, "id", id);
+        comment.setVideoId(CommentService.GLOBAL_ROOM_VIDEO_ID);
+        comment.setAuthor("익명");
+        comment.setClientId(clientId);
+        comment.setContent(content);
+        comment.setCreatedAt(createdAt);
+        return comment;
     }
 }

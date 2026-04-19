@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.game.api.GameRealtimeEventResponse;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
@@ -41,6 +42,7 @@ public class GameSettlementService {
     private final GameCoinTierService gameCoinTierService;
     private final TrendSignalRepository trendSignalRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final CommentService commentService;
     private final Clock clock;
 
     public GameSettlementService(
@@ -54,6 +56,7 @@ public class GameSettlementService {
         GameCoinTierService gameCoinTierService,
         TrendSignalRepository trendSignalRepository,
         SimpMessagingTemplate messagingTemplate,
+        CommentService commentService,
         Clock clock
     ) {
         this.atlasProperties = atlasProperties;
@@ -66,6 +69,7 @@ public class GameSettlementService {
         this.gameCoinTierService = gameCoinTierService;
         this.trendSignalRepository = trendSignalRepository;
         this.messagingTemplate = messagingTemplate;
+        this.commentService = commentService;
         this.clock = clock;
     }
 
@@ -237,10 +241,36 @@ public class GameSettlementService {
         payout.setCreatedAt(now);
         gameCoinPayoutRepository.saveAndFlush(payout);
 
+        long previousCoinBalance = wallet.getCoinBalance();
         wallet.setCoinBalance(wallet.getCoinBalance() + producedCoins);
         wallet.setUpdatedAt(now);
         gameWalletRepository.save(wallet);
         publishWalletUpdated(wallet, capturedAt, now);
+        publishTierPromotionIfNeeded(wallet, previousCoinBalance);
+    }
+
+    private void publishTierPromotionIfNeeded(GameWallet wallet, long previousCoinBalance) {
+        List<GameSeasonCoinTier> tiers = gameCoinTierService.getOrCreateTiers(wallet.getSeason());
+        if (tiers == null || tiers.isEmpty()) {
+            return;
+        }
+
+        GameSeasonCoinTier previousTier = gameCoinTierService.resolveTier(tiers, previousCoinBalance);
+        GameSeasonCoinTier currentTier = gameCoinTierService.resolveTier(tiers, wallet.getCoinBalance());
+        if (previousTier == null || currentTier == null) {
+            return;
+        }
+
+        if (currentTier.getSortOrder() <= previousTier.getSortOrder()) {
+            return;
+        }
+
+        String displayName = StringUtils.hasText(wallet.getUser().getDisplayName())
+            ? wallet.getUser().getDisplayName().trim()
+            : "익명";
+        commentService.publishTierSystemMessage(
+            displayName + "님이 " + currentTier.getDisplayName() + " 티어로 상승했습니다."
+        );
     }
 
     private void publishWalletUpdated(GameWallet wallet, Instant capturedAt, Instant occurredAt) {

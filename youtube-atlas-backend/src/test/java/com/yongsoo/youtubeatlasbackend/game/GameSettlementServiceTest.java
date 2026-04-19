@@ -2,6 +2,8 @@ package com.yongsoo.youtubeatlasbackend.game;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -17,6 +19,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.yongsoo.youtubeatlasbackend.auth.AppUser;
+import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.game.api.GameRealtimeEventResponse;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
@@ -37,6 +40,7 @@ class GameSettlementServiceTest {
     private GameCoinTierService gameCoinTierService;
     private TrendSignalRepository trendSignalRepository;
     private SimpMessagingTemplate messagingTemplate;
+    private CommentService commentService;
     private GameSettlementService gameSettlementService;
 
     @BeforeEach
@@ -51,6 +55,7 @@ class GameSettlementServiceTest {
         gameCoinTierService = org.mockito.Mockito.mock(GameCoinTierService.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
         messagingTemplate = org.mockito.Mockito.mock(SimpMessagingTemplate.class);
+        commentService = org.mockito.Mockito.mock(CommentService.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-08T00:01:00Z"), ZoneOffset.UTC);
 
         gameSettlementService = new GameSettlementService(
@@ -64,6 +69,7 @@ class GameSettlementServiceTest {
             gameCoinTierService,
             trendSignalRepository,
             messagingTemplate,
+            commentService,
             fixedClock
         );
     }
@@ -181,6 +187,40 @@ class GameSettlementServiceTest {
         gameSettlementService.distributeActiveSeasonCoins();
 
         assertThat(wallet.getCoinBalance()).isEqualTo(producedCoins);
+    }
+
+    @Test
+    void distributeActiveSeasonCoinsPublishesSystemMessageWhenTierPromotes() {
+        GameSeason season = activeSeasonStillRunning();
+        AppUser appUser = user(7L);
+        GamePosition position = openPosition(season, appUser, "video-1", 12, GamePointCalculator.calculatePricePoints(12));
+        position.setCreatedAt(Instant.parse("2026-04-07T22:00:00Z"));
+        GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
+        wallet.setCoinBalance(99_900L);
+        TrendSignal signal = signal("video-1", 1);
+        GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
+        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 100_000L, 2);
+        List<GameSeasonCoinTier> tiers = List.of(bronzeTier, silverTier);
+
+        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
+            .thenReturn(List.of(signal));
+        when(gameCoinPayoutRepository.findPositionIdsBySeasonIdAndPayoutSlotAt(1L, Instant.parse("2026-04-08T00:00:00Z")))
+            .thenReturn(List.of());
+        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(position));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gameCoinPayoutRepository.saveAndFlush(any(GameCoinPayout.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(tiers);
+        when(gameCoinTierService.resolveTier(eq(tiers), anyLong())).thenAnswer(invocation -> {
+            long coinBalance = invocation.getArgument(1, Long.class);
+            return coinBalance >= 100_000L ? silverTier : bronzeTier;
+        });
+
+        gameSettlementService.distributeActiveSeasonCoins();
+
+        verify(commentService).publishTierSystemMessage("User 7님이 실버 티어로 상승했습니다.");
     }
 
     @Test

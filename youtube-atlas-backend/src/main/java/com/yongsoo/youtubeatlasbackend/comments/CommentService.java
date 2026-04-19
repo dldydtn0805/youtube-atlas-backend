@@ -3,6 +3,7 @@ package com.yongsoo.youtubeatlasbackend.comments;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -25,6 +26,7 @@ public class CommentService {
     private static final String SYSTEM_CLIENT_ID_PREFIX = "system:";
     private static final String TRADE_SYSTEM_CLIENT_ID = SYSTEM_CLIENT_ID_PREFIX + "trade";
     private static final String LOGIN_SYSTEM_CLIENT_ID = SYSTEM_CLIENT_ID_PREFIX + "login";
+    private static final String TIER_SYSTEM_CLIENT_ID = SYSTEM_CLIENT_ID_PREFIX + "tier";
 
     static final Duration COMMENT_COOLDOWN = Duration.ofSeconds(5);
     static final Duration COMMENT_DUPLICATE_WINDOW = Duration.ofSeconds(30);
@@ -57,12 +59,20 @@ public class CommentService {
     @Transactional(readOnly = true)
     public List<ChatMessageResponse> getComments(Instant since) {
         List<Comment> comments = since == null
-            ? commentRepository.findByVideoIdOrderByCreatedAtAsc(GLOBAL_ROOM_VIDEO_ID)
+            ? findLatestGlobalComments()
             : commentRepository.findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc(GLOBAL_ROOM_VIDEO_ID, since);
 
         return comments.stream()
             .map(this::toResponse)
             .toList();
+    }
+
+    private List<Comment> findLatestGlobalComments() {
+        List<Comment> comments = new ArrayList<>(
+            commentRepository.findTop20ByVideoIdOrderByCreatedAtDesc(GLOBAL_ROOM_VIDEO_ID)
+        );
+        comments.sort((left, right) -> left.getCreatedAt().compareTo(right.getCreatedAt()));
+        return comments;
     }
 
     @Transactional
@@ -141,6 +151,11 @@ public class CommentService {
     @Transactional
     public ChatMessageResponse publishLoginSystemMessage(String content) {
         return publishSystemMessage(LOGIN_SYSTEM_CLIENT_ID, content);
+    }
+
+    @Transactional
+    public ChatMessageResponse publishTierSystemMessage(String content) {
+        return publishSystemMessage(TIER_SYSTEM_CLIENT_ID, content);
     }
 
     private ChatMessageResponse publishSystemMessage(String clientId, String content) {
