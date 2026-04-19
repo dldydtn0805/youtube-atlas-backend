@@ -24,5 +24,7 @@ public interface GameLedgerRepository extends JpaRepository<GameLedger, Long> {
     """)
     long sumAmountPointsBySeasonIdAndUserIdAndType(Long seasonId, Long userId, LedgerType type);
 
+    long countByUserIdAndTypeIn(Long userId, Collection<LedgerType> types);
+
     void deleteByUserId(Long userId);
 }

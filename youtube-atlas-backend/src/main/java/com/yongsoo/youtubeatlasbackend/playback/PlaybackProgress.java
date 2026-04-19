@@ -19,7 +19,7 @@ import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 @Table(
     name = "playback_progress",
     uniqueConstraints = {
-        @UniqueConstraint(name = "uk_playback_progress_user", columnNames = "user_id")
+        @UniqueConstraint(name = "uk_playback_progress_user_video", columnNames = {"user_id", "video_id"})
     }
 )
 public class PlaybackProgress {

@@ -1,6 +1,7 @@
 package com.yongsoo.youtubeatlasbackend.auth.api;
 
 import java.time.Instant;
+import java.util.List;
 
 import com.yongsoo.youtubeatlasbackend.playback.api.PlaybackProgressResponse;
 
@@ -12,6 +13,9 @@ public record AuthUserResponse(
     Instant createdAt,
     Instant lastLoginAt,
     long favoriteCount,
-    PlaybackProgressResponse lastPlaybackProgress
+    long commentCount,
+    long tradeCount,
+    PlaybackProgressResponse lastPlaybackProgress,
+    List<PlaybackProgressResponse> recentPlaybackProgresses
 ) {
 }

@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,13 +16,18 @@ import org.springframework.util.StringUtils;
 
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthSessionResponse;
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthUserResponse;
+import com.yongsoo.youtubeatlasbackend.comments.CommentRepository;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
+import com.yongsoo.youtubeatlasbackend.game.LedgerType;
 import com.yongsoo.youtubeatlasbackend.playback.PlaybackProgressService;
 import com.yongsoo.youtubeatlasbackend.playback.api.PlaybackProgressResponse;
 
 @Service
 public class AuthService {
+
+    private static final int RECENT_PLAYBACK_PROGRESS_LIMIT = 5;
 
     private final AppUserRepository appUserRepository;
     private final AuthSessionRepository authSessionRepository;
@@ -29,6 +35,8 @@ public class AuthService {
     private final GoogleTokenVerifier googleTokenVerifier;
     private final PlaybackProgressService playbackProgressService;
     private final FavoriteStreamerRepository favoriteStreamerRepository;
+    private final CommentRepository commentRepository;
+    private final GameLedgerRepository gameLedgerRepository;
     private final CommentService commentService;
     private final Clock clock;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -40,6 +48,8 @@ public class AuthService {
         GoogleTokenVerifier googleTokenVerifier,
         PlaybackProgressService playbackProgressService,
         FavoriteStreamerRepository favoriteStreamerRepository,
+        CommentRepository commentRepository,
+        GameLedgerRepository gameLedgerRepository,
         CommentService commentService,
         Clock clock
     ) {
@@ -49,6 +59,8 @@ public class AuthService {
         this.googleTokenVerifier = googleTokenVerifier;
         this.playbackProgressService = playbackProgressService;
         this.favoriteStreamerRepository = favoriteStreamerRepository;
+        this.commentRepository = commentRepository;
+        this.gameLedgerRepository = gameLedgerRepository;
         this.commentService = commentService;
         this.clock = clock;
     }
@@ -187,9 +199,19 @@ public class AuthService {
     }
 
     private AuthUserResponse toUserResponse(AppUser user) {
-        PlaybackProgressResponse lastPlaybackProgress = playbackProgressService.getCurrentProgressForUserId(user.getId())
-            .orElse(null);
+        List<PlaybackProgressResponse> recentPlaybackProgresses = playbackProgressService.getRecentProgressesForUserId(
+            user.getId(),
+            RECENT_PLAYBACK_PROGRESS_LIMIT
+        );
+        PlaybackProgressResponse lastPlaybackProgress = recentPlaybackProgresses.isEmpty()
+            ? null
+            : recentPlaybackProgresses.get(0);
         long favoriteCount = favoriteStreamerRepository.countByUserId(user.getId());
+        long commentCount = commentRepository.countByUserId(user.getId());
+        long tradeCount = gameLedgerRepository.countByUserIdAndTypeIn(
+            user.getId(),
+            List.of(LedgerType.BUY_LOCK, LedgerType.SELL_SETTLE)
+        );
 
         return new AuthUserResponse(
             user.getId(),
@@ -199,7 +221,10 @@ public class AuthService {
             user.getCreatedAt(),
             user.getLastLoginAt(),
             favoriteCount,
-            lastPlaybackProgress
+            commentCount,
+            tradeCount,
+            lastPlaybackProgress,
+            recentPlaybackProgresses
         );
     }
 

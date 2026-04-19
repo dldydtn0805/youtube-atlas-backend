@@ -2,8 +2,10 @@ package com.yongsoo.youtubeatlasbackend.playback;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -38,8 +40,18 @@ public class PlaybackProgressService {
 
     @Transactional(readOnly = true)
     public Optional<PlaybackProgressResponse> getCurrentProgressForUserId(Long userId) {
-        return playbackProgressRepository.findByUserId(userId)
+        return playbackProgressRepository.findTopByUserIdOrderByUpdatedAtDesc(userId)
             .map(this::toResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PlaybackProgressResponse> getRecentProgressesForUserId(Long userId, int limit) {
+        int normalizedLimit = Math.max(1, limit);
+
+        return playbackProgressRepository.findByUserIdOrderByUpdatedAtDesc(userId, PageRequest.of(0, normalizedLimit))
+            .stream()
+            .map(this::toResponse)
+            .toList();
     }
 
     @Transactional
@@ -49,7 +61,7 @@ public class PlaybackProgressService {
     ) {
         String videoId = normalizeRequired(request.videoId(), "videoId는 필수입니다.");
 
-        PlaybackProgress playbackProgress = playbackProgressRepository.findByUserId(authenticatedUser.id())
+        PlaybackProgress playbackProgress = playbackProgressRepository.findByUserIdAndVideoId(authenticatedUser.id(), videoId)
             .orElseGet(PlaybackProgress::new);
 
         if (playbackProgress.getUser() == null) {

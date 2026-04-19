@@ -9,8 +9,10 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.PageRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -43,7 +45,7 @@ class PlaybackProgressServiceTest {
         AppUser appUser = new AppUser();
         ReflectionTestUtils.setField(appUser, "id", 7L);
 
-        when(playbackProgressRepository.findByUserId(7L)).thenReturn(Optional.empty());
+        when(playbackProgressRepository.findByUserIdAndVideoId(7L, "abc123")).thenReturn(Optional.empty());
         when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
         when(playbackProgressRepository.save(any(PlaybackProgress.class))).thenAnswer(invocation -> {
             PlaybackProgress playbackProgress = invocation.getArgument(0, PlaybackProgress.class);
@@ -71,7 +73,7 @@ class PlaybackProgressServiceTest {
     }
 
     @Test
-    void upsertProgressReusesExistingPlaybackState() {
+    void upsertProgressReusesExistingPlaybackStateForSameVideo() {
         AppUser appUser = new AppUser();
         ReflectionTestUtils.setField(appUser, "id", 7L);
 
@@ -80,7 +82,7 @@ class PlaybackProgressServiceTest {
         playbackProgress.setUser(appUser);
         playbackProgress.setUpdatedAt(Instant.parse("2026-03-31T06:00:00Z"));
 
-        when(playbackProgressRepository.findByUserId(7L)).thenReturn(Optional.of(playbackProgress));
+        when(playbackProgressRepository.findByUserIdAndVideoId(7L, "video-2")).thenReturn(Optional.of(playbackProgress));
         when(playbackProgressRepository.save(playbackProgress)).thenReturn(playbackProgress);
 
         var response = playbackProgressService.upsertProgress(
@@ -104,7 +106,7 @@ class PlaybackProgressServiceTest {
         playbackProgress.setPositionSeconds(184L);
         playbackProgress.setUpdatedAt(Instant.parse("2026-04-01T05:50:00Z"));
 
-        when(playbackProgressRepository.findByUserId(7L)).thenReturn(Optional.of(playbackProgress));
+        when(playbackProgressRepository.findTopByUserIdOrderByUpdatedAtDesc(7L)).thenReturn(Optional.of(playbackProgress));
 
         var response = playbackProgressService.getCurrentProgress(
             new AuthenticatedUser(7L, "atlas@example.com", "Atlas User", null)
@@ -113,5 +115,27 @@ class PlaybackProgressServiceTest {
         assertThat(response).isPresent();
         assertThat(response.get().videoId()).isEqualTo("abc123");
         assertThat(response.get().positionSeconds()).isEqualTo(184L);
+    }
+
+    @Test
+    void getRecentProgressesReturnsStoredPlaybackStatesInUpdatedOrder() {
+        PlaybackProgress latest = new PlaybackProgress();
+        latest.setVideoId("latest");
+        latest.setPositionSeconds(42L);
+        latest.setUpdatedAt(Instant.parse("2026-04-01T06:00:00Z"));
+
+        PlaybackProgress previous = new PlaybackProgress();
+        previous.setVideoId("previous");
+        previous.setPositionSeconds(84L);
+        previous.setUpdatedAt(Instant.parse("2026-04-01T05:00:00Z"));
+
+        when(playbackProgressRepository.findByUserIdOrderByUpdatedAtDesc(7L, PageRequest.of(0, 5)))
+            .thenReturn(List.of(latest, previous));
+
+        var response = playbackProgressService.getRecentProgressesForUserId(7L, 5);
+
+        assertThat(response).hasSize(2);
+        assertThat(response.get(0).videoId()).isEqualTo("latest");
+        assertThat(response.get(1).videoId()).isEqualTo("previous");
     }
 }

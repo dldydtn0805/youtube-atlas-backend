@@ -501,7 +501,11 @@ Origin: https://youtube-atlas.vercel.app
     "email": "atlas@example.com",
     "displayName": "Atlas User",
     "pictureUrl": "https://lh3.googleusercontent.com/...",
+    "createdAt": "2026-04-01T06:00:00Z",
     "lastLoginAt": "2026-04-01T06:00:00Z",
+    "favoriteCount": 4,
+    "commentCount": 18,
+    "tradeCount": 42,
     "lastPlaybackProgress": {
       "videoId": "abc123",
       "videoTitle": "Sample title",
@@ -509,7 +513,17 @@ Origin: https://youtube-atlas.vercel.app
       "thumbnailUrl": "https://example.com/thumb.jpg",
       "positionSeconds": 184,
       "updatedAt": "2026-04-01T05:50:00Z"
-    }
+    },
+    "recentPlaybackProgresses": [
+      {
+        "videoId": "abc123",
+        "videoTitle": "Sample title",
+        "channelTitle": "Sample channel",
+        "thumbnailUrl": "https://example.com/thumb.jpg",
+        "positionSeconds": 184,
+        "updatedAt": "2026-04-01T05:50:00Z"
+      }
+    ]
   }
 }
 ```
@@ -523,7 +537,8 @@ Authorization: Bearer {accessToken}
 ```
 
 현재 로그인한 사용자 정보를 반환합니다.
-- 마지막으로 저장된 재생 위치가 있으면 `user.lastPlaybackProgress` 에 함께 내려옵니다.
+- `favoriteCount`, `commentCount`, `tradeCount` 로 사용자의 주요 활동 누적 수치를 함께 내려옵니다.
+- 최근 재생 위치는 최신 1개를 `user.lastPlaybackProgress`, 최신 5개 목록을 `user.recentPlaybackProgresses` 로 함께 내려옵니다.
 
 ### `DELETE /api/auth/session`
 

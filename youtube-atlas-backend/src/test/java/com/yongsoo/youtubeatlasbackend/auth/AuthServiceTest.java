@@ -3,6 +3,7 @@ package com.yongsoo.youtubeatlasbackend.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -11,6 +12,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -20,8 +22,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthSessionResponse;
 import com.yongsoo.youtubeatlasbackend.auth.api.AuthUserResponse;
+import com.yongsoo.youtubeatlasbackend.comments.CommentRepository;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
+import com.yongsoo.youtubeatlasbackend.game.LedgerType;
 import com.yongsoo.youtubeatlasbackend.playback.PlaybackProgressService;
 import com.yongsoo.youtubeatlasbackend.playback.api.PlaybackProgressResponse;
 
@@ -33,6 +38,8 @@ class AuthServiceTest {
     private GoogleTokenVerifier googleTokenVerifier;
     private PlaybackProgressService playbackProgressService;
     private FavoriteStreamerRepository favoriteStreamerRepository;
+    private CommentRepository commentRepository;
+    private GameLedgerRepository gameLedgerRepository;
     private CommentService commentService;
     private AuthService authService;
     private final Map<String, AuthSession> sessionsByHash = new HashMap<>();
@@ -45,6 +52,8 @@ class AuthServiceTest {
         googleTokenVerifier = org.mockito.Mockito.mock(GoogleTokenVerifier.class);
         playbackProgressService = org.mockito.Mockito.mock(PlaybackProgressService.class);
         favoriteStreamerRepository = org.mockito.Mockito.mock(FavoriteStreamerRepository.class);
+        commentRepository = org.mockito.Mockito.mock(CommentRepository.class);
+        gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
         commentService = org.mockito.Mockito.mock(CommentService.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-01T06:00:00Z"), ZoneOffset.UTC);
         authService = new AuthService(
@@ -54,6 +63,8 @@ class AuthServiceTest {
             googleTokenVerifier,
             playbackProgressService,
             favoriteStreamerRepository,
+            commentRepository,
+            gameLedgerRepository,
             commentService,
             fixedClock
         );
@@ -74,7 +85,10 @@ class AuthServiceTest {
             Optional.ofNullable(sessionsByHash.get(invocation.getArgument(0, String.class)))
         );
         when(favoriteStreamerRepository.countByUserId(any())).thenReturn(0L);
+        when(commentRepository.countByUserId(any())).thenReturn(0L);
+        when(gameLedgerRepository.countByUserIdAndTypeIn(any(), any())).thenReturn(0L);
         when(playbackProgressService.getCurrentProgressForUserId(any())).thenReturn(Optional.empty());
+        when(playbackProgressService.getRecentProgressesForUserId(any(), anyInt())).thenReturn(List.of());
     }
 
     @Test
@@ -107,6 +121,8 @@ class AuthServiceTest {
         assertThat(me.displayName()).isEqualTo("Atlas User");
         assertThat(me.createdAt()).isEqualTo(Instant.parse("2026-04-01T06:00:00Z"));
         assertThat(me.favoriteCount()).isZero();
+        assertThat(me.commentCount()).isZero();
+        assertThat(me.tradeCount()).isZero();
     }
 
     @Test
@@ -114,7 +130,7 @@ class AuthServiceTest {
         when(googleTokenVerifier.verify("google-id-token")).thenReturn(
             new GoogleIdentity("google-subject-1", "atlas@example.com", "Atlas User", null)
         );
-        when(playbackProgressService.getCurrentProgressForUserId(7L)).thenReturn(Optional.of(
+        when(playbackProgressService.getRecentProgressesForUserId(7L, 5)).thenReturn(List.of(
             new PlaybackProgressResponse(
                 "abc123",
                 "Sample title",
@@ -131,6 +147,40 @@ class AuthServiceTest {
         assertThat(me.lastPlaybackProgress()).isNotNull();
         assertThat(me.lastPlaybackProgress().videoId()).isEqualTo("abc123");
         assertThat(me.lastPlaybackProgress().positionSeconds()).isEqualTo(184L);
+        assertThat(me.recentPlaybackProgresses()).hasSize(1);
+        assertThat(me.recentPlaybackProgresses().get(0).videoId()).isEqualTo("abc123");
+    }
+
+    @Test
+    void getCurrentUserIncludesRecentPlaybackProgressesWhenPresent() {
+        when(googleTokenVerifier.verify("google-id-token")).thenReturn(
+            new GoogleIdentity("google-subject-1", "atlas@example.com", "Atlas User", null)
+        );
+        when(playbackProgressService.getRecentProgressesForUserId(7L, 5)).thenReturn(List.of(
+            new PlaybackProgressResponse(
+                "latest",
+                "Latest title",
+                "Latest channel",
+                "https://example.com/latest.jpg",
+                10L,
+                Instant.parse("2026-04-01T05:50:00Z")
+            ),
+            new PlaybackProgressResponse(
+                "previous",
+                "Previous title",
+                "Previous channel",
+                "https://example.com/previous.jpg",
+                20L,
+                Instant.parse("2026-04-01T05:40:00Z")
+            )
+        ));
+
+        AuthSessionResponse sessionResponse = authService.loginWithGoogle("google-id-token", 30);
+        AuthUserResponse me = authService.getCurrentUser("Bearer " + sessionResponse.accessToken());
+
+        assertThat(me.lastPlaybackProgress().videoId()).isEqualTo("latest");
+        assertThat(me.recentPlaybackProgresses()).extracting(PlaybackProgressResponse::videoId)
+            .containsExactly("latest", "previous");
     }
 
     @Test
@@ -145,6 +195,24 @@ class AuthServiceTest {
 
         assertThat(me.createdAt()).isEqualTo(Instant.parse("2026-04-01T06:00:00Z"));
         assertThat(me.favoriteCount()).isEqualTo(4L);
+    }
+
+    @Test
+    void getCurrentUserIncludesCommentAndTradeCounts() {
+        when(googleTokenVerifier.verify("google-id-token")).thenReturn(
+            new GoogleIdentity("google-subject-1", "atlas@example.com", "Atlas User", null)
+        );
+        when(commentRepository.countByUserId(7L)).thenReturn(18L);
+        when(gameLedgerRepository.countByUserIdAndTypeIn(
+            org.mockito.ArgumentMatchers.eq(7L),
+            org.mockito.ArgumentMatchers.eq(java.util.List.of(LedgerType.BUY_LOCK, LedgerType.SELL_SETTLE))
+        )).thenReturn(42L);
+
+        AuthSessionResponse sessionResponse = authService.loginWithGoogle("google-id-token", 30);
+        AuthUserResponse me = authService.getCurrentUser("Bearer " + sessionResponse.accessToken());
+
+        assertThat(me.commentCount()).isEqualTo(18L);
+        assertThat(me.tradeCount()).isEqualTo(42L);
     }
 
     @Test

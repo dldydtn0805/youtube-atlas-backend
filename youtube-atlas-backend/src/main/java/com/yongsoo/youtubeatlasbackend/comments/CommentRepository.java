@@ -16,6 +16,8 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
 
     long countByVideoId(String videoId);
 
+    long countByUserId(Long userId);
+
     List<Comment> findByVideoIdOrderByCreatedAtAsc(String videoId);
 
     List<Comment> findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc(String videoId, Instant createdAt);
