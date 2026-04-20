@@ -52,7 +52,7 @@ jobs:
 
           DB_URL="${DB_URL#jdbc:}"
 
-          sudo docker run --rm \
+          sudo docker run --rm -i \
             -e PGPASSWORD="$DB_PASSWORD" \
             postgres:18 \
             psql "$DB_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 <<'SQL'
