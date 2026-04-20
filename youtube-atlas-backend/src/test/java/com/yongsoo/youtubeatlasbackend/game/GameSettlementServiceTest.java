@@ -199,7 +199,7 @@ class GameSettlementServiceTest {
         wallet.setCoinBalance(7_900L);
         TrendSignal signal = signal("video-1", 1);
         GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
-        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 8_000L, 2);
+        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 10_000L, 2);
         List<GameSeasonCoinTier> tiers = List.of(bronzeTier, silverTier);
 
         when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
@@ -215,7 +215,7 @@ class GameSettlementServiceTest {
         when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(tiers);
         when(gameCoinTierService.resolveTier(eq(tiers), anyLong())).thenAnswer(invocation -> {
             long coinBalance = invocation.getArgument(1, Long.class);
-            return coinBalance >= 8_000L ? silverTier : bronzeTier;
+            return coinBalance >= 10_000L ? silverTier : bronzeTier;
         });
 
         gameSettlementService.distributeActiveSeasonCoins();
@@ -313,7 +313,7 @@ class GameSettlementServiceTest {
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
         wallet.setCoinBalance(2_500_000L);
-        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", 20_000L, 3);
+        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", 30_000L, 3);
 
         when(gameSeasonRepository.findByStatusAndEndAtLessThanEqual(SeasonStatus.ACTIVE, Instant.parse("2026-04-08T00:01:00Z")))
             .thenReturn(List.of(season));
@@ -376,7 +376,7 @@ class GameSettlementServiceTest {
     void settleEndedSeasonsScheduledCreatesInitialSeasonFromDefaultsWhenNoHistoryExists() {
         atlasProperties.getGame().setSchedulerEnabled(true);
         atlasProperties.getGame().setSeasonDurationDays(3);
-        atlasProperties.getGame().setStartingBalancePoints(20_000L);
+        atlasProperties.getGame().setStartingBalancePoints(30_000L);
         atlasProperties.getGame().setMinHoldSeconds(300);
         atlasProperties.getGame().setMaxOpenPositions(7);
         atlasProperties.getGame().setRankPointMultiplier(150);
@@ -400,7 +400,7 @@ class GameSettlementServiceTest {
         assertThat(createdSeason.getRegionCode()).isEqualTo("BR");
         assertThat(createdSeason.getStartAt()).isEqualTo(Instant.parse("2026-04-08T00:01:00Z"));
         assertThat(createdSeason.getEndAt()).isEqualTo(Instant.parse("2026-04-11T00:01:00Z"));
-        assertThat(createdSeason.getStartingBalancePoints()).isEqualTo(20_000L);
+        assertThat(createdSeason.getStartingBalancePoints()).isEqualTo(30_000L);
         assertThat(createdSeason.getMinHoldSeconds()).isEqualTo(300);
         assertThat(createdSeason.getMaxOpenPositions()).isEqualTo(7);
         assertThat(createdSeason.getRankPointMultiplier()).isEqualTo(150);

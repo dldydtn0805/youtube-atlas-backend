@@ -309,12 +309,12 @@ class AdminUserServiceTest {
     private List<GameSeasonCoinTier> defaultTiers(GameSeason season) {
         return List.of(
             tier(season, "BRONZE", "브론즈", 0L, 1),
-            tier(season, "SILVER", "실버", 8_000L, 2),
-            tier(season, "GOLD", "골드", 20_000L, 3),
-            tier(season, "PLATINUM", "플래티넘", 35_000L, 4),
-            tier(season, "DIAMOND", "다이아몬드", 55_000L, 5),
-            tier(season, "MASTER", "마스터", 85_000L, 6),
-            tier(season, "LEGEND", "레전드", 130_000L, 7)
+            tier(season, "SILVER", "실버", 10_000L, 2),
+            tier(season, "GOLD", "골드", 30_000L, 3),
+            tier(season, "PLATINUM", "플래티넘", 70_000L, 4),
+            tier(season, "DIAMOND", "다이아몬드", 130_000L, 5),
+            tier(season, "MASTER", "마스터", 220_000L, 6),
+            tier(season, "LEGEND", "레전드", 350_000L, 7)
         );
     }
 
