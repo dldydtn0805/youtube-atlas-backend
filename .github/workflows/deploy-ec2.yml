@@ -33,6 +33,48 @@ jobs:
             printf '\nGAME_COIN_HOLD_BOOST_INTERVAL_SECONDS=3600\n' >> .env
           fi
 
+          read_env_last() {
+            local key="$1"
+            awk -v key="$key" 'BEGIN{FS="="} $1==key {value=$0; sub(/^[^=]*=/,"",value)} END{print value}' .env \
+              | sed 's/^"//; s/"$//'
+          }
+
+          DB_URL="$(read_env_last AWS_DB_URL)"
+          DB_USERNAME="$(read_env_last AWS_DB_USERNAME)"
+          DB_PASSWORD="$(read_env_last AWS_DB_PASSWORD)"
+
+          if [ -z "$DB_URL" ]; then
+            DB_URL="$(read_env_last SPRING_DATASOURCE_URL)"
+          fi
+          if [ -z "$DB_URL" ]; then
+            DB_URL="$(read_env_last DB_URL)"
+          fi
+          if [ -z "$DB_USERNAME" ]; then
+            DB_USERNAME="$(read_env_last SPRING_DATASOURCE_USERNAME)"
+          fi
+          if [ -z "$DB_USERNAME" ]; then
+            DB_USERNAME="$(read_env_last DB_USERNAME)"
+          fi
+          if [ -z "$DB_PASSWORD" ]; then
+            DB_PASSWORD="$(read_env_last SPRING_DATASOURCE_PASSWORD)"
+          fi
+          if [ -z "$DB_PASSWORD" ]; then
+            DB_PASSWORD="$(read_env_last DB_PASSWORD)"
+          fi
+
+          if [ -z "$DB_URL" ] || [ -z "$DB_USERNAME" ] || [ -z "$DB_PASSWORD" ]; then
+            echo "DB connection env is missing in /home/ec2-user/youtube-atlas-backend/.env" >&2
+            exit 1
+          fi
+
+          DB_URL="${DB_URL#jdbc:}"
+
+          sudo docker run --rm -i \
+            -e PGPASSWORD="$DB_PASSWORD" \
+            -v /home/ec2-user/youtube-atlas-backend/sql:/sql:ro \
+            postgres:18 \
+            psql "$DB_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 -f /sql/migrate_game_wallet_tier_score.sql
+
           sudo docker build -t youtube-atlas-backend:latest .
           sudo docker rm -f youtube-atlas-backend || true
           sudo docker run -d \
