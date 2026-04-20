@@ -90,6 +90,8 @@ public interface GamePositionRepository extends JpaRepository<GamePosition, Long
 
     List<GamePosition> findBySeasonIdAndStatus(Long seasonId, PositionStatus status);
 
+    List<GamePosition> findBySeasonId(Long seasonId);
+
     @org.springframework.data.jpa.repository.Modifying
     @Query("""
         delete from GamePosition position

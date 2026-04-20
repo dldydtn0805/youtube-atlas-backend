@@ -82,6 +82,14 @@ public class GameController {
         return gameService.getCoinOverview(authService.requireCurrentUser(authorizationHeader), regionCode);
     }
 
+    @GetMapping("/highlights")
+    public List<GameHighlightResponse> getHighlights(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode
+    ) {
+        return gameService.getHighlights(authService.requireCurrentUser(authorizationHeader), regionCode);
+    }
+
     @GetMapping("/tiers/current")
     public CoinTierProgressResponse getCurrentCoinTier(
         @RequestHeader("Authorization") String authorizationHeader,
@@ -105,6 +113,30 @@ public class GameController {
         @RequestParam String regionCode
     ) {
         return gameService.getLeaderboardPositions(authService.requireCurrentUser(authorizationHeader), userId, regionCode);
+    }
+
+    @GetMapping("/leaderboard/{userId}/highlights")
+    public List<GameHighlightResponse> getLeaderboardHighlights(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @PathVariable Long userId,
+        @RequestParam String regionCode
+    ) {
+        return gameService.getLeaderboardHighlights(authService.requireCurrentUser(authorizationHeader), userId, regionCode);
+    }
+
+    @GetMapping("/leaderboard/{userId}/positions/{positionId}/rank-history")
+    public PositionRankHistoryResponse getLeaderboardPositionRankHistory(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @PathVariable Long userId,
+        @PathVariable Long positionId,
+        @RequestParam String regionCode
+    ) {
+        return gameService.getLeaderboardPositionRankHistory(
+            authService.requireCurrentUser(authorizationHeader),
+            userId,
+            positionId,
+            regionCode
+        );
     }
 
     @GetMapping("/positions/me")

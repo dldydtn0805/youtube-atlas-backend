@@ -6,6 +6,7 @@ public record CoinTierProgressResponse(
     Long seasonId,
     String seasonName,
     String regionCode,
+    Long highlightScore,
     Long coinBalance,
     CoinTierResponse currentTier,
     CoinTierResponse nextTier,

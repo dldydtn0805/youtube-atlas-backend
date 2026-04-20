@@ -959,12 +959,12 @@ class GameServiceTest {
             .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(myWallet));
         when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(List.of(goldTier, platinumTier));
-        when(gameCoinTierService.resolveTier(List.of(goldTier, platinumTier), 2_500_000L)).thenReturn(platinumTier);
-        when(gameCoinTierService.resolveTier(List.of(goldTier, platinumTier), 1_199_999L)).thenReturn(goldTier);
+        when(gameCoinTierService.resolveTier(List.of(goldTier, platinumTier), 0L)).thenReturn(goldTier);
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
             .thenReturn(List.of(mySignal, rivalSignal));
         when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN))
             .thenReturn(List.of(myPosition, rivalPosition));
+        when(gamePositionRepository.findBySeasonId(1L)).thenReturn(List.of(myPosition, rivalPosition));
         when(gameWalletRepository.findBySeasonId(1L)).thenReturn(List.of(myWallet, rivalWallet));
 
         var response = gameService.getLeaderboard(authenticatedUser(), "KR");
@@ -972,8 +972,10 @@ class GameServiceTest {
         assertThat(response).hasSize(2);
         assertThat(response.get(0).userId()).isEqualTo(7L);
         assertThat(response.get(0).rank()).isEqualTo(1);
-        assertThat(response.get(0).currentTier().tierCode()).isEqualTo("PLATINUM");
-        assertThat(response.get(0).currentTier().displayName()).isEqualTo("플래티넘");
+        assertThat(response.get(0).currentTier().tierCode()).isEqualTo("GOLD");
+        assertThat(response.get(0).currentTier().displayName()).isEqualTo("골드");
+        assertThat(response.get(0).highlightScore()).isZero();
+        assertThat(response.get(0).highlightCount()).isZero();
         assertThat(response.get(0).coinBalance()).isEqualTo(2_500_000L);
         assertThat(response.get(0).totalStakePoints()).isEqualTo(myBuyPricePoints);
         assertThat(response.get(0).totalEvaluationPoints()).isEqualTo(myMarkedPricePoints);
@@ -1090,6 +1092,16 @@ class GameServiceTest {
     }
 
     @Test
+    void calculateProfitPointsHighlightBonusUsesThresholdAndLogCap() {
+        assertThat(GameService.calculateProfitPointsHighlightBonus(null)).isZero();
+        assertThat(GameService.calculateProfitPointsHighlightBonus(4_999L)).isZero();
+        assertThat(GameService.calculateProfitPointsHighlightBonus(5_000L)).isEqualTo(783L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(30_000L)).isEqualTo(2_197L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000L)).isEqualTo(3_000L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(1_000_000L)).isEqualTo(3_000L);
+    }
+
+    @Test
     void resolveCoinRateUsesReducedLowerRankAnchors() {
         assertThat(GameService.resolveCoinRateBasisPoints(1)).isEqualTo(100);
         assertThat(GameService.resolveCoinRateBasisPoints(10)).isEqualTo(46);
@@ -1118,19 +1130,21 @@ class GameServiceTest {
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
         when(gameCoinTierService.getOrCreateTiers(season))
             .thenReturn(List.of(bronzeTier, silverTier, goldTier, platinumTier, diamondTier, masterTier, legendTier));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of());
         when(gameCoinTierService.resolveTier(
             List.of(bronzeTier, silverTier, goldTier, platinumTier, diamondTier, masterTier, legendTier),
-            2_500_000L
+            0L
         ))
-            .thenReturn(platinumTier);
+            .thenReturn(bronzeTier);
 
         var response = gameService.getCurrentCoinTier(authenticatedUser(), "KR");
 
         assertThat(response.seasonId()).isEqualTo(1L);
+        assertThat(response.highlightScore()).isZero();
         assertThat(response.coinBalance()).isEqualTo(2_500_000L);
-        assertThat(response.currentTier().tierCode()).isEqualTo("PLATINUM");
-        assertThat(response.currentTier().displayName()).isEqualTo("플래티넘");
-        assertThat(response.nextTier().tierCode()).isEqualTo("DIAMOND");
+        assertThat(response.currentTier().tierCode()).isEqualTo("BRONZE");
+        assertThat(response.currentTier().displayName()).isEqualTo("브론즈");
+        assertThat(response.nextTier().tierCode()).isEqualTo("SILVER");
         assertThat(response.tiers()).hasSize(7);
     }
 
@@ -1308,6 +1322,86 @@ class GameServiceTest {
         assertThat(response.points().get(0).capturedAt()).isEqualTo(Instant.parse("2026-04-10T07:00:00Z"));
         assertThat(response.points().get(1).capturedAt()).isEqualTo(Instant.parse("2026-04-10T08:00:00Z"));
         assertThat(response.points().get(1).sellPoint()).isTrue();
+    }
+
+    @Test
+    void getLeaderboardPositionRankHistoryReturnsOtherUsersPositionInCurrentSeason() {
+        GameSeason season = activeSeason();
+        AppUser requester = user(7L);
+        AppUser rival = user(9L);
+        GameWallet wallet = wallet(season, requester, 10_000L, 0L, 0L);
+        GamePosition position = openPosition(
+            season,
+            rival,
+            "video-1",
+            170,
+            GamePointCalculator.calculatePricePoints(170),
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        TrendRun buyRun = trendRun(11L, Instant.parse("2026-04-01T05:40:00Z"));
+        TrendRun latestRun = trendRun(12L, Instant.parse("2026-04-01T06:00:00Z"));
+        TrendSignal latestSignal = signal("video-1", 160, 0);
+        latestSignal.setCurrentRunId(12L);
+        latestSignal.setCapturedAt(latestRun.getCapturedAt());
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.findByIdAndUserId(300L, 9L)).thenReturn(Optional.of(position));
+        when(trendSnapshotRepository.findFirstByRegionCodeAndCategoryIdAndVideoIdOrderByRun_IdAsc("KR", "0", "video-1"))
+            .thenReturn(Optional.of(snapshot(buyRun, "video-1", 170)));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1")))
+            .thenReturn(Optional.of(latestSignal));
+        when(trendRunRepository.findByRegionCodeAndCategoryIdAndIdBetweenOrderByIdAsc("KR", "0", 11L, 12L))
+            .thenReturn(List.of(buyRun, latestRun));
+        when(trendSnapshotRepository.findByRegionCodeAndCategoryIdAndVideoIdAndRun_IdBetweenOrderByRun_IdAsc(
+            "KR",
+            "0",
+            "video-1",
+            11L,
+            12L
+        )).thenReturn(List.of(
+            snapshot(buyRun, "video-1", 170),
+            snapshot(latestRun, "video-1", 160)
+        ));
+
+        var response = gameService.getLeaderboardPositionRankHistory(authenticatedUser(), 9L, 300L, "KR");
+
+        assertThat(response.positionId()).isEqualTo(300L);
+        assertThat(response.buyRank()).isEqualTo(170);
+        assertThat(response.latestRank()).isEqualTo(160);
+        assertThat(response.points()).hasSize(2);
+        verify(gameWalletRepository, never()).saveAndFlush(any(GameWallet.class));
+    }
+
+    @Test
+    void getLeaderboardPositionRankHistoryRejectsPositionOutsideCurrentSeason() {
+        GameSeason currentSeason = activeSeason();
+        GameSeason oldSeason = activeSeason();
+        ReflectionTestUtils.setField(oldSeason, "id", 2L);
+        oldSeason.setStartAt(Instant.parse("2026-03-20T00:00:00Z"));
+        oldSeason.setEndAt(Instant.parse("2026-03-27T00:00:00Z"));
+
+        AppUser requester = user(7L);
+        AppUser rival = user(9L);
+        GameWallet wallet = wallet(currentSeason, requester, 10_000L, 0L, 0L);
+        GamePosition position = openPosition(
+            oldSeason,
+            rival,
+            "video-1",
+            170,
+            GamePointCalculator.calculatePricePoints(170),
+            Instant.parse("2026-03-21T05:45:00Z")
+        );
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(currentSeason));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.findByIdAndUserId(300L, 9L)).thenReturn(Optional.of(position));
+
+        assertThatThrownBy(() -> gameService.getLeaderboardPositionRankHistory(authenticatedUser(), 9L, 300L, "KR"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("현재 시즌 포지션만 조회할 수 있습니다.");
     }
 
     private AuthenticatedUser authenticatedUser() {

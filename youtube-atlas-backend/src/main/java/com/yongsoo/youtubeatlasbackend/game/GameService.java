@@ -32,6 +32,7 @@ import com.yongsoo.youtubeatlasbackend.game.api.CoinTierProgressResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.CoinTierResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.CreatePositionRequest;
 import com.yongsoo.youtubeatlasbackend.game.api.CurrentSeasonResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.GameHighlightResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.LeaderboardEntryResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.MarketVideoResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionRankHistoryPointResponse;
@@ -68,6 +69,20 @@ public class GameService {
     private static final int BUYABLE_CHART_PAGE_SIZE = 50;
     private static final int DEFAULT_FALLBACK_RANK = 201;
     private static final int COIN_ELIGIBLE_RANK_CUTOFF = 200;
+    private static final double CASHOUT_HIGHLIGHT_MIN_PROFIT_RATE_PERCENT = 300D;
+    private static final int MOONSHOT_BUY_RANK_MIN = 100;
+    private static final int MOONSHOT_TARGET_RANK_MAX = 20;
+    private static final int SNIPE_BUY_RANK_MIN = 150;
+    private static final int SNIPE_TARGET_RANK_MAX = 100;
+    private static final long S_GRADE_HIGHLIGHT_BASE_SCORE = 5_000L;
+    private static final long A_GRADE_HIGHLIGHT_BASE_SCORE = 2_500L;
+    private static final long RANK_DIFF_HIGHLIGHT_SCORE_MULTIPLIER = 20L;
+    private static final long PROFIT_RATE_HIGHLIGHT_SCORE_MULTIPLIER = 10L;
+    private static final long MAX_PROFIT_RATE_HIGHLIGHT_BONUS = 5_000L;
+    private static final long MIN_PROFIT_POINTS_HIGHLIGHT_BONUS = 5_000L;
+    private static final double PROFIT_POINTS_HIGHLIGHT_LOG_DIVISOR = 5_000D;
+    private static final double PROFIT_POINTS_HIGHLIGHT_LOG_SCALE = 2_600D;
+    private static final long MAX_PROFIT_POINTS_HIGHLIGHT_BONUS = 3_000L;
     private static final CoinRateAnchor[] COIN_RATE_ANCHORS = {
         new CoinRateAnchor(1, 100),
         new CoinRateAnchor(10, 46),
@@ -513,16 +528,27 @@ public class GameService {
             season.getId(),
             PositionStatus.OPEN
         ).stream().collect(Collectors.groupingBy(position -> position.getUser().getId()));
+        Map<Long, List<GameHighlightResponse>> highlightsByUserId = gamePositionRepository.findBySeasonId(season.getId())
+            .stream()
+            .map(position -> new UserHighlight(position.getUser().getId(), toGameHighlightResponse(position)))
+            .filter(entry -> entry.highlight() != null)
+            .collect(Collectors.groupingBy(
+                UserHighlight::userId,
+                Collectors.mapping(UserHighlight::highlight, Collectors.toList())
+            ));
 
         List<LeaderboardSnapshot> snapshots = gameWalletRepository.findBySeasonId(season.getId()).stream()
             .map(wallet -> toLeaderboardSnapshot(
                 wallet,
                 openPositionsByUserId.getOrDefault(wallet.getUser().getId(), List.of()),
+                highlightsByUserId.getOrDefault(wallet.getUser().getId(), List.of()),
                 signalByVideoId,
                 tiers
             ))
             .sorted(
-                Comparator.comparingLong(LeaderboardSnapshot::coinBalance).reversed()
+                Comparator.comparingLong(LeaderboardSnapshot::highlightScore).reversed()
+                    .thenComparing(Comparator.comparingInt(LeaderboardSnapshot::highlightCount).reversed())
+                    .thenComparing(Comparator.comparingLong(LeaderboardSnapshot::coinBalance).reversed())
                     .thenComparing(Comparator.comparingLong(LeaderboardSnapshot::totalAssetPoints).reversed())
                     .thenComparing(Comparator.comparingLong(LeaderboardSnapshot::realizedPnlPoints).reversed())
                     .thenComparing(LeaderboardSnapshot::displayName, String.CASE_INSENSITIVE_ORDER)
@@ -581,9 +607,10 @@ public class GameService {
         GameSeason season = requireActiveSeason(regionCode);
         GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
         List<GameSeasonCoinTier> tiers = gameCoinTierService.getOrCreateTiers(season);
-        GameSeasonCoinTier currentTier = gameCoinTierService.resolveTier(tiers, wallet.getCoinBalance());
+        long highlightScore = calculateUserHighlightScore(season.getId(), authenticatedUser.id());
+        GameSeasonCoinTier currentTier = gameCoinTierService.resolveTier(tiers, highlightScore);
         GameSeasonCoinTier nextTier = tiers.stream()
-            .filter(tier -> tier.getMinCoinBalance() > wallet.getCoinBalance())
+            .filter(tier -> tier.getMinCoinBalance() > highlightScore)
             .min(
                 Comparator.comparingLong(GameSeasonCoinTier::getMinCoinBalance)
                     .thenComparingInt(GameSeasonCoinTier::getSortOrder)
@@ -594,6 +621,7 @@ public class GameService {
             season.getId(),
             season.getName(),
             season.getRegionCode(),
+            highlightScore,
             wallet.getCoinBalance(),
             toCoinTierResponse(currentTier),
             nextTier != null ? toCoinTierResponse(nextTier) : null,
@@ -641,6 +669,31 @@ public class GameService {
             PositionStatus.OPEN
         ).stream()
             .map(this::toPositionResponse)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<GameHighlightResponse> getLeaderboardHighlights(
+        AuthenticatedUser authenticatedUser,
+        Long userId,
+        String regionCode
+    ) {
+        GameSeason season = requireActiveSeason(regionCode);
+        getOrCreateWallet(season, authenticatedUser);
+
+        if (userId == null) {
+            throw new IllegalArgumentException("userId는 필수입니다.");
+        }
+
+        return gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(season.getId(), userId).stream()
+            .map(this::toGameHighlightResponse)
+            .filter(Objects::nonNull)
+            .sorted(
+                Comparator
+                    .comparingLong(this::calculateHighlightScore)
+                    .reversed()
+                    .thenComparing(GameHighlightResponse::createdAt, Comparator.nullsLast(Comparator.reverseOrder()))
+            )
             .toList();
     }
 
@@ -753,10 +806,41 @@ public class GameService {
     }
 
     @Transactional(readOnly = true)
+    public PositionRankHistoryResponse getLeaderboardPositionRankHistory(
+        AuthenticatedUser authenticatedUser,
+        Long userId,
+        Long positionId,
+        String regionCode
+    ) {
+        GameSeason season = requireActiveSeason(regionCode);
+        getOrCreateWallet(season, authenticatedUser);
+
+        if (userId == null) {
+            throw new IllegalArgumentException("userId는 필수입니다.");
+        }
+        if (positionId == null) {
+            throw new IllegalArgumentException("positionId는 필수입니다.");
+        }
+
+        GamePosition position = gamePositionRepository.findByIdAndUserId(positionId, userId)
+            .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 포지션입니다."));
+
+        if (!position.getSeason().getId().equals(season.getId())) {
+            throw new IllegalArgumentException("현재 시즌 포지션만 조회할 수 있습니다.");
+        }
+
+        return buildPositionRankHistoryResponse(position);
+    }
+
+    @Transactional(readOnly = true)
     public PositionRankHistoryResponse getPositionRankHistory(AuthenticatedUser authenticatedUser, Long positionId) {
         GamePosition position = gamePositionRepository.findByIdAndUserId(positionId, authenticatedUser.id())
             .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 포지션입니다."));
 
+        return buildPositionRankHistoryResponse(position);
+    }
+
+    private PositionRankHistoryResponse buildPositionRankHistoryResponse(GamePosition position) {
         PositionHistoryWindow historyWindow = resolvePositionHistoryWindow(position);
         List<TrendRun> runs = trendRunRepository.findByRegionCodeAndCategoryIdAndIdBetweenOrderByIdAsc(
             position.getRegionCode(),
@@ -824,6 +908,25 @@ public class GameService {
             position.getClosedAt(),
             points
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<GameHighlightResponse> getHighlights(AuthenticatedUser authenticatedUser, String regionCode) {
+        GameSeason season = requireActiveSeason(regionCode);
+        List<GamePosition> positions = gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(
+            season.getId(),
+            authenticatedUser.id()
+        );
+
+        return positions.stream()
+            .map(this::toGameHighlightResponse)
+            .filter(Objects::nonNull)
+            .sorted(
+                Comparator
+                    .comparing(GameHighlightResponse::createdAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(GameHighlightResponse::positionId, Comparator.nullsLast(Comparator.reverseOrder()))
+            )
+            .toList();
     }
 
     @Transactional
@@ -1102,6 +1205,175 @@ public class GameService {
         );
     }
 
+    private GameHighlightResponse toGameHighlightResponse(GamePosition position) {
+        HighlightSnapshot snapshot = resolveHighlightSnapshot(position);
+        if (snapshot == null || snapshot.highlightRank() == null) {
+            return null;
+        }
+
+        int rankDiff = position.getBuyRank() - snapshot.highlightRank();
+        Double profitRatePercent = calculateProfitRatePercent(snapshot.profitPoints(), position.getStakePoints());
+        HighlightDefinition definition = resolveHighlightDefinition(position, snapshot, rankDiff, profitRatePercent);
+        if (definition == null) {
+            return null;
+        }
+
+        GameHighlightResponse highlight = new GameHighlightResponse(
+            position.getId() + "-" + definition.highlightType(),
+            definition.highlightType(),
+            definition.grade(),
+            definition.title(),
+            definition.description(),
+            position.getId(),
+            position.getVideoId(),
+            position.getTitle(),
+            position.getChannelTitle(),
+            position.getThumbnailUrl(),
+            position.getBuyRank(),
+            snapshot.highlightRank(),
+            position.getSellRank(),
+            rankDiff,
+            getPositionQuantity(position),
+            position.getStakePoints(),
+            snapshot.currentPricePoints(),
+            snapshot.profitPoints(),
+            profitRatePercent,
+            0L,
+            position.getStatus().name(),
+            snapshot.createdAt()
+        );
+
+        return new GameHighlightResponse(
+            highlight.id(),
+            highlight.highlightType(),
+            highlight.grade(),
+            highlight.title(),
+            highlight.description(),
+            highlight.positionId(),
+            highlight.videoId(),
+            highlight.videoTitle(),
+            highlight.channelTitle(),
+            highlight.thumbnailUrl(),
+            highlight.buyRank(),
+            highlight.highlightRank(),
+            highlight.sellRank(),
+            highlight.rankDiff(),
+            highlight.quantity(),
+            highlight.stakePoints(),
+            highlight.currentPricePoints(),
+            highlight.profitPoints(),
+            highlight.profitRatePercent(),
+            calculateHighlightScore(highlight),
+            highlight.status(),
+            highlight.createdAt()
+        );
+    }
+
+    private HighlightSnapshot resolveHighlightSnapshot(GamePosition position) {
+        if (position.getStatus() == PositionStatus.OPEN) {
+            OpenPositionSnapshot snapshot = resolveOpenPositionSnapshot(position);
+            if (snapshot == null || snapshot.chartOut()) {
+                return null;
+            }
+
+            long currentPricePoints = GamePointCalculator.calculatePositionPoints(
+                resolveOpenPositionUnitPricePoints(snapshot),
+                getPositionQuantity(position)
+            );
+            return new HighlightSnapshot(
+                snapshot.currentRank(),
+                currentPricePoints,
+                GamePointCalculator.calculateProfitPoints(position.getStakePoints(), currentPricePoints),
+                snapshot.capturedAt()
+            );
+        }
+
+        if (position.getSellRank() == null || position.getSettledPoints() == null || position.getPnlPoints() == null) {
+            return null;
+        }
+
+        return new HighlightSnapshot(
+            position.getSellRank(),
+            position.getSettledPoints(),
+            position.getPnlPoints(),
+            position.getClosedAt() != null ? position.getClosedAt() : position.getSellCapturedAt()
+        );
+    }
+
+    private HighlightDefinition resolveHighlightDefinition(
+        GamePosition position,
+        HighlightSnapshot snapshot,
+        int rankDiff,
+        Double profitRatePercent
+    ) {
+        if (position.getBuyRank() >= MOONSHOT_BUY_RANK_MIN && snapshot.highlightRank() <= MOONSHOT_TARGET_RANK_MAX) {
+            return new HighlightDefinition(
+                "MOONSHOT",
+                "S",
+                "문샷 적중",
+                position.getBuyRank() + "위에서 잡은 영상이 " + snapshot.highlightRank() + "위까지 올라왔습니다."
+            );
+        }
+
+        if (profitRatePercent != null && profitRatePercent >= CASHOUT_HIGHLIGHT_MIN_PROFIT_RATE_PERCENT) {
+            return new HighlightDefinition(
+                "CASHOUT",
+                profitRatePercent >= 1_000D ? "S" : "A",
+                "수익 실현",
+                "수익률 " + profitRatePercent + "% 플레이가 기록됐습니다."
+            );
+        }
+
+        if (position.getBuyRank() >= SNIPE_BUY_RANK_MIN && snapshot.highlightRank() <= SNIPE_TARGET_RANK_MAX) {
+            return new HighlightDefinition(
+                "SNIPE",
+                "A",
+                "스나이프 성공",
+                position.getBuyRank() + "위에서 진입해 " + rankDiff + "계단을 앞질렀습니다."
+            );
+        }
+
+        return null;
+    }
+
+    private long calculateHighlightScore(GameHighlightResponse highlight) {
+        long baseScore = "S".equals(highlight.grade())
+            ? S_GRADE_HIGHLIGHT_BASE_SCORE
+            : "A".equals(highlight.grade()) ? A_GRADE_HIGHLIGHT_BASE_SCORE : 1_000L;
+        long rankDiffBonus = Math.max(0, highlight.rankDiff() != null ? highlight.rankDiff() : 0)
+            * RANK_DIFF_HIGHLIGHT_SCORE_MULTIPLIER;
+        long profitRateBonus = highlight.profitRatePercent() != null
+            ? Math.min(
+                MAX_PROFIT_RATE_HIGHLIGHT_BONUS,
+                Math.max(0L, Math.round(highlight.profitRatePercent() * PROFIT_RATE_HIGHLIGHT_SCORE_MULTIPLIER))
+            )
+            : 0L;
+        long profitPointsBonus = calculateProfitPointsHighlightBonus(highlight.profitPoints());
+
+        return baseScore + rankDiffBonus + profitRateBonus + profitPointsBonus;
+    }
+
+    static long calculateProfitPointsHighlightBonus(Long profitPoints) {
+        if (profitPoints == null || profitPoints < MIN_PROFIT_POINTS_HIGHLIGHT_BONUS) {
+            return 0L;
+        }
+
+        double normalizedProfitPoints = (profitPoints / PROFIT_POINTS_HIGHLIGHT_LOG_DIVISOR) + 1D;
+
+        return Math.min(
+            MAX_PROFIT_POINTS_HIGHLIGHT_BONUS,
+            Math.max(0L, Math.round(Math.log10(normalizedProfitPoints) * PROFIT_POINTS_HIGHLIGHT_LOG_SCALE))
+        );
+    }
+
+    private long calculateUserHighlightScore(Long seasonId, Long userId) {
+        return gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(seasonId, userId).stream()
+            .map(this::toGameHighlightResponse)
+            .filter(Objects::nonNull)
+            .mapToLong(this::calculateHighlightScore)
+            .sum();
+    }
+
     private PositionHistoryWindow resolvePositionHistoryWindow(GamePosition position) {
         long startRunId = resolvePositionHistoryStartRunId(position);
 
@@ -1193,6 +1465,7 @@ public class GameService {
     private LeaderboardSnapshot toLeaderboardSnapshot(
         GameWallet wallet,
         List<GamePosition> openPositions,
+        List<GameHighlightResponse> highlights,
         Map<String, TrendSignal> signalByVideoId,
         List<GameSeasonCoinTier> tiers
     ) {
@@ -1223,12 +1496,20 @@ public class GameService {
             markedOpenPositionPoints += markedValue;
             unrealizedPnlPoints += markedValue - position.getStakePoints();
         }
+        GameHighlightResponse topHighlight = highlights.stream()
+            .max(Comparator.comparingLong(this::calculateHighlightScore))
+            .orElse(null);
+        long highlightScore = highlights.stream().mapToLong(this::calculateHighlightScore).sum();
 
         return new LeaderboardSnapshot(
             wallet.getUser().getId(),
             wallet.getUser().getDisplayName(),
             wallet.getUser().getPictureUrl(),
-            toCoinTierResponse(gameCoinTierService.resolveTier(tiers, wallet.getCoinBalance())),
+            toCoinTierResponse(gameCoinTierService.resolveTier(tiers, highlightScore)),
+            highlightScore,
+            highlights.size(),
+            topHighlight != null ? topHighlight.highlightType() : null,
+            topHighlight != null ? topHighlight.grade() : null,
             wallet.getCoinBalance(),
             wallet.getBalancePoints() + markedOpenPositionPoints,
             wallet.getBalancePoints(),
@@ -1252,6 +1533,10 @@ public class GameService {
                     snapshot.displayName(),
                     snapshot.pictureUrl(),
                     snapshot.currentTier(),
+                    snapshot.highlightScore(),
+                    snapshot.highlightCount(),
+                    snapshot.topHighlightType(),
+                    snapshot.topHighlightGrade(),
                     snapshot.coinBalance(),
                     snapshot.totalAssetPoints(),
                     snapshot.balancePoints(),
@@ -1807,6 +2092,10 @@ public class GameService {
         String displayName,
         String pictureUrl,
         CoinTierResponse currentTier,
+        Long highlightScore,
+        Integer highlightCount,
+        String topHighlightType,
+        String topHighlightGrade,
         Long coinBalance,
         Long totalAssetPoints,
         Long balancePoints,
@@ -1824,6 +2113,15 @@ public class GameService {
     }
 
     private record OpenPositionSnapshot(int currentRank, Integer rankChange, Instant capturedAt, boolean chartOut) {
+    }
+
+    private record HighlightSnapshot(Integer highlightRank, long currentPricePoints, long profitPoints, Instant createdAt) {
+    }
+
+    private record HighlightDefinition(String highlightType, String grade, String title, String description) {
+    }
+
+    private record UserHighlight(Long userId, GameHighlightResponse highlight) {
     }
 
     private record LatestTrendRun(TrendRun run, List<TrendSnapshot> snapshots) {
