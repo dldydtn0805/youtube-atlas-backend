@@ -18,6 +18,7 @@ public record GameNotificationResponse(
     List<GameStrategyType> strategyTags,
     Long highlightScore,
     Instant readAt,
-    Instant createdAt
+    Instant createdAt,
+    boolean showModal
 ) {
 }

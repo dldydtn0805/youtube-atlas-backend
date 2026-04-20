@@ -175,7 +175,8 @@ public class GameNotificationService {
             parseStrategyTags(notification.getStrategyTags()),
             notification.getHighlightScore(),
             notification.getReadAt(),
-            notification.getCreatedAt()
+            notification.getCreatedAt(),
+            true
         );
     }
 

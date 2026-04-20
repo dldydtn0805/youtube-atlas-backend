@@ -83,7 +83,8 @@ final class GameNotificationFactory {
             highlight.strategyTags(),
             highlight.highlightScore(),
             null,
-            highlight.createdAt()
+            highlight.createdAt(),
+            true
         );
     }
 
@@ -110,7 +111,8 @@ final class GameNotificationFactory {
             strategyTags,
             highlightScore,
             null,
-            createdAt
+            createdAt,
+            true
         );
     }
 
