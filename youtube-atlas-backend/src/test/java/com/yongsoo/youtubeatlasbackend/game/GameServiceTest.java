@@ -147,6 +147,9 @@ class GameServiceTest {
         assertThat(response.get(0).quantity()).isEqualTo(ONE_SHARE);
         assertThat(response.get(0).stakePoints()).isEqualTo(buyPricePoints);
         assertThat(response.get(0).currentPricePoints()).isEqualTo(buyPricePoints);
+        assertThat(response.get(0).achievedStrategyTags()).isEmpty();
+        assertThat(response.get(0).targetStrategyTags()).isEmpty();
+        assertThat(response.get(0).projectedHighlightScore()).isZero();
         assertThat(wallet.getBalancePoints()).isEqualTo(10_000L - buyPricePoints);
         assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints);
         verify(commentService).publishTradeSystemMessage("User 7님이 [Title video-1] 1개를 매수했습니다. (7500P)");
@@ -1092,13 +1095,13 @@ class GameServiceTest {
     }
 
     @Test
-    void calculateProfitPointsHighlightBonusUsesThresholdAndLogCap() {
+    void calculateProfitPointsHighlightBonusUsesThresholdAndSqrtCap() {
         assertThat(GameService.calculateProfitPointsHighlightBonus(null)).isZero();
         assertThat(GameService.calculateProfitPointsHighlightBonus(4_999L)).isZero();
-        assertThat(GameService.calculateProfitPointsHighlightBonus(5_000L)).isEqualTo(783L);
-        assertThat(GameService.calculateProfitPointsHighlightBonus(30_000L)).isEqualTo(2_197L);
-        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000L)).isEqualTo(3_000L);
-        assertThat(GameService.calculateProfitPointsHighlightBonus(1_000_000L)).isEqualTo(3_000L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(5_000L)).isZero();
+        assertThat(GameService.calculateProfitPointsHighlightBonus(30_000L)).isEqualTo(474L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000L)).isEqualTo(925L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(1_000_000L)).isEqualTo(2_992L);
     }
 
     @Test

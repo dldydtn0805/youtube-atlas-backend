@@ -69,20 +69,20 @@ public class GameService {
     private static final int BUYABLE_CHART_PAGE_SIZE = 50;
     private static final int DEFAULT_FALLBACK_RANK = 201;
     private static final int COIN_ELIGIBLE_RANK_CUTOFF = 200;
-    private static final double CASHOUT_HIGHLIGHT_MIN_PROFIT_RATE_PERCENT = 300D;
     private static final int MOONSHOT_BUY_RANK_MIN = 100;
     private static final int MOONSHOT_TARGET_RANK_MAX = 20;
     private static final int SNIPE_BUY_RANK_MIN = 150;
     private static final int SNIPE_TARGET_RANK_MAX = 100;
-    private static final long S_GRADE_HIGHLIGHT_BASE_SCORE = 5_000L;
-    private static final long A_GRADE_HIGHLIGHT_BASE_SCORE = 2_500L;
+    private static final long MOONSHOT_HIGHLIGHT_BASE_SCORE = 5_000L;
+    private static final long BIG_CASHOUT_HIGHLIGHT_BASE_SCORE = 5_000L;
+    private static final long SMALL_CASHOUT_HIGHLIGHT_BASE_SCORE = 2_500L;
+    private static final long SNIPE_HIGHLIGHT_BASE_SCORE = 2_500L;
     private static final long RANK_DIFF_HIGHLIGHT_SCORE_MULTIPLIER = 20L;
     private static final long PROFIT_RATE_HIGHLIGHT_SCORE_MULTIPLIER = 10L;
     private static final long MAX_PROFIT_RATE_HIGHLIGHT_BONUS = 5_000L;
     private static final long MIN_PROFIT_POINTS_HIGHLIGHT_BONUS = 5_000L;
-    private static final double PROFIT_POINTS_HIGHLIGHT_LOG_DIVISOR = 5_000D;
-    private static final double PROFIT_POINTS_HIGHLIGHT_LOG_SCALE = 2_600D;
-    private static final long MAX_PROFIT_POINTS_HIGHLIGHT_BONUS = 3_000L;
+    private static final double PROFIT_POINTS_HIGHLIGHT_SQRT_SCALE = 3D;
+    private static final long MAX_PROFIT_POINTS_HIGHLIGHT_BONUS = 30_000L;
     private static final CoinRateAnchor[] COIN_RATE_ANCHORS = {
         new CoinRateAnchor(1, 100),
         new CoinRateAnchor(10, 46),
@@ -690,7 +690,7 @@ public class GameService {
             .filter(Objects::nonNull)
             .sorted(
                 Comparator
-                    .comparingLong(this::calculateHighlightScore)
+                    .comparingLong(GameService::calculateHighlightScore)
                     .reversed()
                     .thenComparing(GameHighlightResponse::createdAt, Comparator.nullsLast(Comparator.reverseOrder()))
             )
@@ -1161,6 +1161,16 @@ public class GameService {
             position.getStakePoints(),
             position.getSettledPoints(),
             position.getPnlPoints(),
+            List.of(GameStrategyType.SMALL_CASHOUT),
+            List.of(GameStrategyType.SMALL_CASHOUT),
+            List.of(),
+            calculateProjectedPositionHighlightScore(
+                position.getBuyRank(),
+                position.getRankDiff(),
+                GameStrategyResolver.calculateProfitRatePercent(position.getStakePoints(), position.getSettledPoints()),
+                position.getPnlPoints(),
+                List.of(GameStrategyType.SMALL_CASHOUT)
+            ),
             false,
             position.getStatus().name(),
             position.getBuyCapturedAt(),
@@ -1183,6 +1193,29 @@ public class GameService {
             getPositionQuantity(position)
         );
         long profitPoints = GamePointCalculator.calculateProfitPoints(position.getStakePoints(), currentPricePoints);
+        List<GameStrategyType> strategyTags = GameStrategyResolver.resolvePositionStrategyTags(
+            position,
+            snapshot.currentRank(),
+            currentPricePoints,
+            snapshot.chartOut(),
+            Instant.now(clock)
+        );
+        List<GameStrategyType> achievedStrategyTags = GameStrategyResolver.resolveAchievedPositionStrategyTags(
+            position,
+            snapshot.currentRank(),
+            currentPricePoints
+        );
+        List<GameStrategyType> targetStrategyTags = GameStrategyResolver.resolveTargetPositionStrategyTags(
+            strategyTags,
+            achievedStrategyTags
+        );
+        long projectedHighlightScore = calculateProjectedPositionHighlightScore(
+            position.getBuyRank(),
+            rankDiff,
+            GameStrategyResolver.calculateProfitRatePercent(position.getStakePoints(), currentPricePoints),
+            profitPoints,
+            achievedStrategyTags
+        );
 
         return new PositionResponse(
             position.getId(),
@@ -1197,12 +1230,55 @@ public class GameService {
             position.getStakePoints(),
             currentPricePoints,
             profitPoints,
+            strategyTags,
+            achievedStrategyTags,
+            targetStrategyTags,
+            projectedHighlightScore,
             snapshot.chartOut(),
             position.getStatus().name(),
             position.getBuyCapturedAt(),
             position.getCreatedAt(),
             position.getClosedAt()
         );
+    }
+
+    static long calculateProjectedPositionHighlightScore(
+        Integer buyRank,
+        Integer rankDiff,
+        Double profitRatePercent,
+        Long profitPoints,
+        List<GameStrategyType> achievedStrategyTags
+    ) {
+        if (achievedStrategyTags == null || achievedStrategyTags.isEmpty()) {
+            return 0L;
+        }
+
+        GameHighlightResponse projectedHighlight = new GameHighlightResponse(
+            "projected",
+            achievedStrategyTags.get(0).name(),
+            "Projected highlight",
+            "Projected highlight",
+            0L,
+            "projected",
+            "Projected highlight",
+            "Projected channel",
+            "",
+            buyRank != null ? buyRank : 0,
+            buyRank != null && rankDiff != null ? buyRank - rankDiff : null,
+            null,
+            rankDiff,
+            GamePointCalculator.QUANTITY_SCALE,
+            0L,
+            null,
+            profitPoints,
+            profitRatePercent,
+            achievedStrategyTags,
+            0L,
+            PositionStatus.OPEN.name(),
+            Instant.EPOCH
+        );
+
+        return calculateHighlightScore(projectedHighlight);
     }
 
     private GameHighlightResponse toGameHighlightResponse(GamePosition position) {
@@ -1213,7 +1289,12 @@ public class GameService {
 
         int rankDiff = position.getBuyRank() - snapshot.highlightRank();
         Double profitRatePercent = calculateProfitRatePercent(snapshot.profitPoints(), position.getStakePoints());
-        HighlightDefinition definition = resolveHighlightDefinition(position, snapshot, rankDiff, profitRatePercent);
+        List<GameStrategyType> strategyTags = GameStrategyResolver.resolveHighlightStrategyTags(
+            position,
+            snapshot.highlightRank(),
+            profitRatePercent
+        );
+        HighlightDefinition definition = resolveHighlightDefinition(position, snapshot, rankDiff, profitRatePercent, strategyTags);
         if (definition == null) {
             return null;
         }
@@ -1221,7 +1302,6 @@ public class GameService {
         GameHighlightResponse highlight = new GameHighlightResponse(
             position.getId() + "-" + definition.highlightType(),
             definition.highlightType(),
-            definition.grade(),
             definition.title(),
             definition.description(),
             position.getId(),
@@ -1238,6 +1318,7 @@ public class GameService {
             snapshot.currentPricePoints(),
             snapshot.profitPoints(),
             profitRatePercent,
+            strategyTags,
             0L,
             position.getStatus().name(),
             snapshot.createdAt()
@@ -1246,7 +1327,6 @@ public class GameService {
         return new GameHighlightResponse(
             highlight.id(),
             highlight.highlightType(),
-            highlight.grade(),
             highlight.title(),
             highlight.description(),
             highlight.positionId(),
@@ -1263,6 +1343,7 @@ public class GameService {
             highlight.currentPricePoints(),
             highlight.profitPoints(),
             highlight.profitRatePercent(),
+            highlight.strategyTags(),
             calculateHighlightScore(highlight),
             highlight.status(),
             highlight.createdAt()
@@ -1304,30 +1385,36 @@ public class GameService {
         GamePosition position,
         HighlightSnapshot snapshot,
         int rankDiff,
-        Double profitRatePercent
+        Double profitRatePercent,
+        List<GameStrategyType> strategyTags
     ) {
-        if (position.getBuyRank() >= MOONSHOT_BUY_RANK_MIN && snapshot.highlightRank() <= MOONSHOT_TARGET_RANK_MAX) {
+        if (strategyTags.contains(GameStrategyType.MOONSHOT)) {
             return new HighlightDefinition(
                 "MOONSHOT",
-                "S",
                 "문샷 적중",
                 position.getBuyRank() + "위에서 잡은 영상이 " + snapshot.highlightRank() + "위까지 올라왔습니다."
             );
         }
 
-        if (profitRatePercent != null && profitRatePercent >= CASHOUT_HIGHLIGHT_MIN_PROFIT_RATE_PERCENT) {
+        if (strategyTags.contains(GameStrategyType.BIG_CASHOUT)) {
             return new HighlightDefinition(
-                "CASHOUT",
-                profitRatePercent >= 1_000D ? "S" : "A",
-                "수익 실현",
+                "BIG_CASHOUT",
+                "빅 캐시아웃",
                 "수익률 " + profitRatePercent + "% 플레이가 기록됐습니다."
             );
         }
 
-        if (position.getBuyRank() >= SNIPE_BUY_RANK_MIN && snapshot.highlightRank() <= SNIPE_TARGET_RANK_MAX) {
+        if (strategyTags.contains(GameStrategyType.SMALL_CASHOUT)) {
+            return new HighlightDefinition(
+                "SMALL_CASHOUT",
+                "스몰 캐시아웃",
+                "수익률 " + profitRatePercent + "% 플레이가 기록됐습니다."
+            );
+        }
+
+        if (strategyTags.contains(GameStrategyType.SNIPE)) {
             return new HighlightDefinition(
                 "SNIPE",
-                "A",
                 "스나이프 성공",
                 position.getBuyRank() + "위에서 진입해 " + rankDiff + "계단을 앞질렀습니다."
             );
@@ -1336,10 +1423,23 @@ public class GameService {
         return null;
     }
 
-    private long calculateHighlightScore(GameHighlightResponse highlight) {
-        long baseScore = "S".equals(highlight.grade())
-            ? S_GRADE_HIGHLIGHT_BASE_SCORE
-            : "A".equals(highlight.grade()) ? A_GRADE_HIGHLIGHT_BASE_SCORE : 1_000L;
+    static long calculateHighlightScore(GameHighlightResponse highlight) {
+        if (highlight.strategyTags() == null || highlight.strategyTags().isEmpty()) {
+            return 0L;
+        }
+
+        return highlight.strategyTags().stream()
+            .mapToLong(strategyType -> calculateStrategyHighlightScore(strategyType, highlight))
+            .sum();
+    }
+
+    static long calculateStrategyHighlightScore(GameStrategyType strategyType, GameHighlightResponse highlight) {
+        long baseScore = switch (strategyType) {
+            case MOONSHOT -> MOONSHOT_HIGHLIGHT_BASE_SCORE;
+            case BIG_CASHOUT -> BIG_CASHOUT_HIGHLIGHT_BASE_SCORE;
+            case SMALL_CASHOUT -> SMALL_CASHOUT_HIGHLIGHT_BASE_SCORE;
+            case SNIPE -> SNIPE_HIGHLIGHT_BASE_SCORE;
+        };
         long rankDiffBonus = Math.max(0, highlight.rankDiff() != null ? highlight.rankDiff() : 0)
             * RANK_DIFF_HIGHLIGHT_SCORE_MULTIPLIER;
         long profitRateBonus = highlight.profitRatePercent() != null
@@ -1358,11 +1458,11 @@ public class GameService {
             return 0L;
         }
 
-        double normalizedProfitPoints = (profitPoints / PROFIT_POINTS_HIGHLIGHT_LOG_DIVISOR) + 1D;
+        double normalizedProfitPoints = Math.max(0D, profitPoints - MIN_PROFIT_POINTS_HIGHLIGHT_BONUS);
 
         return Math.min(
             MAX_PROFIT_POINTS_HIGHLIGHT_BONUS,
-            Math.max(0L, Math.round(Math.log10(normalizedProfitPoints) * PROFIT_POINTS_HIGHLIGHT_LOG_SCALE))
+            Math.max(0L, Math.round(Math.sqrt(normalizedProfitPoints) * PROFIT_POINTS_HIGHLIGHT_SQRT_SCALE))
         );
     }
 
@@ -1370,7 +1470,7 @@ public class GameService {
         return gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(seasonId, userId).stream()
             .map(this::toGameHighlightResponse)
             .filter(Objects::nonNull)
-            .mapToLong(this::calculateHighlightScore)
+            .mapToLong(GameService::calculateHighlightScore)
             .sum();
     }
 
@@ -1497,9 +1597,9 @@ public class GameService {
             unrealizedPnlPoints += markedValue - position.getStakePoints();
         }
         GameHighlightResponse topHighlight = highlights.stream()
-            .max(Comparator.comparingLong(this::calculateHighlightScore))
+            .max(Comparator.comparingLong(GameService::calculateHighlightScore))
             .orElse(null);
-        long highlightScore = highlights.stream().mapToLong(this::calculateHighlightScore).sum();
+        long highlightScore = highlights.stream().mapToLong(GameService::calculateHighlightScore).sum();
 
         return new LeaderboardSnapshot(
             wallet.getUser().getId(),
@@ -1509,7 +1609,6 @@ public class GameService {
             highlightScore,
             highlights.size(),
             topHighlight != null ? topHighlight.highlightType() : null,
-            topHighlight != null ? topHighlight.grade() : null,
             wallet.getCoinBalance(),
             wallet.getBalancePoints() + markedOpenPositionPoints,
             wallet.getBalancePoints(),
@@ -1536,7 +1635,6 @@ public class GameService {
                     snapshot.highlightScore(),
                     snapshot.highlightCount(),
                     snapshot.topHighlightType(),
-                    snapshot.topHighlightGrade(),
                     snapshot.coinBalance(),
                     snapshot.totalAssetPoints(),
                     snapshot.balancePoints(),
@@ -2095,7 +2193,6 @@ public class GameService {
         Long highlightScore,
         Integer highlightCount,
         String topHighlightType,
-        String topHighlightGrade,
         Long coinBalance,
         Long totalAssetPoints,
         Long balancePoints,
@@ -2118,7 +2215,7 @@ public class GameService {
     private record HighlightSnapshot(Integer highlightRank, long currentPricePoints, long profitPoints, Instant createdAt) {
     }
 
-    private record HighlightDefinition(String highlightType, String grade, String title, String description) {
+    private record HighlightDefinition(String highlightType, String title, String description) {
     }
 
     private record UserHighlight(Long userId, GameHighlightResponse highlight) {

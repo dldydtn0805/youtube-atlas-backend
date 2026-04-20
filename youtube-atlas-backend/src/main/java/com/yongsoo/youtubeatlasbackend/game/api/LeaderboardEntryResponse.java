@@ -9,7 +9,6 @@ public record LeaderboardEntryResponse(
     Long highlightScore,
     Integer highlightCount,
     String topHighlightType,
-    String topHighlightGrade,
     Long coinBalance,
     Long totalAssetPoints,
     Long balancePoints,

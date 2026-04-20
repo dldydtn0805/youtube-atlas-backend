@@ -1,11 +1,13 @@
 package com.yongsoo.youtubeatlasbackend.game.api;
 
 import java.time.Instant;
+import java.util.List;
+
+import com.yongsoo.youtubeatlasbackend.game.GameStrategyType;
 
 public record GameHighlightResponse(
     String id,
     String highlightType,
-    String grade,
     String title,
     String description,
     Long positionId,
@@ -22,6 +24,7 @@ public record GameHighlightResponse(
     Long currentPricePoints,
     Long profitPoints,
     Double profitRatePercent,
+    List<GameStrategyType> strategyTags,
     Long highlightScore,
     String status,
     Instant createdAt
