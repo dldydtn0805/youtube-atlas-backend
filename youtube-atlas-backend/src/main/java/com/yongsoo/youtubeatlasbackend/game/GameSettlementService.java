@@ -21,6 +21,7 @@ import org.springframework.util.StringUtils;
 
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
+import com.yongsoo.youtubeatlasbackend.game.api.GameNotificationResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.GameRealtimeEventResponse;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
@@ -31,6 +32,7 @@ public class GameSettlementService {
     private static final String TRENDING_CATEGORY_ID = "0";
     private static final int DEFAULT_FALLBACK_RANK = 201;
     private static final String WALLET_UPDATED_EVENT = "wallet-updated";
+    private static final String USER_GAME_NOTIFICATIONS_QUEUE = "/queue/game/notifications";
 
     private final AtlasProperties atlasProperties;
     private final GameSeasonRepository gameSeasonRepository;
@@ -210,7 +212,18 @@ public class GameSettlementService {
             );
 
             try {
-                saveCoinPayout(position, wallet, currentRunId, capturedAt, payoutSlotAt, rank, effectiveCoinRateBasisPoints, producedCoins, now);
+                saveCoinPayout(
+                    position,
+                    wallet,
+                    currentRunId,
+                    capturedAt,
+                    payoutSlotAt,
+                    rank,
+                    currentValuePoints,
+                    effectiveCoinRateBasisPoints,
+                    producedCoins,
+                    now
+                );
                 paidPositionIds.add(position.getId());
             } catch (DataIntegrityViolationException ignored) {
                 // Another scheduler tick or node inserted the payout first.
@@ -225,6 +238,7 @@ public class GameSettlementService {
         Instant capturedAt,
         Instant payoutSlotAt,
         int rank,
+        long currentValuePoints,
         int coinRateBasisPoints,
         long producedCoins,
         Instant now
@@ -241,36 +255,27 @@ public class GameSettlementService {
         payout.setCreatedAt(now);
         gameCoinPayoutRepository.saveAndFlush(payout);
 
-        long previousCoinBalance = wallet.getCoinBalance();
         wallet.setCoinBalance(wallet.getCoinBalance() + producedCoins);
         wallet.setUpdatedAt(now);
         gameWalletRepository.save(wallet);
         publishWalletUpdated(wallet, capturedAt, now);
-        publishTierPromotionIfNeeded(wallet, previousCoinBalance);
+        publishGameNotifications(position, rank, currentValuePoints, capturedAt);
     }
 
-    private void publishTierPromotionIfNeeded(GameWallet wallet, long previousCoinBalance) {
-        List<GameSeasonCoinTier> tiers = gameCoinTierService.getOrCreateTiers(wallet.getSeason());
-        if (tiers == null || tiers.isEmpty()) {
-            return;
-        }
-
-        GameSeasonCoinTier previousTier = gameCoinTierService.resolveTier(tiers, previousCoinBalance);
-        GameSeasonCoinTier currentTier = gameCoinTierService.resolveTier(tiers, wallet.getCoinBalance());
-        if (previousTier == null || currentTier == null) {
-            return;
-        }
-
-        if (currentTier.getSortOrder() <= previousTier.getSortOrder()) {
-            return;
-        }
-
-        String displayName = StringUtils.hasText(wallet.getUser().getDisplayName())
-            ? wallet.getUser().getDisplayName().trim()
-            : "익명";
-        commentService.publishTierSystemMessage(
-            displayName + "님이 " + currentTier.getDisplayName() + " 티어로 상승했습니다."
+    private void publishGameNotifications(GamePosition position, int currentRank, long currentValuePoints, Instant capturedAt) {
+        List<GameNotificationResponse> notifications = GameNotificationFactory.fromPositionSnapshot(
+            position,
+            currentRank,
+            currentValuePoints,
+            capturedAt
         );
+        for (GameNotificationResponse notification : notifications) {
+            messagingTemplate.convertAndSendToUser(
+                position.getUser().getId().toString(),
+                USER_GAME_NOTIFICATIONS_QUEUE,
+                notification
+            );
+        }
     }
 
     private void publishWalletUpdated(GameWallet wallet, Instant capturedAt, Instant occurredAt) {

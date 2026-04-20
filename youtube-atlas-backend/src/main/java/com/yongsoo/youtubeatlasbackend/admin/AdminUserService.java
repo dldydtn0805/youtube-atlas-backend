@@ -25,6 +25,7 @@ import com.yongsoo.youtubeatlasbackend.game.GameCoinPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameCoinTierService;
 import com.yongsoo.youtubeatlasbackend.game.GameDividendPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameService;
 import com.yongsoo.youtubeatlasbackend.game.GameSeason;
 import com.yongsoo.youtubeatlasbackend.game.GameSeasonCoinResultRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameSeasonCoinTier;
@@ -56,6 +57,7 @@ public class AdminUserService {
     private final GameDividendPayoutRepository gameDividendPayoutRepository;
     private final GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
     private final GameCoinTierService gameCoinTierService;
+    private final GameService gameService;
     private final AdminAccessService adminAccessService;
     private final Clock clock;
 
@@ -73,6 +75,7 @@ public class AdminUserService {
         GameDividendPayoutRepository gameDividendPayoutRepository,
         GameSeasonCoinResultRepository gameSeasonCoinResultRepository,
         GameCoinTierService gameCoinTierService,
+        GameService gameService,
         AdminAccessService adminAccessService,
         Clock clock
     ) {
@@ -89,6 +92,7 @@ public class AdminUserService {
         this.gameDividendPayoutRepository = gameDividendPayoutRepository;
         this.gameSeasonCoinResultRepository = gameSeasonCoinResultRepository;
         this.gameCoinTierService = gameCoinTierService;
+        this.gameService = gameService;
         this.adminAccessService = adminAccessService;
         this.clock = clock;
     }
@@ -208,6 +212,7 @@ public class AdminUserService {
 
     private AdminUserGameSummaryResponse toGameSummary(Long userId, GameSeason activeSeason) {
         List<GameSeasonCoinTier> tiers = gameCoinTierService.getOrCreateTiers(activeSeason);
+        long highlightScore = gameService.calculateSettledUserHighlightScore(activeSeason.getId(), userId);
         long openPositionCount = gamePositionRepository.countBySeasonIdAndUserIdAndStatus(
             activeSeason.getId(),
             userId,
@@ -222,8 +227,8 @@ public class AdminUserService {
         return gameWalletRepository.findBySeasonIdAndUserId(activeSeason.getId(), userId)
             .map(wallet -> {
                 long coinBalance = normalizeNonNegative(wallet.getCoinBalance());
-                GameSeasonCoinTier currentCoinTier = resolveCurrentTier(tiers, coinBalance);
-                GameSeasonCoinTier nextCoinTier = resolveNextTier(tiers, coinBalance);
+                GameSeasonCoinTier currentCoinTier = resolveCurrentTier(tiers, highlightScore);
+                GameSeasonCoinTier nextCoinTier = resolveNextTier(tiers, highlightScore);
 
                 return new AdminUserGameSummaryResponse(
                     activeSeason.getId(),
@@ -251,8 +256,8 @@ public class AdminUserService {
                 0L,
                 0L,
                 activeSeason.getStartingBalancePoints(),
-                toCoinTierSummary(resolveCurrentTier(tiers, 0L)),
-                toCoinTierSummary(resolveNextTier(tiers, 0L)),
+                toCoinTierSummary(resolveCurrentTier(tiers, highlightScore)),
+                toCoinTierSummary(resolveNextTier(tiers, highlightScore)),
                 openPositionCount,
                 closedPositionCount
             ));
@@ -310,13 +315,13 @@ public class AdminUserService {
         return value != null ? value : 0L;
     }
 
-    private GameSeasonCoinTier resolveCurrentTier(List<GameSeasonCoinTier> tiers, long coinBalance) {
-        return tiers.isEmpty() ? null : gameCoinTierService.resolveTier(tiers, coinBalance);
+    private GameSeasonCoinTier resolveCurrentTier(List<GameSeasonCoinTier> tiers, long tierScore) {
+        return tiers.isEmpty() ? null : gameCoinTierService.resolveTier(tiers, tierScore);
     }
 
-    private GameSeasonCoinTier resolveNextTier(List<GameSeasonCoinTier> tiers, long coinBalance) {
+    private GameSeasonCoinTier resolveNextTier(List<GameSeasonCoinTier> tiers, long tierScore) {
         return tiers.stream()
-            .filter(tier -> tier.getMinCoinBalance() > coinBalance)
+            .filter(tier -> tier.getMinCoinBalance() > tierScore)
             .min(
                 java.util.Comparator.comparingLong(GameSeasonCoinTier::getMinCoinBalance)
                     .thenComparingInt(GameSeasonCoinTier::getSortOrder)

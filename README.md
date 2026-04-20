@@ -125,6 +125,7 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `GET /api/game/market`
 - `GET /api/game/leaderboard`
 - `GET /api/game/coins/overview`
+- `GET /api/game/notifications`
 - `GET /api/game/positions/me?status=OPEN`
 - `POST /api/game/positions`
 - `POST /api/game/positions/{positionId}/sell`
@@ -263,7 +264,8 @@ values
     "realizedPnlPoints": 0,
     "coinBalance": 0,
     "totalAssetPoints": 10000
-  }
+  },
+  "notifications": []
 }
 ```
 
@@ -360,6 +362,36 @@ values
     "unrealizedPnlPoints": 2400,
     "openPositionCount": 1,
     "me": true
+  }
+]
+```
+
+### `GET /api/game/notifications`
+
+현재 로그인 사용자의 활성 시즌 포지션 중 알림으로 띄울 전략 달성 항목을 반환합니다.
+
+- `MOONSHOT`, `BIG_CASHOUT`, `SMALL_CASHOUT`, `SNIPE` 조건을 만족하면 알림 항목으로 내려갑니다.
+- 한 포지션에서 여러 조건이 동시에 성립하면 조건별로 각각 반환합니다.
+- 로그인 직후 `GET /api/game/seasons/current` 응답의 `notifications` 를 사용하거나 이 API를 따로 호출하면 됩니다.
+- 로그인 상태에서 WebSocket을 연결하면 같은 알림이 `/user/queue/game/notifications` 로 실시간 전달됩니다.
+
+응답 예시:
+
+```json
+[
+  {
+    "id": "game-300-MOONSHOT",
+    "notificationType": "MOONSHOT",
+    "title": "문샷 적중",
+    "message": "150위에서 잡은 영상이 10위까지 올라왔습니다.",
+    "positionId": 300,
+    "videoId": "video-1",
+    "videoTitle": "Title video-1",
+    "channelTitle": "Channel",
+    "thumbnailUrl": "https://example.com/video-1.jpg",
+    "strategyTags": ["MOONSHOT", "BIG_CASHOUT", "SNIPE"],
+    "highlightScore": 20000,
+    "createdAt": "2026-04-01T06:00:00Z"
   }
 ]
 ```
@@ -1046,6 +1078,9 @@ Authorization: Bearer {accessToken}
 
 - WebSocket endpoint: `/ws`
 - subscribe topic: `/topic/comments`
+- game update topic: `/topic/game/{regionCode}`
+- personal game notifications: `/user/queue/game/notifications`
+- 개인 게임 알림을 받으려면 STOMP `CONNECT` native header에 `Authorization: Bearer {accessToken}` 을 포함합니다.
 
 ## 급상승 API
 

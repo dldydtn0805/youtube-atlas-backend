@@ -90,6 +90,14 @@ public class GameController {
         return gameService.getHighlights(authService.requireCurrentUser(authorizationHeader), regionCode);
     }
 
+    @GetMapping("/notifications")
+    public List<GameNotificationResponse> getNotifications(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode
+    ) {
+        return gameService.getNotifications(authService.requireCurrentUser(authorizationHeader), regionCode);
+    }
+
     @GetMapping("/tiers/current")
     public CoinTierProgressResponse getCurrentCoinTier(
         @RequestHeader("Authorization") String authorizationHeader,

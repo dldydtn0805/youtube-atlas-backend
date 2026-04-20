@@ -1,6 +1,7 @@
 package com.yongsoo.youtubeatlasbackend.game.api;
 
 import java.time.Instant;
+import java.util.List;
 
 public record CurrentSeasonResponse(
     Long seasonId,
@@ -13,6 +14,7 @@ public record CurrentSeasonResponse(
     Integer minHoldSeconds,
     Integer maxOpenPositions,
     Integer rankPointMultiplier,
-    WalletResponse wallet
+    WalletResponse wallet,
+    List<GameNotificationResponse> notifications
 ) {
 }

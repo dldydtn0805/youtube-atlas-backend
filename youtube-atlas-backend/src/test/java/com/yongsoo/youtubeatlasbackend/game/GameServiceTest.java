@@ -108,7 +108,81 @@ class GameServiceTest {
         assertThat(response.wallet().balancePoints()).isEqualTo(10_000L);
         assertThat(response.wallet().reservedPoints()).isZero();
         assertThat(response.wallet().coinBalance()).isZero();
+        assertThat(response.notifications()).isEmpty();
         verify(gameLedgerRepository).save(any(GameLedger.class));
+    }
+
+    @Test
+    void getCurrentSeasonIncludesActiveGameNotifications() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            150,
+            GamePointCalculator.calculatePricePoints(150),
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+        TrendSignal signal = signal("video-1", 10, 0);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal));
+
+        var response = gameService.getCurrentSeason(authenticatedUser(), "KR");
+
+        assertThat(response.notifications()).hasSize(3);
+        assertThat(response.notifications().get(0).id()).isEqualTo("game-300-MOONSHOT");
+        assertThat(response.notifications().get(0).notificationType()).isEqualTo("MOONSHOT");
+        assertThat(response.notifications().get(0).title()).isEqualTo("문샷 적중");
+        assertThat(response.notifications().get(0).videoTitle()).isEqualTo("Title video-1");
+        assertThat(response.notifications().get(0).strategyTags()).contains(GameStrategyType.MOONSHOT);
+        assertThat(response.notifications().get(1).notificationType()).isEqualTo("BIG_CASHOUT");
+        assertThat(response.notifications().get(2).notificationType()).isEqualTo("SNIPE");
+    }
+
+    @Test
+    void getNotificationsReturnsCashoutMoonshotAndSnipeAlerts() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GamePosition moonshotPosition = openPosition(
+            season,
+            appUser,
+            "video-1",
+            150,
+            GamePointCalculator.calculatePricePoints(150),
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+        GamePosition cashoutPosition = openPosition(
+            season,
+            appUser,
+            "video-2",
+            100,
+            GamePointCalculator.calculatePricePoints(100),
+            Instant.parse("2026-04-01T05:39:00Z")
+        );
+        ReflectionTestUtils.setField(cashoutPosition, "id", 301L);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L))
+            .thenReturn(List.of(moonshotPosition, cashoutPosition));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1")))
+            .thenReturn(Optional.of(signal("video-1", 10, 0)));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-2")))
+            .thenReturn(Optional.of(signal("video-2", 40, 0)));
+
+        var response = gameService.getNotifications(authenticatedUser(), "KR");
+
+        assertThat(response).hasSize(4);
+        assertThat(response.stream().map(notification -> notification.notificationType()).toList())
+            .containsExactlyInAnyOrder("MOONSHOT", "BIG_CASHOUT", "SNIPE", "SMALL_CASHOUT");
+        assertThat(response.stream().filter(notification -> notification.notificationType().equals("SMALL_CASHOUT")).findFirst())
+            .hasValueSatisfying(notification -> assertThat(notification.title()).isEqualTo("스몰 캐시아웃"));
     }
 
     @Test
@@ -277,6 +351,50 @@ class GameServiceTest {
         assertThat(wallet.getReservedPoints()).isZero();
         assertThat(wallet.getRealizedPnlPoints()).isEqualTo(pnlPoints);
         verify(commentService).publishTradeSystemMessage("User 7님이 [Title video-1] 1개를 매도했습니다. (9970P)");
+    }
+
+    @Test
+    void sellPublishesTierPromotionFromSettledHighlightScore() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(150);
+        GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            150,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        TrendSignal latestSignal = signal("video-1", 10, 0);
+        GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
+        GameSeasonCoinTier diamondTier = coinTier(season, "DIAMOND", "다이아몬드", 40_000L, 5);
+        GameSeasonCoinTier masterTier = coinTier(season, "MASTER", "마스터", 80_000L, 6);
+        List<GameSeasonCoinTier> tiers = List.of(bronzeTier, diamondTier, masterTier);
+
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of());
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.save(position)).thenReturn(position);
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(tiers);
+        when(gameCoinTierService.resolveTier(
+            org.mockito.ArgumentMatchers.eq(tiers),
+            org.mockito.ArgumentMatchers.anyLong()
+        )).thenAnswer(invocation -> {
+            long score = invocation.getArgument(1, Long.class);
+            if (score >= 80_000L) {
+                return masterTier;
+            }
+            return score >= 40_000L ? diamondTier : bronzeTier;
+        });
+
+        gameService.sell(authenticatedUser(), 300L);
+
+        verify(commentService).publishTierSystemMessage("User 7님이 다이아몬드 티어로 상승했습니다.");
     }
 
     @Test
@@ -1149,6 +1267,86 @@ class GameServiceTest {
         assertThat(response.currentTier().displayName()).isEqualTo("브론즈");
         assertThat(response.nextTier().tierCode()).isEqualTo("SILVER");
         assertThat(response.tiers()).hasSize(7);
+    }
+
+    @Test
+    void getCurrentCoinTierIgnoresOpenPositionHighlightsUntilSold() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        GamePosition openMoonshotPosition = openPosition(
+            season,
+            appUser,
+            "video-1",
+            150,
+            GamePointCalculator.calculatePricePoints(150),
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+        GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
+        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 10_000L, 2);
+        List<GameSeasonCoinTier> tiers = List.of(bronzeTier, silverTier);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(tiers);
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L))
+            .thenReturn(List.of(openMoonshotPosition));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1")))
+            .thenReturn(Optional.of(signal("video-1", 10, 0)));
+        when(gameCoinTierService.resolveTier(tiers, 0L)).thenReturn(bronzeTier);
+
+        var response = gameService.getCurrentCoinTier(authenticatedUser(), "KR");
+
+        assertThat(response.highlightScore()).isZero();
+        assertThat(response.currentTier().tierCode()).isEqualTo("BRONZE");
+    }
+
+    @Test
+    void getCurrentCoinTierCountsHighlightScoreAfterPositionIsSold() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        GamePosition closedMoonshotPosition = openPosition(
+            season,
+            appUser,
+            "video-1",
+            150,
+            GamePointCalculator.calculatePricePoints(150),
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+        long sellPricePoints = GamePointCalculator.calculatePricePoints(10);
+        long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
+        closedMoonshotPosition.setStatus(PositionStatus.CLOSED);
+        closedMoonshotPosition.setSellRunId(55L);
+        closedMoonshotPosition.setSellRank(10);
+        closedMoonshotPosition.setSellCapturedAt(Instant.parse("2026-04-01T06:00:00Z"));
+        closedMoonshotPosition.setSettledPoints(settledPoints);
+        closedMoonshotPosition.setPnlPoints(GamePointCalculator.calculateProfitPoints(
+            closedMoonshotPosition.getStakePoints(),
+            settledPoints
+        ));
+        closedMoonshotPosition.setClosedAt(Instant.parse("2026-04-01T06:01:00Z"));
+        GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
+        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 10_000L, 2);
+        List<GameSeasonCoinTier> tiers = List.of(bronzeTier, silverTier);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(tiers);
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L))
+            .thenReturn(List.of(closedMoonshotPosition));
+        when(gameCoinTierService.resolveTier(
+            org.mockito.ArgumentMatchers.eq(tiers),
+            org.mockito.ArgumentMatchers.longThat(score -> score > 0L)
+        ))
+            .thenReturn(silverTier);
+
+        var response = gameService.getCurrentCoinTier(authenticatedUser(), "KR");
+
+        assertThat(response.highlightScore()).isPositive();
+        assertThat(response.currentTier().tierCode()).isEqualTo("SILVER");
     }
 
     @Test

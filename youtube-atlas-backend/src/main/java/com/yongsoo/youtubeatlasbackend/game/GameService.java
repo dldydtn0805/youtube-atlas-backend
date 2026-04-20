@@ -33,6 +33,7 @@ import com.yongsoo.youtubeatlasbackend.game.api.CoinTierResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.CreatePositionRequest;
 import com.yongsoo.youtubeatlasbackend.game.api.CurrentSeasonResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.GameHighlightResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.GameNotificationResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.LeaderboardEntryResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.MarketVideoResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionRankHistoryPointResponse;
@@ -83,6 +84,7 @@ public class GameService {
     private static final long MIN_PROFIT_POINTS_HIGHLIGHT_BONUS = 5_000L;
     private static final double PROFIT_POINTS_HIGHLIGHT_SQRT_SCALE = 3D;
     private static final long MAX_PROFIT_POINTS_HIGHLIGHT_BONUS = 30_000L;
+    private static final int NOTIFICATION_LIMIT = 5;
     private static final CoinRateAnchor[] COIN_RATE_ANCHORS = {
         new CoinRateAnchor(1, 100),
         new CoinRateAnchor(10, 46),
@@ -144,7 +146,7 @@ public class GameService {
     public CurrentSeasonResponse getCurrentSeason(AuthenticatedUser authenticatedUser, String regionCode) {
         GameSeason season = requireActiveSeason(regionCode);
         GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
-        return toCurrentSeasonResponse(season, wallet);
+        return toCurrentSeasonResponse(season, wallet, buildNotifications(season, authenticatedUser.id()));
     }
 
     @Transactional
@@ -530,7 +532,7 @@ public class GameService {
         ).stream().collect(Collectors.groupingBy(position -> position.getUser().getId()));
         Map<Long, List<GameHighlightResponse>> highlightsByUserId = gamePositionRepository.findBySeasonId(season.getId())
             .stream()
-            .map(position -> new UserHighlight(position.getUser().getId(), toGameHighlightResponse(position)))
+            .map(position -> new UserHighlight(position.getUser().getId(), toSettledGameHighlightResponse(position)))
             .filter(entry -> entry.highlight() != null)
             .collect(Collectors.groupingBy(
                 UserHighlight::userId,
@@ -913,9 +915,19 @@ public class GameService {
     @Transactional(readOnly = true)
     public List<GameHighlightResponse> getHighlights(AuthenticatedUser authenticatedUser, String regionCode) {
         GameSeason season = requireActiveSeason(regionCode);
+        return buildHighlights(season, authenticatedUser.id());
+    }
+
+    @Transactional(readOnly = true)
+    public List<GameNotificationResponse> getNotifications(AuthenticatedUser authenticatedUser, String regionCode) {
+        GameSeason season = requireActiveSeason(regionCode);
+        return buildNotifications(season, authenticatedUser.id());
+    }
+
+    private List<GameHighlightResponse> buildHighlights(GameSeason season, Long userId) {
         List<GamePosition> positions = gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(
             season.getId(),
-            authenticatedUser.id()
+            userId
         );
 
         return positions.stream()
@@ -997,7 +1009,11 @@ public class GameService {
         return responses;
     }
 
-    private CurrentSeasonResponse toCurrentSeasonResponse(GameSeason season, GameWallet wallet) {
+    private CurrentSeasonResponse toCurrentSeasonResponse(
+        GameSeason season,
+        GameWallet wallet,
+        List<GameNotificationResponse> notifications
+    ) {
         return new CurrentSeasonResponse(
             season.getId(),
             season.getName(),
@@ -1009,8 +1025,16 @@ public class GameService {
             season.getMinHoldSeconds(),
             season.getMaxOpenPositions(),
             season.getRankPointMultiplier(),
-            toWalletResponse(wallet)
+            toWalletResponse(wallet),
+            notifications
         );
+    }
+
+    private List<GameNotificationResponse> buildNotifications(GameSeason season, Long userId) {
+        return buildHighlights(season, userId).stream()
+            .flatMap(highlight -> GameNotificationFactory.fromHighlight(highlight).stream())
+            .limit(NOTIFICATION_LIMIT)
+            .toList();
     }
 
     private WalletResponse toWalletResponse(GameWallet wallet) {
@@ -1350,6 +1374,14 @@ public class GameService {
         );
     }
 
+    private GameHighlightResponse toSettledGameHighlightResponse(GamePosition position) {
+        if (position.getStatus() != PositionStatus.CLOSED) {
+            return null;
+        }
+
+        return toGameHighlightResponse(position);
+    }
+
     private HighlightSnapshot resolveHighlightSnapshot(GamePosition position) {
         if (position.getStatus() == PositionStatus.OPEN) {
             OpenPositionSnapshot snapshot = resolveOpenPositionSnapshot(position);
@@ -1466,9 +1498,14 @@ public class GameService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public long calculateSettledUserHighlightScore(Long seasonId, Long userId) {
+        return calculateUserHighlightScore(seasonId, userId);
+    }
+
     private long calculateUserHighlightScore(Long seasonId, Long userId) {
         return gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(seasonId, userId).stream()
-            .map(this::toGameHighlightResponse)
+            .map(this::toSettledGameHighlightResponse)
             .filter(Objects::nonNull)
             .mapToLong(GameService::calculateHighlightScore)
             .sum();
@@ -1829,6 +1866,7 @@ public class GameService {
         GameWallet wallet,
         Instant now
     ) {
+        long previousHighlightScore = calculateUserHighlightScore(position.getSeason().getId(), position.getUser().getId());
         int rankDiff = position.getBuyRank() - sellSnapshot.rank();
         long unitStakePoints = resolveUnitStakePoints(position);
         long soldStakePoints = GamePointCalculator.calculatePositionPoints(unitStakePoints, sellQuantity);
@@ -1875,6 +1913,7 @@ public class GameService {
             now
         );
         publishTradeSystemMessage(settledPosition.getUser(), settledPosition, "매도", sellQuantity, settledPoints);
+        publishTierPromotionIfNeeded(settledPosition, previousHighlightScore);
 
         return new SellPositionResponse(
             settledPosition.getId(),
@@ -1889,6 +1928,32 @@ public class GameService {
             settledPoints,
             wallet.getBalancePoints(),
             settledPosition.getClosedAt()
+        );
+    }
+
+    private void publishTierPromotionIfNeeded(GamePosition settledPosition, long previousHighlightScore) {
+        GameHighlightResponse highlight = toSettledGameHighlightResponse(settledPosition);
+        if (highlight == null) {
+            return;
+        }
+
+        long currentHighlightScore = previousHighlightScore + calculateHighlightScore(highlight);
+        List<GameSeasonCoinTier> tiers = gameCoinTierService.getOrCreateTiers(settledPosition.getSeason());
+        if (tiers == null || tiers.isEmpty()) {
+            return;
+        }
+
+        GameSeasonCoinTier previousTier = gameCoinTierService.resolveTier(tiers, previousHighlightScore);
+        GameSeasonCoinTier currentTier = gameCoinTierService.resolveTier(tiers, currentHighlightScore);
+        if (previousTier == null || currentTier == null || currentTier.getSortOrder() <= previousTier.getSortOrder()) {
+            return;
+        }
+
+        String displayName = StringUtils.hasText(settledPosition.getUser().getDisplayName())
+            ? settledPosition.getUser().getDisplayName().trim()
+            : "익명";
+        commentService.publishTierSystemMessage(
+            displayName + "님이 " + currentTier.getDisplayName() + " 티어로 상승했습니다."
         );
     }
 

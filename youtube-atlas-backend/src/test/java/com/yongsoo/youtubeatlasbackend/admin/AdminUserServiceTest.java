@@ -27,6 +27,7 @@ import com.yongsoo.youtubeatlasbackend.game.GameCoinTierService;
 import com.yongsoo.youtubeatlasbackend.game.GameDividendPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameService;
 import com.yongsoo.youtubeatlasbackend.game.GameSeason;
 import com.yongsoo.youtubeatlasbackend.game.GameSeasonCoinResultRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameSeasonRepository;
@@ -54,6 +55,7 @@ class AdminUserServiceTest {
     private GameCoinPayoutRepository gameCoinPayoutRepository;
     private GameDividendPayoutRepository gameDividendPayoutRepository;
     private GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
+    private GameService gameService;
     private AdminAccessService adminAccessService;
     private AdminUserService adminUserService;
     private Clock clock;
@@ -72,6 +74,7 @@ class AdminUserServiceTest {
         gameCoinPayoutRepository = org.mockito.Mockito.mock(GameCoinPayoutRepository.class);
         gameDividendPayoutRepository = org.mockito.Mockito.mock(GameDividendPayoutRepository.class);
         gameSeasonCoinResultRepository = org.mockito.Mockito.mock(GameSeasonCoinResultRepository.class);
+        gameService = org.mockito.Mockito.mock(GameService.class);
         adminAccessService = org.mockito.Mockito.mock(AdminAccessService.class);
         clock = Clock.fixed(Instant.parse("2026-04-08T03:00:00Z"), ZoneOffset.UTC);
         GameSeasonCoinTierRepository gameSeasonCoinTierRepository = org.mockito.Mockito.mock(GameSeasonCoinTierRepository.class);
@@ -90,6 +93,7 @@ class AdminUserServiceTest {
             gameDividendPayoutRepository,
             gameSeasonCoinResultRepository,
             gameCoinTierService,
+            gameService,
             adminAccessService,
             clock
         );
@@ -159,6 +163,8 @@ class AdminUserServiceTest {
         when(gamePositionRepository.countBySeasonIdAndUserIdAndStatusIn(eq(5L), eq(9L), any())).thenReturn(0L);
         when(gameWalletRepository.findBySeasonIdAndUserId(3L, 9L)).thenReturn(Optional.of(wallet));
         when(gameWalletRepository.findBySeasonIdAndUserId(5L, 9L)).thenReturn(Optional.empty());
+        when(gameService.calculateSettledUserHighlightScore(3L, 9L)).thenReturn(130_000L);
+        when(gameService.calculateSettledUserHighlightScore(5L, 9L)).thenReturn(0L);
 
         var response = adminUserService.getUser(9L);
 
@@ -175,8 +181,9 @@ class AdminUserServiceTest {
         assertThat(response.activeSeasonGame().totalAssetPoints()).isEqualTo(15000L);
         assertThat(response.activeSeasonGame().coinBalance()).isEqualTo(900000L);
         assertThat(response.activeSeasonGame().currentCoinTier()).isNotNull();
-        assertThat(response.activeSeasonGame().currentCoinTier().tierCode()).isEqualTo("LEGEND");
-        assertThat(response.activeSeasonGame().nextCoinTier()).isNull();
+        assertThat(response.activeSeasonGame().currentCoinTier().tierCode()).isEqualTo("DIAMOND");
+        assertThat(response.activeSeasonGame().nextCoinTier()).isNotNull();
+        assertThat(response.activeSeasonGame().nextCoinTier().tierCode()).isEqualTo("MASTER");
         assertThat(response.activeSeasonGame().openPositionCount()).isEqualTo(2L);
         assertThat(response.activeSeasonGame().closedPositionCount()).isEqualTo(5L);
     }

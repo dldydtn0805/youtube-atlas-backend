@@ -2,7 +2,6 @@ package com.yongsoo.youtubeatlasbackend.game;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -21,6 +20,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
+import com.yongsoo.youtubeatlasbackend.game.api.GameNotificationResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.GameRealtimeEventResponse;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalId;
@@ -111,6 +111,38 @@ class GameSettlementServiceTest {
     }
 
     @Test
+    void distributeActiveSeasonCoinsPushesPersonalGameNotifications() {
+        GameSeason season = activeSeasonStillRunning();
+        AppUser appUser = user(7L);
+        GamePosition position = openPosition(season, appUser, "video-1", 150, GamePointCalculator.calculatePricePoints(150));
+        GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
+        TrendSignal signal = signal("video-1", 10);
+
+        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
+            .thenReturn(List.of(signal));
+        when(gameCoinPayoutRepository.findPositionIdsBySeasonIdAndPayoutSlotAt(1L, Instant.parse("2026-04-08T00:00:00Z")))
+            .thenReturn(List.of());
+        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(position));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gameCoinPayoutRepository.saveAndFlush(any(GameCoinPayout.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+
+        gameSettlementService.distributeActiveSeasonCoins();
+
+        org.mockito.ArgumentCaptor<GameNotificationResponse> notificationCaptor =
+            org.mockito.ArgumentCaptor.forClass(GameNotificationResponse.class);
+        verify(messagingTemplate, org.mockito.Mockito.atLeastOnce()).convertAndSendToUser(
+            eq("7"),
+            eq("/queue/game/notifications"),
+            notificationCaptor.capture()
+        );
+        assertThat(notificationCaptor.getAllValues().stream().map(GameNotificationResponse::notificationType).toList())
+            .contains("MOONSHOT", "BIG_CASHOUT", "SNIPE");
+    }
+
+    @Test
     void distributeActiveSeasonCoinsSkipsPositionAlreadyPaidForCurrentRun() {
         GameSeason season = activeSeasonStillRunning();
         AppUser appUser = user(7L);
@@ -190,7 +222,7 @@ class GameSettlementServiceTest {
     }
 
     @Test
-    void distributeActiveSeasonCoinsPublishesSystemMessageWhenTierPromotes() {
+    void distributeActiveSeasonCoinsDoesNotPublishTierPromotionFromCoinBalance() {
         GameSeason season = activeSeasonStillRunning();
         AppUser appUser = user(7L);
         GamePosition position = openPosition(season, appUser, "video-1", 12, GamePointCalculator.calculatePricePoints(12));
@@ -198,9 +230,6 @@ class GameSettlementServiceTest {
         GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
         wallet.setCoinBalance(7_900L);
         TrendSignal signal = signal("video-1", 1);
-        GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
-        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 10_000L, 2);
-        List<GameSeasonCoinTier> tiers = List.of(bronzeTier, silverTier);
 
         when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
@@ -212,15 +241,10 @@ class GameSettlementServiceTest {
         when(gameCoinPayoutRepository.saveAndFlush(any(GameCoinPayout.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
         when(gameWalletRepository.save(wallet)).thenReturn(wallet);
-        when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(tiers);
-        when(gameCoinTierService.resolveTier(eq(tiers), anyLong())).thenAnswer(invocation -> {
-            long coinBalance = invocation.getArgument(1, Long.class);
-            return coinBalance >= 10_000L ? silverTier : bronzeTier;
-        });
 
         gameSettlementService.distributeActiveSeasonCoins();
 
-        verify(commentService).publishTierSystemMessage("User 7님이 실버 티어로 상승했습니다.");
+        verify(commentService, org.mockito.Mockito.never()).publishTierSystemMessage(org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test
