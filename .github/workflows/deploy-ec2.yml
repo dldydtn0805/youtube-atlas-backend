@@ -87,12 +87,22 @@ jobs:
           for attempt in $(seq 1 30); do
             if curl -fsS 'http://127.0.0.1:8080/api/trending/realtime-surging?regionCode=KR' >/dev/null; then
               echo "Backend is healthy"
-              exit 0
+              break
             fi
             echo "Waiting for backend... ($attempt/30)"
             sleep 2
           done
 
-          echo "Backend did not become healthy in time"
-          sudo docker logs --tail 120 youtube-atlas-backend
-          exit 1
+          if ! curl -fsS 'http://127.0.0.1:8080/api/trending/realtime-surging?regionCode=KR' >/dev/null; then
+            echo "Backend did not become healthy in time"
+            sudo docker logs --tail 120 youtube-atlas-backend
+            exit 1
+          fi
+
+          for region in KR US JP BR ID; do
+            echo "Triggering trending sync for $region"
+            curl -fsS -X POST 'http://127.0.0.1:8080/api/trending/sync' \
+              -H 'Content-Type: application/json' \
+              -d "{\"regionCode\":\"$region\",\"categoryId\":\"0\",\"categoryLabel\":\"전체\",\"sourceCategoryIds\":[]}"
+            echo
+          done
