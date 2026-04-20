@@ -1,0 +1,80 @@
+name: Apply tier thresholds
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apply:
+    runs-on:
+      - self-hosted
+      - ec2
+      - youtube-atlas-backend
+
+    steps:
+      - name: Apply score-based tier thresholds
+        run: |
+          set -euo pipefail
+          cd /home/ec2-user/youtube-atlas-backend
+
+          read_env_last() {
+            local key="$1"
+            awk -v key="$key" 'BEGIN{FS="="} $1==key {value=$0; sub(/^[^=]*=/,"",value)} END{print value}' .env \
+              | sed 's/^"//; s/"$//'
+          }
+
+          DB_URL="$(read_env_last AWS_DB_URL)"
+          DB_USERNAME="$(read_env_last AWS_DB_USERNAME)"
+          DB_PASSWORD="$(read_env_last AWS_DB_PASSWORD)"
+
+          if [ -z "$DB_URL" ]; then
+            DB_URL="$(read_env_last SPRING_DATASOURCE_URL)"
+          fi
+          if [ -z "$DB_URL" ]; then
+            DB_URL="$(read_env_last DB_URL)"
+          fi
+          if [ -z "$DB_USERNAME" ]; then
+            DB_USERNAME="$(read_env_last SPRING_DATASOURCE_USERNAME)"
+          fi
+          if [ -z "$DB_USERNAME" ]; then
+            DB_USERNAME="$(read_env_last DB_USERNAME)"
+          fi
+          if [ -z "$DB_PASSWORD" ]; then
+            DB_PASSWORD="$(read_env_last SPRING_DATASOURCE_PASSWORD)"
+          fi
+          if [ -z "$DB_PASSWORD" ]; then
+            DB_PASSWORD="$(read_env_last DB_PASSWORD)"
+          fi
+
+          if [ -z "$DB_URL" ] || [ -z "$DB_USERNAME" ] || [ -z "$DB_PASSWORD" ]; then
+            echo "DB connection env is missing in /home/ec2-user/youtube-atlas-backend/.env" >&2
+            exit 1
+          fi
+
+          DB_URL="${DB_URL#jdbc:}"
+
+          sudo docker run --rm \
+            -e PGPASSWORD="$DB_PASSWORD" \
+            postgres:18 \
+            psql "$DB_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 <<'SQL'
+          update game_season_coin_tiers
+          set min_coin_balance = case tier_code
+              when 'BRONZE' then 0
+              when 'SILVER' then 8000
+              when 'GOLD' then 20000
+              when 'PLATINUM' then 35000
+              when 'DIAMOND' then 55000
+              when 'MASTER' then 85000
+              when 'LEGEND' then 130000
+              else min_coin_balance
+          end
+          where tier_code in ('BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', 'MASTER', 'LEGEND');
+
+          select season_id, tier_code, min_coin_balance
+          from game_season_coin_tiers
+          where season_id in (
+              select id
+              from game_seasons
+              where status = 'ACTIVE'
+          )
+          order by season_id, sort_order;
+          SQL

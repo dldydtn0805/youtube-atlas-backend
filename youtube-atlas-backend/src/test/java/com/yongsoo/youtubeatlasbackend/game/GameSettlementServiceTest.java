@@ -196,10 +196,10 @@ class GameSettlementServiceTest {
         GamePosition position = openPosition(season, appUser, "video-1", 12, GamePointCalculator.calculatePricePoints(12));
         position.setCreatedAt(Instant.parse("2026-04-07T22:00:00Z"));
         GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
-        wallet.setCoinBalance(99_900L);
+        wallet.setCoinBalance(7_900L);
         TrendSignal signal = signal("video-1", 1);
         GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
-        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 100_000L, 2);
+        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 8_000L, 2);
         List<GameSeasonCoinTier> tiers = List.of(bronzeTier, silverTier);
 
         when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
@@ -215,7 +215,7 @@ class GameSettlementServiceTest {
         when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(tiers);
         when(gameCoinTierService.resolveTier(eq(tiers), anyLong())).thenAnswer(invocation -> {
             long coinBalance = invocation.getArgument(1, Long.class);
-            return coinBalance >= 100_000L ? silverTier : bronzeTier;
+            return coinBalance >= 8_000L ? silverTier : bronzeTier;
         });
 
         gameSettlementService.distributeActiveSeasonCoins();
@@ -313,7 +313,7 @@ class GameSettlementServiceTest {
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
         wallet.setCoinBalance(2_500_000L);
-        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", 300_000L, 3);
+        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", 20_000L, 3);
 
         when(gameSeasonRepository.findByStatusAndEndAtLessThanEqual(SeasonStatus.ACTIVE, Instant.parse("2026-04-08T00:01:00Z")))
             .thenReturn(List.of(season));
