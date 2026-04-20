@@ -20,7 +20,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
-import com.yongsoo.youtubeatlasbackend.game.api.GameNotificationResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.GameRealtimeEventResponse;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalId;
@@ -38,6 +37,7 @@ class GameSettlementServiceTest {
     private GameCoinPayoutRepository gameCoinPayoutRepository;
     private GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
     private GameCoinTierService gameCoinTierService;
+    private GameNotificationService gameNotificationService;
     private TrendSignalRepository trendSignalRepository;
     private SimpMessagingTemplate messagingTemplate;
     private CommentService commentService;
@@ -53,6 +53,7 @@ class GameSettlementServiceTest {
         gameCoinPayoutRepository = org.mockito.Mockito.mock(GameCoinPayoutRepository.class);
         gameSeasonCoinResultRepository = org.mockito.Mockito.mock(GameSeasonCoinResultRepository.class);
         gameCoinTierService = org.mockito.Mockito.mock(GameCoinTierService.class);
+        gameNotificationService = org.mockito.Mockito.mock(GameNotificationService.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
         messagingTemplate = org.mockito.Mockito.mock(SimpMessagingTemplate.class);
         commentService = org.mockito.Mockito.mock(CommentService.class);
@@ -67,6 +68,7 @@ class GameSettlementServiceTest {
             gameCoinPayoutRepository,
             gameSeasonCoinResultRepository,
             gameCoinTierService,
+            gameNotificationService,
             trendSignalRepository,
             messagingTemplate,
             commentService,
@@ -111,7 +113,7 @@ class GameSettlementServiceTest {
     }
 
     @Test
-    void distributeActiveSeasonCoinsPushesPersonalGameNotifications() {
+    void distributeActiveSeasonCoinsCreatesPersonalGameNotifications() {
         GameSeason season = activeSeasonStillRunning();
         AppUser appUser = user(7L);
         GamePosition position = openPosition(season, appUser, "video-1", 150, GamePointCalculator.calculatePricePoints(150));
@@ -131,15 +133,12 @@ class GameSettlementServiceTest {
 
         gameSettlementService.distributeActiveSeasonCoins();
 
-        org.mockito.ArgumentCaptor<GameNotificationResponse> notificationCaptor =
-            org.mockito.ArgumentCaptor.forClass(GameNotificationResponse.class);
-        verify(messagingTemplate, org.mockito.Mockito.atLeastOnce()).convertAndSendToUser(
-            eq("7"),
-            eq("/queue/game/notifications"),
-            notificationCaptor.capture()
+        verify(gameNotificationService).createAndPushPositionSnapshot(
+            eq(position),
+            eq(10),
+            eq(GamePointCalculator.calculatePricePoints(10)),
+            eq(Instant.parse("2026-04-08T00:00:00Z"))
         );
-        assertThat(notificationCaptor.getAllValues().stream().map(GameNotificationResponse::notificationType).toList())
-            .contains("MOONSHOT", "BIG_CASHOUT", "SNIPE");
     }
 
     @Test

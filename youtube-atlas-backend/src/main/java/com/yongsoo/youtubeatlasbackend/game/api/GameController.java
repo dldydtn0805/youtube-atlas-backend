@@ -5,7 +5,9 @@ import java.util.List;
 import jakarta.validation.Valid;
 
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -96,6 +98,30 @@ public class GameController {
         @RequestParam String regionCode
     ) {
         return gameService.getNotifications(authService.requireCurrentUser(authorizationHeader), regionCode);
+    }
+
+    @PatchMapping("/notifications/read")
+    public void markNotificationsRead(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode
+    ) {
+        gameService.markNotificationsRead(authService.requireCurrentUser(authorizationHeader), regionCode);
+    }
+
+    @DeleteMapping("/notifications")
+    public void deleteNotifications(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode
+    ) {
+        gameService.deleteNotifications(authService.requireCurrentUser(authorizationHeader), regionCode);
+    }
+
+    @DeleteMapping("/notifications/{notificationId}")
+    public void deleteNotification(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @PathVariable Long notificationId
+    ) {
+        gameService.deleteNotification(authService.requireCurrentUser(authorizationHeader), notificationId);
     }
 
     @GetMapping("/tiers/current")

@@ -368,10 +368,11 @@ values
 
 ### `GET /api/game/notifications`
 
-현재 로그인 사용자의 활성 시즌 포지션 중 알림으로 띄울 전략 달성 항목을 반환합니다.
+현재 로그인 사용자의 활성 시즌 게임 알림 중 삭제되지 않은 항목을 반환합니다.
 
 - `MOONSHOT`, `BIG_CASHOUT`, `SMALL_CASHOUT`, `SNIPE` 조건을 만족하면 알림 항목으로 내려갑니다.
 - 한 포지션에서 여러 조건이 동시에 성립하면 조건별로 각각 반환합니다.
+- 알림은 서버에 저장되며 `readAt`, `deletedAt` 상태로 읽음/삭제를 관리합니다.
 - 로그인 직후 `GET /api/game/seasons/current` 응답의 `notifications` 를 사용하거나 이 API를 따로 호출하면 됩니다.
 - 로그인 상태에서 WebSocket을 연결하면 같은 알림이 `/user/queue/game/notifications` 로 실시간 전달됩니다.
 
@@ -380,7 +381,7 @@ values
 ```json
 [
   {
-    "id": "game-300-MOONSHOT",
+    "id": "42",
     "notificationType": "MOONSHOT",
     "title": "문샷 적중",
     "message": "150위에서 잡은 영상이 10위까지 올라왔습니다.",
@@ -391,10 +392,27 @@ values
     "thumbnailUrl": "https://example.com/video-1.jpg",
     "strategyTags": ["MOONSHOT", "BIG_CASHOUT", "SNIPE"],
     "highlightScore": 20000,
+    "readAt": null,
     "createdAt": "2026-04-01T06:00:00Z"
   }
 ]
 ```
+
+### `PATCH /api/game/notifications/read`
+
+현재 로그인 사용자의 활성 시즌 알림을 모두 읽음 처리합니다.
+
+Query:
+
+- `regionCode`: 활성 시즌 지역 코드
+
+### `DELETE /api/game/notifications`
+
+현재 로그인 사용자의 활성 시즌 알림을 모두 삭제 처리합니다.
+
+### `DELETE /api/game/notifications/{notificationId}`
+
+현재 로그인 사용자의 단일 알림을 삭제 처리합니다.
 
 ### `GET /api/game/positions/me?status=OPEN`
 

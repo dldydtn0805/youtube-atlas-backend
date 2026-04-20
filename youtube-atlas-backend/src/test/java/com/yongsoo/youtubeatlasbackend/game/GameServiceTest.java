@@ -45,6 +45,7 @@ class GameServiceTest {
     private GameLedgerRepository gameLedgerRepository;
     private GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
     private GameCoinTierService gameCoinTierService;
+    private GameNotificationService gameNotificationService;
     private AppUserRepository appUserRepository;
     private TrendSignalRepository trendSignalRepository;
     private TrendRunRepository trendRunRepository;
@@ -60,6 +61,7 @@ class GameServiceTest {
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
         gameSeasonCoinResultRepository = org.mockito.Mockito.mock(GameSeasonCoinResultRepository.class);
         gameCoinTierService = org.mockito.Mockito.mock(GameCoinTierService.class);
+        gameNotificationService = org.mockito.Mockito.mock(GameNotificationService.class);
         appUserRepository = org.mockito.Mockito.mock(AppUserRepository.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
         trendRunRepository = org.mockito.Mockito.mock(TrendRunRepository.class);
@@ -76,6 +78,7 @@ class GameServiceTest {
             gameLedgerRepository,
             gameSeasonCoinResultRepository,
             gameCoinTierService,
+            gameNotificationService,
             appUserRepository,
             trendSignalRepository,
             trendRunRepository,
@@ -84,6 +87,8 @@ class GameServiceTest {
             fixedClock,
             atlasProperties
         );
+        when(gameNotificationService.syncAndListSeasonNotifications(any(GameSeason.class), any(), any()))
+            .thenAnswer(invocation -> invocation.getArgument(2));
     }
 
     @Test

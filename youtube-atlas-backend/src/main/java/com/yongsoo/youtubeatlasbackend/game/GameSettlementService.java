@@ -21,7 +21,6 @@ import org.springframework.util.StringUtils;
 
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
-import com.yongsoo.youtubeatlasbackend.game.api.GameNotificationResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.GameRealtimeEventResponse;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
@@ -32,7 +31,6 @@ public class GameSettlementService {
     private static final String TRENDING_CATEGORY_ID = "0";
     private static final int DEFAULT_FALLBACK_RANK = 201;
     private static final String WALLET_UPDATED_EVENT = "wallet-updated";
-    private static final String USER_GAME_NOTIFICATIONS_QUEUE = "/queue/game/notifications";
 
     private final AtlasProperties atlasProperties;
     private final GameSeasonRepository gameSeasonRepository;
@@ -42,6 +40,7 @@ public class GameSettlementService {
     private final GameCoinPayoutRepository gameCoinPayoutRepository;
     private final GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
     private final GameCoinTierService gameCoinTierService;
+    private final GameNotificationService gameNotificationService;
     private final TrendSignalRepository trendSignalRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final CommentService commentService;
@@ -56,6 +55,7 @@ public class GameSettlementService {
         GameCoinPayoutRepository gameCoinPayoutRepository,
         GameSeasonCoinResultRepository gameSeasonCoinResultRepository,
         GameCoinTierService gameCoinTierService,
+        GameNotificationService gameNotificationService,
         TrendSignalRepository trendSignalRepository,
         SimpMessagingTemplate messagingTemplate,
         CommentService commentService,
@@ -69,6 +69,7 @@ public class GameSettlementService {
         this.gameCoinPayoutRepository = gameCoinPayoutRepository;
         this.gameSeasonCoinResultRepository = gameSeasonCoinResultRepository;
         this.gameCoinTierService = gameCoinTierService;
+        this.gameNotificationService = gameNotificationService;
         this.trendSignalRepository = trendSignalRepository;
         this.messagingTemplate = messagingTemplate;
         this.commentService = commentService;
@@ -263,19 +264,12 @@ public class GameSettlementService {
     }
 
     private void publishGameNotifications(GamePosition position, int currentRank, long currentValuePoints, Instant capturedAt) {
-        List<GameNotificationResponse> notifications = GameNotificationFactory.fromPositionSnapshot(
+        gameNotificationService.createAndPushPositionSnapshot(
             position,
             currentRank,
             currentValuePoints,
             capturedAt
         );
-        for (GameNotificationResponse notification : notifications) {
-            messagingTemplate.convertAndSendToUser(
-                position.getUser().getId().toString(),
-                USER_GAME_NOTIFICATIONS_QUEUE,
-                notification
-            );
-        }
     }
 
     private void publishWalletUpdated(GameWallet wallet, Instant capturedAt, Instant occurredAt) {

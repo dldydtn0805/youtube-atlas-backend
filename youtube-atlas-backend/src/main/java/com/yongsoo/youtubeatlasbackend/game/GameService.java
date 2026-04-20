@@ -84,7 +84,6 @@ public class GameService {
     private static final long MIN_PROFIT_POINTS_HIGHLIGHT_BONUS = 5_000L;
     private static final double PROFIT_POINTS_HIGHLIGHT_SQRT_SCALE = 3D;
     private static final long MAX_PROFIT_POINTS_HIGHLIGHT_BONUS = 30_000L;
-    private static final int NOTIFICATION_LIMIT = 5;
     private static final CoinRateAnchor[] COIN_RATE_ANCHORS = {
         new CoinRateAnchor(1, 100),
         new CoinRateAnchor(10, 46),
@@ -100,6 +99,7 @@ public class GameService {
     private final GameLedgerRepository gameLedgerRepository;
     private final GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
     private final GameCoinTierService gameCoinTierService;
+    private final GameNotificationService gameNotificationService;
     private final AppUserRepository appUserRepository;
     private final TrendSignalRepository trendSignalRepository;
     private final TrendRunRepository trendRunRepository;
@@ -117,6 +117,7 @@ public class GameService {
         GameLedgerRepository gameLedgerRepository,
         GameSeasonCoinResultRepository gameSeasonCoinResultRepository,
         GameCoinTierService gameCoinTierService,
+        GameNotificationService gameNotificationService,
         AppUserRepository appUserRepository,
         TrendSignalRepository trendSignalRepository,
         TrendRunRepository trendRunRepository,
@@ -131,6 +132,7 @@ public class GameService {
         this.gameLedgerRepository = gameLedgerRepository;
         this.gameSeasonCoinResultRepository = gameSeasonCoinResultRepository;
         this.gameCoinTierService = gameCoinTierService;
+        this.gameNotificationService = gameNotificationService;
         this.appUserRepository = appUserRepository;
         this.trendSignalRepository = trendSignalRepository;
         this.trendRunRepository = trendRunRepository;
@@ -146,7 +148,7 @@ public class GameService {
     public CurrentSeasonResponse getCurrentSeason(AuthenticatedUser authenticatedUser, String regionCode) {
         GameSeason season = requireActiveSeason(regionCode);
         GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
-        return toCurrentSeasonResponse(season, wallet, buildNotifications(season, authenticatedUser.id()));
+        return toCurrentSeasonResponse(season, wallet, syncAndListNotifications(season, authenticatedUser.id()));
     }
 
     @Transactional
@@ -918,10 +920,31 @@ public class GameService {
         return buildHighlights(season, authenticatedUser.id());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<GameNotificationResponse> getNotifications(AuthenticatedUser authenticatedUser, String regionCode) {
         GameSeason season = requireActiveSeason(regionCode);
-        return buildNotifications(season, authenticatedUser.id());
+        return syncAndListNotifications(season, authenticatedUser.id());
+    }
+
+    @Transactional
+    public void markNotificationsRead(AuthenticatedUser authenticatedUser, String regionCode) {
+        GameSeason season = requireActiveSeason(regionCode);
+        gameNotificationService.markSeasonNotificationsRead(season.getId(), authenticatedUser.id());
+    }
+
+    @Transactional
+    public void deleteNotifications(AuthenticatedUser authenticatedUser, String regionCode) {
+        GameSeason season = requireActiveSeason(regionCode);
+        gameNotificationService.deleteSeasonNotifications(season.getId(), authenticatedUser.id());
+    }
+
+    @Transactional
+    public void deleteNotification(AuthenticatedUser authenticatedUser, Long notificationId) {
+        if (notificationId == null) {
+            throw new IllegalArgumentException("notificationId는 필수입니다.");
+        }
+
+        gameNotificationService.deleteNotification(notificationId, authenticatedUser.id());
     }
 
     private List<GameHighlightResponse> buildHighlights(GameSeason season, Long userId) {
@@ -1030,10 +1053,17 @@ public class GameService {
         );
     }
 
-    private List<GameNotificationResponse> buildNotifications(GameSeason season, Long userId) {
+    private List<GameNotificationResponse> syncAndListNotifications(GameSeason season, Long userId) {
+        return gameNotificationService.syncAndListSeasonNotifications(
+            season,
+            userId,
+            buildGeneratedNotifications(season, userId)
+        );
+    }
+
+    private List<GameNotificationResponse> buildGeneratedNotifications(GameSeason season, Long userId) {
         return buildHighlights(season, userId).stream()
             .flatMap(highlight -> GameNotificationFactory.fromHighlight(highlight).stream())
-            .limit(NOTIFICATION_LIMIT)
             .toList();
     }
 
@@ -1913,6 +1943,11 @@ public class GameService {
             now
         );
         publishTradeSystemMessage(settledPosition.getUser(), settledPosition, "매도", sellQuantity, settledPoints);
+        gameNotificationService.createAndPush(
+            settledPosition.getUser(),
+            settledPosition.getSeason(),
+            GameNotificationFactory.fromHighlight(toSettledGameHighlightResponse(settledPosition))
+        );
         publishTierPromotionIfNeeded(settledPosition, previousHighlightScore);
 
         return new SellPositionResponse(

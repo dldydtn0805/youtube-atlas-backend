@@ -12,6 +12,10 @@ final class GameNotificationFactory {
     }
 
     static List<GameNotificationResponse> fromHighlight(GameHighlightResponse highlight) {
+        if (highlight == null) {
+            return List.of();
+        }
+
         if (highlight.strategyTags() == null || highlight.strategyTags().isEmpty()) {
             return List.of();
         }
@@ -78,6 +82,7 @@ final class GameNotificationFactory {
             highlight.thumbnailUrl(),
             highlight.strategyTags(),
             highlight.highlightScore(),
+            null,
             highlight.createdAt()
         );
     }
@@ -104,6 +109,7 @@ final class GameNotificationFactory {
             position.getThumbnailUrl(),
             strategyTags,
             highlightScore,
+            null,
             createdAt
         );
     }

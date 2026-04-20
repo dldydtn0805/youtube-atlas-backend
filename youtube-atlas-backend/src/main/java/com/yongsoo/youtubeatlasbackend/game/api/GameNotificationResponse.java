@@ -17,6 +17,7 @@ public record GameNotificationResponse(
     String thumbnailUrl,
     List<GameStrategyType> strategyTags,
     Long highlightScore,
+    Instant readAt,
     Instant createdAt
 ) {
 }
