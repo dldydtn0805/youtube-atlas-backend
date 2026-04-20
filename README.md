@@ -90,8 +90,8 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `ALLOWED_ORIGINS` 기본값에는 로컬 개발 주소와 Vercel 배포 주소 패턴이 포함됩니다.
 - `GOOGLE_CLIENT_ID` 는 프론트의 Google OAuth Client ID와 동일해야 합니다.
 - `GOOGLE_CLIENT_SECRET` 는 같은 Google OAuth Web Client의 secret 이어야 합니다.
-- `GAME_SCHEDULER_ENABLED=true` 로 두면 시즌 코인 적립 배치와 종료 시즌 자동 정리가 함께 켜집니다.
-- 로컬에서 빠르게 확인하려면 `GAME_SETTLEMENT_CRON=0 */1 * * * *`, `GAME_PAYOUT_SLOT_MINUTES=1` 로 두면 1분 슬롯 기준 적립을 테스트할 수 있습니다.
+- `GAME_SCHEDULER_ENABLED=true` 로 두면 종료 시즌 자동 정리와 다음 시즌 생성이 주기적으로 실행됩니다.
+- 로컬에서 빠르게 확인하려면 `GAME_SETTLEMENT_CRON=0 */1 * * * *` 로 두면 1분마다 시즌 정리를 테스트할 수 있습니다.
 - `ADMIN_ALLOWED_EMAILS` 에 관리자 이메일을 쉼표로 구분해서 넣으면 `/api/admin/*` 엔드포인트 접근을 허용합니다.
 - `TRENDING_SYNC_MAX_PAGES_PER_SOURCE` 는 급상승 동기화 시 소스 카테고리별로 몇 페이지까지 수집할지 결정합니다.
 
@@ -811,6 +811,7 @@ Authorization: Bearer {accessToken}
     "balancePoints": 12000,
     "reservedPoints": 3000,
     "realizedPnlPoints": 1500,
+    "tierScore": 130000,
     "coinBalance": 900000,
     "totalAssetPoints": 15000,
     "openPositionCount": 2,
@@ -825,6 +826,7 @@ Authorization: Bearer {accessToken}
       "balancePoints": 12000,
       "reservedPoints": 3000,
       "realizedPnlPoints": 1500,
+      "tierScore": 130000,
       "coinBalance": 900000,
       "totalAssetPoints": 15000,
       "openPositionCount": 2,
@@ -838,6 +840,7 @@ Authorization: Bearer {accessToken}
       "balancePoints": 10000,
       "reservedPoints": 0,
       "realizedPnlPoints": 0,
+      "tierScore": 0,
       "coinBalance": 0,
       "totalAssetPoints": 10000,
       "openPositionCount": 0,
@@ -884,13 +887,14 @@ Authorization: Bearer {accessToken}
   "balancePoints": 12000,
   "reservedPoints": 3000,
   "realizedPnlPoints": 1500,
-  "coinBalance": 900000
+  "tierScore": 130000
 }
 ```
 
 - `seasonId` 가 주어지면 해당 시즌이 현재 `ACTIVE` 상태인지 검증합니다.
 - `seasonId` 를 생략하면 가장 최근 활성 시즌 하나를 대상으로 동작합니다.
 - 아직 활성 시즌 지갑이 없는 유저여도, 수정 시 관리자 값으로 새 지갑을 생성합니다.
+- `tierScore` 는 티어 판정에 우선 사용되는 관리자 지정 점수입니다.
 - `reservedPoints` 는 오픈 포지션과 연결될 수 있으므로 운영 목적에서만 수동 조정해야 합니다.
 
 ### `DELETE /api/admin/users/{userId}`

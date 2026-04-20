@@ -2,7 +2,6 @@ package com.yongsoo.youtubeatlasbackend.game;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -14,13 +13,10 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.yongsoo.youtubeatlasbackend.auth.AppUser;
-import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
-import com.yongsoo.youtubeatlasbackend.game.api.GameRealtimeEventResponse;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalId;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
@@ -34,13 +30,9 @@ class GameSettlementServiceTest {
     private GamePositionRepository gamePositionRepository;
     private GameWalletRepository gameWalletRepository;
     private GameLedgerRepository gameLedgerRepository;
-    private GameCoinPayoutRepository gameCoinPayoutRepository;
     private GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
     private GameCoinTierService gameCoinTierService;
-    private GameNotificationService gameNotificationService;
     private TrendSignalRepository trendSignalRepository;
-    private SimpMessagingTemplate messagingTemplate;
-    private CommentService commentService;
     private GameSettlementService gameSettlementService;
 
     @BeforeEach
@@ -50,13 +42,9 @@ class GameSettlementServiceTest {
         gamePositionRepository = org.mockito.Mockito.mock(GamePositionRepository.class);
         gameWalletRepository = org.mockito.Mockito.mock(GameWalletRepository.class);
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
-        gameCoinPayoutRepository = org.mockito.Mockito.mock(GameCoinPayoutRepository.class);
         gameSeasonCoinResultRepository = org.mockito.Mockito.mock(GameSeasonCoinResultRepository.class);
         gameCoinTierService = org.mockito.Mockito.mock(GameCoinTierService.class);
-        gameNotificationService = org.mockito.Mockito.mock(GameNotificationService.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
-        messagingTemplate = org.mockito.Mockito.mock(SimpMessagingTemplate.class);
-        commentService = org.mockito.Mockito.mock(CommentService.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-08T00:01:00Z"), ZoneOffset.UTC);
 
         gameSettlementService = new GameSettlementService(
@@ -65,185 +53,11 @@ class GameSettlementServiceTest {
             gamePositionRepository,
             gameWalletRepository,
             gameLedgerRepository,
-            gameCoinPayoutRepository,
             gameSeasonCoinResultRepository,
             gameCoinTierService,
-            gameNotificationService,
             trendSignalRepository,
-            messagingTemplate,
-            commentService,
             fixedClock
         );
-    }
-
-    @Test
-    void distributeActiveSeasonCoinsPaysEligibleTopRankPositionOncePerRun() {
-        GameSeason season = activeSeasonStillRunning();
-        AppUser appUser = user(7L);
-        GamePosition position = openPosition(season, appUser, "video-1", 12, GamePointCalculator.calculatePricePoints(12));
-        GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
-        TrendSignal signal = signal("video-1", 5);
-        long currentValuePoints = GamePointCalculator.calculatePricePoints(5);
-        int holdBoostBasisPoints = GameService.calculateHoldBoostBasisPoints(1_860L, 600, 600, 1_000, 10_000);
-        int effectiveCoinRateBasisPoints = GameService.calculateEffectiveCoinRateBasisPoints(76, holdBoostBasisPoints);
-        long producedCoins = GameService.calculateEstimatedCoinYield(currentValuePoints, effectiveCoinRateBasisPoints);
-
-        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
-        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
-            .thenReturn(List.of(signal));
-        when(gameCoinPayoutRepository.findPositionIdsBySeasonIdAndPayoutSlotAt(1L, Instant.parse("2026-04-08T00:00:00Z")))
-            .thenReturn(List.of());
-        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(position));
-        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
-        when(gameCoinPayoutRepository.saveAndFlush(any(GameCoinPayout.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
-        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
-
-        gameSettlementService.distributeActiveSeasonCoins();
-
-        assertThat(wallet.getBalancePoints()).isEqualTo(10_000L);
-        assertThat(wallet.getCoinBalance()).isEqualTo(producedCoins);
-        verify(gameCoinPayoutRepository).saveAndFlush(any(GameCoinPayout.class));
-        org.mockito.ArgumentCaptor<GameRealtimeEventResponse> eventCaptor =
-            org.mockito.ArgumentCaptor.forClass(GameRealtimeEventResponse.class);
-        verify(messagingTemplate).convertAndSend(org.mockito.Mockito.eq("/topic/game/KR"), eventCaptor.capture());
-        assertThat(eventCaptor.getValue().eventType()).isEqualTo("wallet-updated");
-        assertThat(eventCaptor.getValue().seasonId()).isEqualTo(1L);
-        assertThat(eventCaptor.getValue().capturedAt()).isEqualTo(Instant.parse("2026-04-08T00:00:00Z"));
-    }
-
-    @Test
-    void distributeActiveSeasonCoinsCreatesPersonalGameNotifications() {
-        GameSeason season = activeSeasonStillRunning();
-        AppUser appUser = user(7L);
-        GamePosition position = openPosition(season, appUser, "video-1", 150, GamePointCalculator.calculatePricePoints(150));
-        GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
-        TrendSignal signal = signal("video-1", 10);
-
-        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
-        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
-            .thenReturn(List.of(signal));
-        when(gameCoinPayoutRepository.findPositionIdsBySeasonIdAndPayoutSlotAt(1L, Instant.parse("2026-04-08T00:00:00Z")))
-            .thenReturn(List.of());
-        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(position));
-        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
-        when(gameCoinPayoutRepository.saveAndFlush(any(GameCoinPayout.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
-        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
-
-        gameSettlementService.distributeActiveSeasonCoins();
-
-        verify(gameNotificationService).createAndPushPositionSnapshot(
-            eq(position),
-            eq(10),
-            eq(GamePointCalculator.calculatePricePoints(10)),
-            eq(Instant.parse("2026-04-08T00:00:00Z"))
-        );
-    }
-
-    @Test
-    void distributeActiveSeasonCoinsSkipsPositionAlreadyPaidForCurrentRun() {
-        GameSeason season = activeSeasonStillRunning();
-        AppUser appUser = user(7L);
-        GamePosition position = openPosition(season, appUser, "video-1", 12, GamePointCalculator.calculatePricePoints(12));
-        GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
-        TrendSignal signal = signal("video-1", 5);
-
-        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
-        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
-            .thenReturn(List.of(signal));
-        when(gameCoinPayoutRepository.findPositionIdsBySeasonIdAndPayoutSlotAt(1L, Instant.parse("2026-04-08T00:00:00Z")))
-            .thenReturn(List.of(300L));
-        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(position));
-
-        gameSettlementService.distributeActiveSeasonCoins();
-
-        assertThat(wallet.getBalancePoints()).isEqualTo(10_000L);
-        assertThat(wallet.getCoinBalance()).isZero();
-        verify(gameCoinPayoutRepository, org.mockito.Mockito.never()).saveAndFlush(any(GameCoinPayout.class));
-        verify(gameLedgerRepository, org.mockito.Mockito.never()).save(any(GameLedger.class));
-        verify(messagingTemplate, org.mockito.Mockito.never())
-            .convertAndSend(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.<Object>any());
-    }
-
-    @Test
-    void distributeActiveSeasonCoinsUsesCurrentTimeForMinHoldCheck() {
-        GameSeason season = activeSeasonStillRunning();
-        AppUser appUser = user(7L);
-        GamePosition position = openPosition(season, appUser, "video-1", 12, GamePointCalculator.calculatePricePoints(12));
-        position.setCreatedAt(Instant.parse("2026-04-07T23:50:00Z"));
-        position.setBuyCapturedAt(Instant.parse("2026-04-07T23:50:00Z"));
-        GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
-        TrendSignal signal = signal("video-1", 5);
-
-        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
-        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
-            .thenReturn(List.of(signal));
-        when(gameCoinPayoutRepository.findPositionIdsBySeasonIdAndPayoutSlotAt(1L, Instant.parse("2026-04-08T00:00:00Z")))
-            .thenReturn(List.of());
-        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(position));
-        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
-        when(gameCoinPayoutRepository.saveAndFlush(any(GameCoinPayout.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
-        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
-
-        gameSettlementService.distributeActiveSeasonCoins();
-
-        assertThat(wallet.getCoinBalance()).isPositive();
-        verify(gameCoinPayoutRepository).saveAndFlush(any(GameCoinPayout.class));
-    }
-
-    @Test
-    void distributeActiveSeasonCoinsAppliesHoldBoostUpToDoubleRate() {
-        GameSeason season = activeSeasonStillRunning();
-        AppUser appUser = user(7L);
-        GamePosition position = openPosition(season, appUser, "video-1", 12, GamePointCalculator.calculatePricePoints(12));
-        position.setCreatedAt(Instant.parse("2026-04-07T22:00:00Z"));
-        GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
-        TrendSignal signal = signal("video-1", 1);
-        long currentValuePoints = GamePointCalculator.calculatePricePoints(1);
-        long producedCoins = GameService.calculateEstimatedCoinYield(currentValuePoints, 200);
-
-        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
-        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
-            .thenReturn(List.of(signal));
-        when(gameCoinPayoutRepository.findPositionIdsBySeasonIdAndPayoutSlotAt(1L, Instant.parse("2026-04-08T00:00:00Z")))
-            .thenReturn(List.of());
-        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(position));
-        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
-        when(gameCoinPayoutRepository.saveAndFlush(any(GameCoinPayout.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
-        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
-
-        gameSettlementService.distributeActiveSeasonCoins();
-
-        assertThat(wallet.getCoinBalance()).isEqualTo(producedCoins);
-    }
-
-    @Test
-    void distributeActiveSeasonCoinsDoesNotPublishTierPromotionFromCoinBalance() {
-        GameSeason season = activeSeasonStillRunning();
-        AppUser appUser = user(7L);
-        GamePosition position = openPosition(season, appUser, "video-1", 12, GamePointCalculator.calculatePricePoints(12));
-        position.setCreatedAt(Instant.parse("2026-04-07T22:00:00Z"));
-        GameWallet wallet = wallet(season, appUser, 10_000L, position.getStakePoints(), 0L);
-        wallet.setCoinBalance(7_900L);
-        TrendSignal signal = signal("video-1", 1);
-
-        when(gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)).thenReturn(List.of(season));
-        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
-            .thenReturn(List.of(signal));
-        when(gameCoinPayoutRepository.findPositionIdsBySeasonIdAndPayoutSlotAt(1L, Instant.parse("2026-04-08T00:00:00Z")))
-            .thenReturn(List.of());
-        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(position));
-        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
-        when(gameCoinPayoutRepository.saveAndFlush(any(GameCoinPayout.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
-        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
-
-        gameSettlementService.distributeActiveSeasonCoins();
-
-        verify(commentService, org.mockito.Mockito.never()).publishTierSystemMessage(org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test

@@ -3,7 +3,6 @@ package com.yongsoo.youtubeatlasbackend.game;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -13,15 +12,12 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
-import com.yongsoo.youtubeatlasbackend.game.api.GameRealtimeEventResponse;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
 
@@ -30,20 +26,15 @@ public class GameSettlementService {
 
     private static final String TRENDING_CATEGORY_ID = "0";
     private static final int DEFAULT_FALLBACK_RANK = 201;
-    private static final String WALLET_UPDATED_EVENT = "wallet-updated";
 
     private final AtlasProperties atlasProperties;
     private final GameSeasonRepository gameSeasonRepository;
     private final GamePositionRepository gamePositionRepository;
     private final GameWalletRepository gameWalletRepository;
     private final GameLedgerRepository gameLedgerRepository;
-    private final GameCoinPayoutRepository gameCoinPayoutRepository;
     private final GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
     private final GameCoinTierService gameCoinTierService;
-    private final GameNotificationService gameNotificationService;
     private final TrendSignalRepository trendSignalRepository;
-    private final SimpMessagingTemplate messagingTemplate;
-    private final CommentService commentService;
     private final Clock clock;
 
     public GameSettlementService(
@@ -52,13 +43,9 @@ public class GameSettlementService {
         GamePositionRepository gamePositionRepository,
         GameWalletRepository gameWalletRepository,
         GameLedgerRepository gameLedgerRepository,
-        GameCoinPayoutRepository gameCoinPayoutRepository,
         GameSeasonCoinResultRepository gameSeasonCoinResultRepository,
         GameCoinTierService gameCoinTierService,
-        GameNotificationService gameNotificationService,
         TrendSignalRepository trendSignalRepository,
-        SimpMessagingTemplate messagingTemplate,
-        CommentService commentService,
         Clock clock
     ) {
         this.atlasProperties = atlasProperties;
@@ -66,13 +53,9 @@ public class GameSettlementService {
         this.gamePositionRepository = gamePositionRepository;
         this.gameWalletRepository = gameWalletRepository;
         this.gameLedgerRepository = gameLedgerRepository;
-        this.gameCoinPayoutRepository = gameCoinPayoutRepository;
         this.gameSeasonCoinResultRepository = gameSeasonCoinResultRepository;
         this.gameCoinTierService = gameCoinTierService;
-        this.gameNotificationService = gameNotificationService;
         this.trendSignalRepository = trendSignalRepository;
-        this.messagingTemplate = messagingTemplate;
-        this.commentService = commentService;
         this.clock = clock;
     }
 
@@ -83,21 +66,8 @@ public class GameSettlementService {
             return;
         }
 
-        distributeActiveSeasonCoins();
         settleEndedSeasons();
         ensureManagedActiveSeasons();
-    }
-
-    @Transactional
-    public void distributeActiveSeasonCoins() {
-        Instant now = Instant.now(clock);
-        for (GameSeason season : gameSeasonRepository.findByStatus(SeasonStatus.ACTIVE)) {
-            if (season.getEndAt() != null && !season.getEndAt().isAfter(now)) {
-                continue;
-            }
-
-            distributeSeasonCoins(season, now);
-        }
     }
 
     @Transactional
@@ -141,155 +111,6 @@ public class GameSettlementService {
         Instant now = Instant.now(clock);
         settleSeason(season, now);
         ensureManagedActiveSeasons();
-    }
-
-    private void distributeSeasonCoins(GameSeason season, Instant now) {
-        List<TrendSignal> signals = trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
-            season.getRegionCode(),
-            TRENDING_CATEGORY_ID
-        );
-        if (signals.isEmpty()) {
-            return;
-        }
-
-        Long currentRunId = signals.get(0).getCurrentRunId();
-        Instant capturedAt = signals.get(0).getCapturedAt();
-        Instant payoutSlotAt = resolvePayoutSlotAt(now);
-        Map<String, TrendSignal> signalByVideoId = signals.stream()
-            .collect(Collectors.toMap(signal -> signal.getId().getVideoId(), Function.identity()));
-        Set<Long> paidPositionIds = new HashSet<>(
-            gameCoinPayoutRepository.findPositionIdsBySeasonIdAndPayoutSlotAt(season.getId(), payoutSlotAt)
-        );
-        Map<Long, GameWallet> walletByUserId = new HashMap<>();
-
-        for (GamePosition position : gamePositionRepository.findBySeasonIdAndStatus(season.getId(), PositionStatus.OPEN)) {
-            if (paidPositionIds.contains(position.getId())) {
-                continue;
-            }
-
-            TrendSignal signal = signalByVideoId.get(position.getVideoId());
-            if (signal == null) {
-                continue;
-            }
-
-            int rank = signal.getCurrentRank();
-            int baseCoinRateBasisPoints = GameService.resolveCoinRateBasisPoints(rank);
-            if (baseCoinRateBasisPoints <= 0) {
-                continue;
-            }
-
-            long heldSeconds = now.getEpochSecond() - position.getCreatedAt().getEpochSecond();
-            if (heldSeconds < position.getSeason().getMinHoldSeconds()) {
-                continue;
-            }
-
-            int holdBoostBasisPoints = GameService.calculateHoldBoostBasisPoints(
-                heldSeconds,
-                position.getSeason().getMinHoldSeconds(),
-                atlasProperties.getGame().getCoinHoldBoostIntervalSeconds(),
-                atlasProperties.getGame().getCoinHoldBoostBasisPoints(),
-                atlasProperties.getGame().getCoinHoldBoostMaxBasisPoints()
-            );
-            int effectiveCoinRateBasisPoints = GameService.calculateEffectiveCoinRateBasisPoints(
-                baseCoinRateBasisPoints,
-                holdBoostBasisPoints
-            );
-
-            long currentValuePoints = GamePointCalculator.calculatePositionPoints(
-                GamePointCalculator.calculateMomentumAdjustedPricePoints(rank, signal.getRankChange()),
-                position.getQuantity() == null || position.getQuantity() < GamePointCalculator.MIN_QUANTITY
-                    ? GamePointCalculator.QUANTITY_SCALE
-                    : position.getQuantity()
-            );
-            long producedCoins = GameService.calculateEstimatedCoinYield(currentValuePoints, effectiveCoinRateBasisPoints);
-            if (producedCoins <= 0L) {
-                continue;
-            }
-
-            GameWallet wallet = walletByUserId.computeIfAbsent(
-                position.getUser().getId(),
-                userId -> gameWalletRepository.findBySeasonIdAndUserIdForUpdate(season.getId(), userId)
-                    .orElseThrow(() -> new IllegalArgumentException("지갑 정보를 찾을 수 없습니다."))
-            );
-
-            try {
-                saveCoinPayout(
-                    position,
-                    wallet,
-                    currentRunId,
-                    capturedAt,
-                    payoutSlotAt,
-                    rank,
-                    currentValuePoints,
-                    effectiveCoinRateBasisPoints,
-                    producedCoins,
-                    now
-                );
-                paidPositionIds.add(position.getId());
-            } catch (DataIntegrityViolationException ignored) {
-                // Another scheduler tick or node inserted the payout first.
-            }
-        }
-    }
-
-    private void saveCoinPayout(
-        GamePosition position,
-        GameWallet wallet,
-        Long trendRunId,
-        Instant capturedAt,
-        Instant payoutSlotAt,
-        int rank,
-        long currentValuePoints,
-        int coinRateBasisPoints,
-        long producedCoins,
-        Instant now
-    ) {
-        GameCoinPayout payout = new GameCoinPayout();
-        payout.setSeason(position.getSeason());
-        payout.setUser(position.getUser());
-        payout.setPosition(position);
-        payout.setTrendRunId(trendRunId);
-        payout.setPayoutSlotAt(payoutSlotAt);
-        payout.setRankAtPayout(rank);
-        payout.setCoinRateBasisPoints(coinRateBasisPoints);
-        payout.setAmountCoins(producedCoins);
-        payout.setCreatedAt(now);
-        gameCoinPayoutRepository.saveAndFlush(payout);
-
-        wallet.setCoinBalance(wallet.getCoinBalance() + producedCoins);
-        wallet.setUpdatedAt(now);
-        gameWalletRepository.save(wallet);
-        publishWalletUpdated(wallet, capturedAt, now);
-        publishGameNotifications(position, rank, currentValuePoints, capturedAt);
-    }
-
-    private void publishGameNotifications(GamePosition position, int currentRank, long currentValuePoints, Instant capturedAt) {
-        gameNotificationService.createAndPushPositionSnapshot(
-            position,
-            currentRank,
-            currentValuePoints,
-            capturedAt
-        );
-    }
-
-    private void publishWalletUpdated(GameWallet wallet, Instant capturedAt, Instant occurredAt) {
-        messagingTemplate.convertAndSend(
-            "/topic/game/" + wallet.getSeason().getRegionCode(),
-            new GameRealtimeEventResponse(
-                WALLET_UPDATED_EVENT,
-                wallet.getSeason().getRegionCode(),
-                wallet.getSeason().getId(),
-                capturedAt,
-                occurredAt
-            )
-        );
-    }
-
-    private Instant resolvePayoutSlotAt(Instant now) {
-        long slotMinutes = Math.max(1, atlasProperties.getGame().getPayoutSlotMinutes());
-        long slotSeconds = slotMinutes * 60L;
-        long epochSecond = now.getEpochSecond();
-        return Instant.ofEpochSecond(epochSecond - (epochSecond % slotSeconds));
     }
 
     private void settleSeason(GameSeason season, Instant now) {

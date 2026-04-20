@@ -183,6 +183,7 @@ class AdminUserServiceTest {
         assertThat(response.activeSeasonGames().get(1).regionCode()).isEqualTo("US");
         assertThat(response.activeSeasonGame().participating()).isTrue();
         assertThat(response.activeSeasonGame().totalAssetPoints()).isEqualTo(15000L);
+        assertThat(response.activeSeasonGame().tierScore()).isEqualTo(130_000L);
         assertThat(response.activeSeasonGame().coinBalance()).isEqualTo(900000L);
         assertThat(response.activeSeasonGame().currentCoinTier()).isNotNull();
         assertThat(response.activeSeasonGame().currentCoinTier().tierCode()).isEqualTo("DIAMOND");
@@ -208,6 +209,7 @@ class AdminUserServiceTest {
         wallet.setReservedPoints(200L);
         wallet.setRealizedPnlPoints(50L);
         wallet.setCoinBalance(40L);
+        wallet.setTierScore(10_000L);
 
         when(appUserRepository.findById(11L)).thenReturn(Optional.of(user));
         when(gameSeasonRepository.findByIdAndStatus(4L, SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
@@ -222,18 +224,20 @@ class AdminUserServiceTest {
 
         var response = adminUserService.updateActiveSeasonWallet(
             11L,
-            new AdminWalletUpdateRequest(4L, 5000L, 1200L, 700L, 2500000L)
+            new AdminWalletUpdateRequest(4L, 5000L, 1200L, 700L, 250000L, null)
         );
 
         assertThat(wallet.getBalancePoints()).isEqualTo(5000L);
         assertThat(wallet.getReservedPoints()).isEqualTo(1200L);
         assertThat(wallet.getRealizedPnlPoints()).isEqualTo(700L);
-        assertThat(wallet.getCoinBalance()).isEqualTo(2500000L);
+        assertThat(wallet.getTierScore()).isEqualTo(250000L);
+        assertThat(wallet.getCoinBalance()).isEqualTo(40L);
         assertThat(wallet.getUpdatedAt()).isEqualTo(Instant.parse("2026-04-08T03:00:00Z"));
         assertThat(response.activeSeasonGame()).isNotNull();
         assertThat(response.activeSeasonGame().balancePoints()).isEqualTo(5000L);
         assertThat(response.activeSeasonGame().reservedPoints()).isEqualTo(1200L);
-        assertThat(response.activeSeasonGame().coinBalance()).isEqualTo(2500000L);
+        assertThat(response.activeSeasonGame().tierScore()).isEqualTo(250000L);
+        assertThat(response.activeSeasonGame().coinBalance()).isEqualTo(40L);
     }
 
     @Test
@@ -293,6 +297,7 @@ class AdminUserServiceTest {
         assertThat(response.activeSeasonGame().balancePoints()).isEqualTo(10_000L);
         assertThat(response.activeSeasonGame().reservedPoints()).isEqualTo(0L);
         assertThat(response.activeSeasonGame().realizedPnlPoints()).isEqualTo(0L);
+        assertThat(response.activeSeasonGame().tierScore()).isEqualTo(0L);
         assertThat(response.activeSeasonGame().coinBalance()).isEqualTo(0L);
         assertThat(response.activeSeasonGame().currentCoinTier()).isNotNull();
         assertThat(response.activeSeasonGame().currentCoinTier().tierCode()).isEqualTo("BRONZE");
