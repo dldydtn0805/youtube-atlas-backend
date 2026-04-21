@@ -27,12 +27,6 @@ jobs:
           git checkout master
           git reset --hard origin/master
 
-          if grep -q '^GAME_COIN_HOLD_BOOST_INTERVAL_SECONDS=' .env; then
-            sed -i 's/^GAME_COIN_HOLD_BOOST_INTERVAL_SECONDS=.*/GAME_COIN_HOLD_BOOST_INTERVAL_SECONDS=3600/' .env
-          else
-            printf '\nGAME_COIN_HOLD_BOOST_INTERVAL_SECONDS=3600\n' >> .env
-          fi
-
           read_env_last() {
             local key="$1"
             awk -v key="$key" 'BEGIN{FS="="} $1==key {value=$0; sub(/^[^=]*=/,"",value)} END{print value}' .env \
@@ -69,17 +63,14 @@ jobs:
 
           DB_URL="${DB_URL#jdbc:}"
 
-          sudo docker run --rm -i \
-            -e PGPASSWORD="$DB_PASSWORD" \
-            -v /home/ec2-user/youtube-atlas-backend/sql:/sql:ro \
-            postgres:18 \
-            psql "$DB_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 -f /sql/migrate_game_wallet_tier_score.sql
-
-          sudo docker run --rm -i \
-            -e PGPASSWORD="$DB_PASSWORD" \
-            -v /home/ec2-user/youtube-atlas-backend/sql:/sql:ro \
-            postgres:18 \
-            psql "$DB_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 -f /sql/migrate_game_coin_tier_thresholds_20260421.sql
+          for migration in $(find sql -maxdepth 1 -type f -name 'migrate_*.sql' | sort); do
+            echo "Applying ${migration}"
+            sudo docker run --rm -i \
+              -e PGPASSWORD="$DB_PASSWORD" \
+              -v /home/ec2-user/youtube-atlas-backend/sql:/sql:ro \
+              postgres:18 \
+              psql "$DB_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 -f "/sql/$(basename "$migration")"
+          done
 
           sudo docker build -t youtube-atlas-backend:latest .
           sudo docker rm -f youtube-atlas-backend || true

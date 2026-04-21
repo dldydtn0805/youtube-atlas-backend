@@ -36,12 +36,12 @@ if [ ! -d "$MIGRATIONS_DIR" ]; then
 fi
 
 set +e
-MIGRATION_FILES=$(find "$MIGRATIONS_DIR" -maxdepth 1 -type f -name '*.sql' | sort)
+MIGRATION_FILES=$(find "$MIGRATIONS_DIR" -maxdepth 1 -type f -name 'migrate_*.sql' | sort)
 FIND_EXIT=$?
 set -e
 
 if [ "$FIND_EXIT" -ne 0 ] || [ -z "$MIGRATION_FILES" ]; then
-  echo "Skipping DB migrations because no SQL files were found in $MIGRATIONS_DIR"
+  echo "Skipping DB migrations because no migration SQL files were found in $MIGRATIONS_DIR"
   exit 0
 fi
 

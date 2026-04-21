@@ -56,8 +56,8 @@ jobs:
             -e PGPASSWORD="$DB_PASSWORD" \
             postgres:18 \
             psql "$DB_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 <<'SQL'
-          update game_season_coin_tiers
-          set min_coin_balance = case tier_code
+          update game_season_tiers
+          set min_score = case tier_code
               when 'BRONZE' then 0
               when 'SILVER' then 10000
               when 'GOLD' then 30000
@@ -65,12 +65,12 @@ jobs:
               when 'DIAMOND' then 600000
               when 'MASTER' then 3600000
               when 'LEGEND' then 25200000
-              else min_coin_balance
+              else min_score
           end
           where tier_code in ('BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', 'MASTER', 'LEGEND');
 
-          select season_id, tier_code, min_coin_balance
-          from game_season_coin_tiers
+          select season_id, tier_code, min_score
+          from game_season_tiers
           where season_id in (
               select id
               from game_seasons
