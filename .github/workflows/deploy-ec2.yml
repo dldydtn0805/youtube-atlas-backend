@@ -98,11 +98,3 @@ jobs:
             sudo docker logs --tail 120 youtube-atlas-backend
             exit 1
           fi
-
-          for region in KR US JP BR ID; do
-            echo "Triggering trending sync for $region"
-            curl -fsS -X POST 'http://127.0.0.1:8080/api/trending/sync' \
-              -H 'Content-Type: application/json' \
-              -d "{\"regionCode\":\"$region\",\"categoryId\":\"0\",\"categoryLabel\":\"전체\",\"sourceCategoryIds\":[]}"
-            echo
-          done
