@@ -1460,7 +1460,7 @@ class GameServiceTest {
         GameSeason season = activeSeason();
         AppUser me = user(7L, "Atlas User");
         AppUser rival = user(8L, "Rival User");
-        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 70_000L, 4);
+        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 120_000L, 4);
         GameSeasonCoinTier goldTier = coinTier(season, "GOLD", "골드", 30_000L, 3);
         long myBuyPricePoints = GamePointCalculator.calculatePricePoints(170);
         long rivalBuyPricePoints = GamePointCalculator.calculatePricePoints(180);
@@ -1654,10 +1654,10 @@ class GameServiceTest {
         GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
         GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 10_000L, 2);
         GameSeasonCoinTier goldTier = coinTier(season, "GOLD", "골드", 30_000L, 3);
-        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 70_000L, 4);
-        GameSeasonCoinTier diamondTier = coinTier(season, "DIAMOND", "다이아몬드", 130_000L, 5);
-        GameSeasonCoinTier masterTier = coinTier(season, "MASTER", "마스터", 220_000L, 6);
-        GameSeasonCoinTier legendTier = coinTier(season, "LEGEND", "레전드", 350_000L, 7);
+        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 120_000L, 4);
+        GameSeasonCoinTier diamondTier = coinTier(season, "DIAMOND", "다이아몬드", 600_000L, 5);
+        GameSeasonCoinTier masterTier = coinTier(season, "MASTER", "마스터", 3_600_000L, 6);
+        GameSeasonCoinTier legendTier = coinTier(season, "LEGEND", "레전드", 25_200_000L, 7);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));

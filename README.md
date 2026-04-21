@@ -811,7 +811,7 @@ Authorization: Bearer {accessToken}
     "balancePoints": 12000,
     "reservedPoints": 3000,
     "realizedPnlPoints": 1500,
-    "tierScore": 130000,
+    "tierScore": 600000,
     "coinBalance": 900000,
     "totalAssetPoints": 15000,
     "openPositionCount": 2,
@@ -826,7 +826,7 @@ Authorization: Bearer {accessToken}
       "balancePoints": 12000,
       "reservedPoints": 3000,
       "realizedPnlPoints": 1500,
-      "tierScore": 130000,
+      "tierScore": 600000,
       "coinBalance": 900000,
       "totalAssetPoints": 15000,
       "openPositionCount": 2,
@@ -887,7 +887,7 @@ Authorization: Bearer {accessToken}
   "balancePoints": 12000,
   "reservedPoints": 3000,
   "realizedPnlPoints": 1500,
-  "tierScore": 130000
+  "tierScore": 600000
 }
 ```
 

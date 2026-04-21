@@ -172,7 +172,7 @@ class AdminUserServiceTest {
         when(gamePositionRepository.countBySeasonIdAndUserIdAndStatusIn(eq(5L), eq(9L), any())).thenReturn(0L);
         when(gameWalletRepository.findBySeasonIdAndUserId(3L, 9L)).thenReturn(Optional.of(wallet));
         when(gameWalletRepository.findBySeasonIdAndUserId(5L, 9L)).thenReturn(Optional.empty());
-        when(gameService.calculateSettledUserHighlightScore(3L, 9L)).thenReturn(130_000L);
+        when(gameService.calculateSettledUserHighlightScore(3L, 9L)).thenReturn(600_000L);
         when(gameService.calculateSettledUserHighlightScore(5L, 9L)).thenReturn(0L);
 
         var response = adminUserService.getUser(9L);
@@ -188,7 +188,7 @@ class AdminUserServiceTest {
         assertThat(response.activeSeasonGames().get(1).regionCode()).isEqualTo("US");
         assertThat(response.activeSeasonGame().participating()).isTrue();
         assertThat(response.activeSeasonGame().totalAssetPoints()).isEqualTo(15000L);
-        assertThat(response.activeSeasonGame().tierScore()).isEqualTo(130_000L);
+        assertThat(response.activeSeasonGame().tierScore()).isEqualTo(600_000L);
         assertThat(response.activeSeasonGame().coinBalance()).isEqualTo(900000L);
         assertThat(response.activeSeasonGame().currentCoinTier()).isNotNull();
         assertThat(response.activeSeasonGame().currentCoinTier().tierCode()).isEqualTo("DIAMOND");
@@ -386,10 +386,10 @@ class AdminUserServiceTest {
             tier(season, "BRONZE", "브론즈", 0L, 1),
             tier(season, "SILVER", "실버", 10_000L, 2),
             tier(season, "GOLD", "골드", 30_000L, 3),
-            tier(season, "PLATINUM", "플래티넘", 70_000L, 4),
-            tier(season, "DIAMOND", "다이아몬드", 130_000L, 5),
-            tier(season, "MASTER", "마스터", 220_000L, 6),
-            tier(season, "LEGEND", "레전드", 350_000L, 7)
+            tier(season, "PLATINUM", "플래티넘", 120_000L, 4),
+            tier(season, "DIAMOND", "다이아몬드", 600_000L, 5),
+            tier(season, "MASTER", "마스터", 3_600_000L, 6),
+            tier(season, "LEGEND", "레전드", 25_200_000L, 7)
         );
     }
 
