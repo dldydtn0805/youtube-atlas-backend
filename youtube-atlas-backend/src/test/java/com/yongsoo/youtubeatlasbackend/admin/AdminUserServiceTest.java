@@ -224,18 +224,21 @@ class AdminUserServiceTest {
 
         var response = adminUserService.updateActiveSeasonWallet(
             11L,
-            new AdminWalletUpdateRequest(4L, 5000L, 1200L, 700L, null)
+            new AdminWalletUpdateRequest(4L, 5000L, 1200L, 700L, 5_000L, null)
         );
 
         assertThat(wallet.getBalancePoints()).isEqualTo(5000L);
         assertThat(wallet.getReservedPoints()).isEqualTo(1200L);
         assertThat(wallet.getRealizedPnlPoints()).isEqualTo(700L);
+        assertThat(wallet.getManualTierScoreAdjustment()).isEqualTo(5_000L);
         assertThat(wallet.getCoinBalance()).isEqualTo(40L);
         assertThat(wallet.getUpdatedAt()).isEqualTo(Instant.parse("2026-04-08T03:00:00Z"));
         assertThat(response.activeSeasonGame()).isNotNull();
         assertThat(response.activeSeasonGame().balancePoints()).isEqualTo(5000L);
         assertThat(response.activeSeasonGame().reservedPoints()).isEqualTo(1200L);
-        assertThat(response.activeSeasonGame().tierScore()).isEqualTo(250_000L);
+        assertThat(response.activeSeasonGame().calculatedTierScore()).isEqualTo(250_000L);
+        assertThat(response.activeSeasonGame().manualTierScoreAdjustment()).isEqualTo(5_000L);
+        assertThat(response.activeSeasonGame().tierScore()).isEqualTo(255_000L);
         assertThat(response.activeSeasonGame().coinBalance()).isEqualTo(40L);
     }
 

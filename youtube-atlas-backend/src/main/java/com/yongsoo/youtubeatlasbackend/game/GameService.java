@@ -611,7 +611,8 @@ public class GameService {
         GameSeason season = requireActiveSeason(regionCode);
         GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
         List<GameSeasonCoinTier> tiers = gameCoinTierService.getOrCreateTiers(season);
-        long highlightScore = calculateUserHighlightScore(season.getId(), authenticatedUser.id());
+        long calculatedHighlightScore = calculateUserHighlightScore(season.getId(), authenticatedUser.id());
+        long highlightScore = applyManualTierScoreAdjustment(wallet, calculatedHighlightScore);
         GameSeasonCoinTier currentTier = gameCoinTierService.resolveTier(tiers, highlightScore);
         GameSeasonCoinTier nextTier = tiers.stream()
             .filter(tier -> tier.getMinCoinBalance() > highlightScore)
@@ -626,6 +627,8 @@ public class GameService {
             season.getName(),
             season.getRegionCode(),
             highlightScore,
+            calculatedHighlightScore,
+            normalizeTierScoreAdjustment(wallet.getManualTierScoreAdjustment()),
             wallet.getCoinBalance(),
             toCoinTierResponse(currentTier),
             nextTier != null ? toCoinTierResponse(nextTier) : null,
@@ -1665,7 +1668,8 @@ public class GameService {
         GameHighlightResponse topHighlight = highlights.stream()
             .max(Comparator.comparingLong(GameService::calculateHighlightScore))
             .orElse(null);
-        long highlightScore = highlights.stream().mapToLong(GameService::calculateHighlightScore).sum();
+        long calculatedHighlightScore = highlights.stream().mapToLong(GameService::calculateHighlightScore).sum();
+        long highlightScore = applyManualTierScoreAdjustment(wallet, calculatedHighlightScore);
 
         return new LeaderboardSnapshot(
             wallet.getUser().getId(),
@@ -1728,6 +1732,7 @@ public class GameService {
         wallet.setReservedPoints(0L);
         wallet.setRealizedPnlPoints(0L);
         wallet.setCoinBalance(0L);
+        wallet.setManualTierScoreAdjustment(0L);
         wallet.setUpdatedAt(now);
         GameWallet savedWallet = gameWalletRepository.saveAndFlush(wallet);
 
@@ -2394,5 +2399,13 @@ public class GameService {
         long slotSeconds = slotMinutes * 60L;
         long slotEpochSeconds = Math.floorDiv(capturedAt.getEpochSecond(), slotSeconds) * slotSeconds;
         return Instant.ofEpochSecond(slotEpochSeconds);
+    }
+
+    private long applyManualTierScoreAdjustment(GameWallet wallet, long calculatedHighlightScore) {
+        return calculatedHighlightScore + normalizeTierScoreAdjustment(wallet.getManualTierScoreAdjustment());
+    }
+
+    private long normalizeTierScoreAdjustment(Long value) {
+        return value != null ? value : 0L;
     }
 }

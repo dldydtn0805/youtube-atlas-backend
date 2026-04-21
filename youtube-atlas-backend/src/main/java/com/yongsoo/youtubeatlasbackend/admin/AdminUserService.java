@@ -136,6 +136,7 @@ public class AdminUserService {
         wallet.setBalancePoints(request.balancePoints());
         wallet.setReservedPoints(request.reservedPoints());
         wallet.setRealizedPnlPoints(request.realizedPnlPoints());
+        wallet.setManualTierScoreAdjustment(normalizeTierScoreAdjustment(request.manualTierScoreAdjustment()));
         wallet.setUpdatedAt(Instant.now(clock));
         gameWalletRepository.save(wallet);
 
@@ -231,8 +232,10 @@ public class AdminUserService {
         return gameWalletRepository.findBySeasonIdAndUserId(activeSeason.getId(), userId)
             .map(wallet -> {
                 long coinBalance = normalizeNonNegative(wallet.getCoinBalance());
-                GameSeasonCoinTier currentCoinTier = resolveCurrentTier(tiers, highlightScore);
-                GameSeasonCoinTier nextCoinTier = resolveNextTier(tiers, highlightScore);
+                long manualTierScoreAdjustment = normalizeTierScoreAdjustment(wallet.getManualTierScoreAdjustment());
+                long tierScore = highlightScore + manualTierScoreAdjustment;
+                GameSeasonCoinTier currentCoinTier = resolveCurrentTier(tiers, tierScore);
+                GameSeasonCoinTier nextCoinTier = resolveNextTier(tiers, tierScore);
 
                 return new AdminUserGameSummaryResponse(
                     activeSeason.getId(),
@@ -243,6 +246,8 @@ public class AdminUserService {
                     wallet.getReservedPoints(),
                     wallet.getRealizedPnlPoints(),
                     highlightScore,
+                    manualTierScoreAdjustment,
+                    tierScore,
                     coinBalance,
                     wallet.getBalancePoints() + wallet.getReservedPoints(),
                     toCoinTierSummary(currentCoinTier),
@@ -258,6 +263,8 @@ public class AdminUserService {
                 false,
                 activeSeason.getStartingBalancePoints(),
                 0L,
+                0L,
+                highlightScore,
                 0L,
                 highlightScore,
                 0L,
@@ -282,6 +289,7 @@ public class AdminUserService {
         wallet.setReservedPoints(0L);
         wallet.setRealizedPnlPoints(0L);
         wallet.setCoinBalance(0L);
+        wallet.setManualTierScoreAdjustment(0L);
         wallet.setUpdatedAt(Instant.now(clock));
         return gameWalletRepository.save(wallet);
     }
@@ -317,6 +325,10 @@ public class AdminUserService {
     }
 
     private long normalizeNonNegative(Long value) {
+        return value != null ? value : 0L;
+    }
+
+    private long normalizeTierScoreAdjustment(Long value) {
         return value != null ? value : 0L;
     }
 

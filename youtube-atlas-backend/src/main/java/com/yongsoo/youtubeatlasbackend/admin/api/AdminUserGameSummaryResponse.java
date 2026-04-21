@@ -8,6 +8,8 @@ public record AdminUserGameSummaryResponse(
     Long balancePoints,
     Long reservedPoints,
     Long realizedPnlPoints,
+    Long calculatedTierScore,
+    Long manualTierScoreAdjustment,
     Long tierScore,
     Long coinBalance,
     Long totalAssetPoints,

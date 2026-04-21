@@ -1287,6 +1287,8 @@ class GameServiceTest {
 
         assertThat(response.seasonId()).isEqualTo(1L);
         assertThat(response.highlightScore()).isZero();
+        assertThat(response.calculatedHighlightScore()).isZero();
+        assertThat(response.manualTierScoreAdjustment()).isZero();
         assertThat(response.coinBalance()).isEqualTo(2_500_000L);
         assertThat(response.currentTier().tierCode()).isEqualTo("BRONZE");
         assertThat(response.currentTier().displayName()).isEqualTo("브론즈");
@@ -1324,6 +1326,7 @@ class GameServiceTest {
         var response = gameService.getCurrentCoinTier(authenticatedUser(), "KR");
 
         assertThat(response.highlightScore()).isZero();
+        assertThat(response.calculatedHighlightScore()).isZero();
         assertThat(response.currentTier().tierCode()).isEqualTo("BRONZE");
     }
 
@@ -1371,6 +1374,7 @@ class GameServiceTest {
         var response = gameService.getCurrentCoinTier(authenticatedUser(), "KR");
 
         assertThat(response.highlightScore()).isPositive();
+        assertThat(response.calculatedHighlightScore()).isPositive();
         assertThat(response.currentTier().tierCode()).isEqualTo("SILVER");
     }
 

@@ -7,6 +7,8 @@ public record CoinTierProgressResponse(
     String seasonName,
     String regionCode,
     Long highlightScore,
+    Long calculatedHighlightScore,
+    Long manualTierScoreAdjustment,
     Long coinBalance,
     CoinTierResponse currentTier,
     CoinTierResponse nextTier,
