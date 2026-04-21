@@ -5,7 +5,6 @@ public record AdminWalletUpdateRequest(
     Long balancePoints,
     Long reservedPoints,
     Long realizedPnlPoints,
-    Long tierScore,
     Long coinBalance
 ) {
 }

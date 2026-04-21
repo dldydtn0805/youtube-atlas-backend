@@ -611,7 +611,7 @@ public class GameService {
         GameSeason season = requireActiveSeason(regionCode);
         GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
         List<GameSeasonCoinTier> tiers = gameCoinTierService.getOrCreateTiers(season);
-        long highlightScore = resolveTierScore(wallet, calculateUserHighlightScore(season.getId(), authenticatedUser.id()));
+        long highlightScore = calculateUserHighlightScore(season.getId(), authenticatedUser.id());
         GameSeasonCoinTier currentTier = gameCoinTierService.resolveTier(tiers, highlightScore);
         GameSeasonCoinTier nextTier = tiers.stream()
             .filter(tier -> tier.getMinCoinBalance() > highlightScore)
@@ -1665,10 +1665,7 @@ public class GameService {
         GameHighlightResponse topHighlight = highlights.stream()
             .max(Comparator.comparingLong(GameService::calculateHighlightScore))
             .orElse(null);
-        long highlightScore = resolveTierScore(
-            wallet,
-            highlights.stream().mapToLong(GameService::calculateHighlightScore).sum()
-        );
+        long highlightScore = highlights.stream().mapToLong(GameService::calculateHighlightScore).sum();
 
         return new LeaderboardSnapshot(
             wallet.getUser().getId(),
@@ -2280,10 +2277,6 @@ public class GameService {
         ledger.setBalanceAfterPoints(balanceAfterPoints);
         ledger.setCreatedAt(createdAt);
         return ledger;
-    }
-
-    private long resolveTierScore(GameWallet wallet, long calculatedHighlightScore) {
-        return wallet.getTierScore() != null ? wallet.getTierScore() : calculatedHighlightScore;
     }
 
     private record LeaderboardSnapshot(

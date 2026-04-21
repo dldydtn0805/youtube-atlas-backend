@@ -209,7 +209,6 @@ class AdminUserServiceTest {
         wallet.setReservedPoints(200L);
         wallet.setRealizedPnlPoints(50L);
         wallet.setCoinBalance(40L);
-        wallet.setTierScore(10_000L);
 
         when(appUserRepository.findById(11L)).thenReturn(Optional.of(user));
         when(gameSeasonRepository.findByIdAndStatus(4L, SeasonStatus.ACTIVE)).thenReturn(Optional.of(season));
@@ -221,22 +220,22 @@ class AdminUserServiceTest {
         when(playbackProgressService.getCurrentProgressForUserId(11L)).thenReturn(Optional.empty());
         when(gamePositionRepository.countBySeasonIdAndUserIdAndStatus(4L, 11L, PositionStatus.OPEN)).thenReturn(0L);
         when(gamePositionRepository.countBySeasonIdAndUserIdAndStatusIn(eq(4L), eq(11L), any())).thenReturn(0L);
+        when(gameService.calculateSettledUserHighlightScore(4L, 11L)).thenReturn(250_000L);
 
         var response = adminUserService.updateActiveSeasonWallet(
             11L,
-            new AdminWalletUpdateRequest(4L, 5000L, 1200L, 700L, 250000L, null)
+            new AdminWalletUpdateRequest(4L, 5000L, 1200L, 700L, null)
         );
 
         assertThat(wallet.getBalancePoints()).isEqualTo(5000L);
         assertThat(wallet.getReservedPoints()).isEqualTo(1200L);
         assertThat(wallet.getRealizedPnlPoints()).isEqualTo(700L);
-        assertThat(wallet.getTierScore()).isEqualTo(250000L);
         assertThat(wallet.getCoinBalance()).isEqualTo(40L);
         assertThat(wallet.getUpdatedAt()).isEqualTo(Instant.parse("2026-04-08T03:00:00Z"));
         assertThat(response.activeSeasonGame()).isNotNull();
         assertThat(response.activeSeasonGame().balancePoints()).isEqualTo(5000L);
         assertThat(response.activeSeasonGame().reservedPoints()).isEqualTo(1200L);
-        assertThat(response.activeSeasonGame().tierScore()).isEqualTo(250000L);
+        assertThat(response.activeSeasonGame().tierScore()).isEqualTo(250_000L);
         assertThat(response.activeSeasonGame().coinBalance()).isEqualTo(40L);
     }
 

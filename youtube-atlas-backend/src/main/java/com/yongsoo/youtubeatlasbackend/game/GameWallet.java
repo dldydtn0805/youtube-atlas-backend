@@ -48,9 +48,6 @@ public class GameWallet {
     @Column(name = "coin_balance", nullable = false)
     private Long coinBalance;
 
-    @Column(name = "tier_score")
-    private Long tierScore;
-
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -104,14 +101,6 @@ public class GameWallet {
 
     public void setCoinBalance(Long coinBalance) {
         this.coinBalance = coinBalance;
-    }
-
-    public Long getTierScore() {
-        return tierScore;
-    }
-
-    public void setTierScore(Long tierScore) {
-        this.tierScore = tierScore;
     }
 
     public Instant getUpdatedAt() {
