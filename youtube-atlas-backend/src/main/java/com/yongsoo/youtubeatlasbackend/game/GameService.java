@@ -763,7 +763,6 @@ public class GameService {
         gameWalletRepository.save(wallet);
 
         saveLedger(season, user, savedPosition, LedgerType.BUY_LOCK, -totalStakePoints, previousBalancePoints - totalStakePoints, now);
-        publishTradeSystemMessage(user, savedPosition, "매수", quantity, totalStakePoints);
 
         return List.of(toOpenPositionResponse(savedPosition, signal));
     }
@@ -1945,7 +1944,6 @@ public class GameService {
             wallet.getBalancePoints(),
             now
         );
-        publishTradeSystemMessage(settledPosition.getUser(), settledPosition, "매도", sellQuantity, settledPoints);
         gameNotificationService.createAndPush(
             settledPosition.getUser(),
             settledPosition.getSeason(),
@@ -1993,19 +1991,15 @@ public class GameService {
         commentService.publishTierSystemMessage(
             displayName + "님이 " + currentTier.getDisplayName() + " 티어로 상승했습니다."
         );
-    }
-
-    private void publishTradeSystemMessage(
-        AppUser user,
-        GamePosition position,
-        String action,
-        int quantity,
-        long points
-    ) {
-        String displayName = StringUtils.hasText(user.getDisplayName()) ? user.getDisplayName().trim() : "익명";
-        commentService.publishTradeSystemMessage(
-            displayName + "님이 [" + position.getTitle() + "] " + formatQuantity(quantity)
-                + "개를 " + action + "했습니다. (" + points + "P)"
+        gameNotificationService.createAndPush(
+            settledPosition.getUser(),
+            settledPosition.getSeason(),
+            GameNotificationFactory.fromTierPromotion(
+                settledPosition,
+                currentTier,
+                currentHighlightScore,
+                highlight.createdAt()
+            )
         );
     }
 

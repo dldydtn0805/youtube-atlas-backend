@@ -231,7 +231,7 @@ class GameServiceTest {
         assertThat(response.get(0).projectedHighlightScore()).isZero();
         assertThat(wallet.getBalancePoints()).isEqualTo(10_000L - buyPricePoints);
         assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints);
-        verify(commentService).publishTradeSystemMessage("User 7님이 [Title video-1] 1개를 매수했습니다. (7500P)");
+        verify(commentService, never()).publishTradeSystemMessage(any());
     }
 
     @Test
@@ -355,7 +355,7 @@ class GameServiceTest {
         assertThat(response.balancePoints()).isEqualTo((10_000L - buyPricePoints) + settledPoints);
         assertThat(wallet.getReservedPoints()).isZero();
         assertThat(wallet.getRealizedPnlPoints()).isEqualTo(pnlPoints);
-        verify(commentService).publishTradeSystemMessage("User 7님이 [Title video-1] 1개를 매도했습니다. (9970P)");
+        verify(commentService, never()).publishTradeSystemMessage(any());
     }
 
     @Test
@@ -400,6 +400,26 @@ class GameServiceTest {
         gameService.sell(authenticatedUser(), 300L);
 
         verify(commentService).publishTierSystemMessage("User 7님이 다이아몬드 티어로 상승했습니다.");
+        verify(gameNotificationService, org.mockito.Mockito.times(2))
+            .createAndPush(
+                org.mockito.ArgumentMatchers.eq(appUser),
+                org.mockito.ArgumentMatchers.eq(season),
+                org.mockito.ArgumentMatchers.anyList()
+            );
+        verify(gameNotificationService)
+            .createAndPush(
+                org.mockito.ArgumentMatchers.eq(appUser),
+                org.mockito.ArgumentMatchers.eq(season),
+                org.mockito.ArgumentMatchers.argThat(notifications ->
+                    notifications.stream().anyMatch(notification ->
+                        notification.notificationType().equals("TIER_PROMOTION")
+                            && notification.title().equals("티어 승급")
+                            && notification.videoTitle().equals("다이아몬드 티어 달성")
+                            && notification.message().contains("다이아몬드 티어")
+                            && notification.showModal()
+                    )
+                )
+            );
     }
 
     @Test

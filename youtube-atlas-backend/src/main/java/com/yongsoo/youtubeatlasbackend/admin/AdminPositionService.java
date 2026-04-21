@@ -15,6 +15,8 @@ import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameWallet;
 import com.yongsoo.youtubeatlasbackend.game.GameWalletRepository;
 import com.yongsoo.youtubeatlasbackend.game.PositionStatus;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshot;
+import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotRepository;
 import com.yongsoo.youtubeatlasbackend.youtube.ResourceNotFoundException;
 
 @Service
@@ -25,17 +27,20 @@ public class AdminPositionService {
     private final AppUserRepository appUserRepository;
     private final GamePositionRepository gamePositionRepository;
     private final GameWalletRepository gameWalletRepository;
+    private final TrendSnapshotRepository trendSnapshotRepository;
     private final Clock clock;
 
     public AdminPositionService(
         AppUserRepository appUserRepository,
         GamePositionRepository gamePositionRepository,
         GameWalletRepository gameWalletRepository,
+        TrendSnapshotRepository trendSnapshotRepository,
         Clock clock
     ) {
         this.appUserRepository = appUserRepository;
         this.gamePositionRepository = gamePositionRepository;
         this.gameWalletRepository = gameWalletRepository;
+        this.trendSnapshotRepository = trendSnapshotRepository;
         this.clock = clock;
     }
 
@@ -83,6 +88,9 @@ public class AdminPositionService {
 
         position.setQuantity(newQuantity);
         position.setStakePoints(newStakePoints);
+        if (request.createdAt() != null) {
+            applyBuyTime(position, request.createdAt());
+        }
         gamePositionRepository.save(position);
 
         wallet.setBalancePoints(nextBalancePoints);
@@ -103,6 +111,27 @@ public class AdminPositionService {
         if (request.quantity() % ORDER_QUANTITY_STEP != 0) {
             throw new IllegalArgumentException("quantity는 100 단위로만 수정할 수 있습니다.");
         }
+    }
+
+    private void applyBuyTime(GamePosition position, Instant createdAt) {
+        TrendSnapshot snapshot = trendSnapshotRepository
+            .findSnapshotsByRegionCodeAndCategoryIdAndVideoIdCapturedBeforeOrderByCapturedAtDesc(
+                position.getRegionCode(),
+                position.getCategoryId(),
+                position.getVideoId(),
+                createdAt
+            )
+            .stream()
+            .findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("해당 구매 시각 이전의 스냅샷을 찾을 수 없습니다."));
+
+        position.setCreatedAt(createdAt);
+        position.setBuyCapturedAt(snapshot.getRun().getCapturedAt());
+        position.setBuyRunId(snapshot.getRun().getId());
+        position.setBuyRank(snapshot.getRank());
+        position.setTitle(snapshot.getTitle());
+        position.setChannelTitle(snapshot.getChannelTitle());
+        position.setThumbnailUrl(snapshot.getThumbnailUrl());
     }
 
     private AdminUserPositionResponse toResponse(GamePosition position) {

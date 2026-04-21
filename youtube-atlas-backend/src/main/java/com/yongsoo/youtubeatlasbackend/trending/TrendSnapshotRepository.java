@@ -67,6 +67,23 @@ public interface TrendSnapshotRepository extends JpaRepository<TrendSnapshot, Lo
         select snapshot
         from TrendSnapshot snapshot
         join fetch snapshot.run run
+        where snapshot.regionCode = :regionCode
+          and snapshot.categoryId = :categoryId
+          and snapshot.videoId = :videoId
+          and run.capturedAt <= :capturedAt
+        order by run.capturedAt desc, run.id desc
+        """)
+    List<TrendSnapshot> findSnapshotsByRegionCodeAndCategoryIdAndVideoIdCapturedBeforeOrderByCapturedAtDesc(
+        String regionCode,
+        String categoryId,
+        String videoId,
+        Instant capturedAt
+    );
+
+    @Query("""
+        select snapshot
+        from TrendSnapshot snapshot
+        join fetch snapshot.run run
         where snapshot.createdAt >= :startAt
           and snapshot.createdAt <= :endAt
           and upper(snapshot.regionCode) = upper(:regionCode)

@@ -1,5 +1,7 @@
 package com.yongsoo.youtubeatlasbackend.admin.api;
 
+import java.time.Instant;
+
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
@@ -9,6 +11,7 @@ public record AdminPositionUpdateRequest(
     Integer quantity,
     @NotNull(message = "stakePoints는 필수입니다.")
     @Min(value = 0, message = "stakePoints는 0 이상이어야 합니다.")
-    Long stakePoints
+    Long stakePoints,
+    Instant createdAt
 ) {
 }

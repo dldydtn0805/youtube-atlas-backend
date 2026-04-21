@@ -69,6 +69,34 @@ final class GameNotificationFactory {
             .toList();
     }
 
+    static List<GameNotificationResponse> fromTierPromotion(
+        GamePosition position,
+        GameSeasonCoinTier tier,
+        long highlightScore,
+        Instant createdAt
+    ) {
+        if (position == null || tier == null) {
+            return List.of();
+        }
+
+        return List.of(new GameNotificationResponse(
+            resolveTierPromotionId(position.getSeason().getId(), tier.getTierCode()),
+            "TIER_PROMOTION",
+            "티어 승급",
+            tier.getDisplayName() + " 티어에 도달했습니다. 축하합니다!",
+            position.getId(),
+            position.getVideoId(),
+            tier.getDisplayName() + " 티어 달성",
+            position.getChannelTitle(),
+            position.getThumbnailUrl(),
+            List.of(),
+            highlightScore,
+            null,
+            createdAt,
+            true
+        ));
+    }
+
     private static GameNotificationResponse fromHighlight(GameHighlightResponse highlight, GameStrategyType strategyType) {
         return new GameNotificationResponse(
             resolveId(highlight.positionId(), strategyType),
@@ -118,6 +146,10 @@ final class GameNotificationFactory {
 
     private static String resolveId(Long positionId, GameStrategyType strategyType) {
         return "game-" + positionId + "-" + strategyType.name();
+    }
+
+    private static String resolveTierPromotionId(Long seasonId, String tierCode) {
+        return "tier-promotion-" + seasonId + "-" + tierCode;
     }
 
     private static String resolveTitle(GameStrategyType strategyType) {
