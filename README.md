@@ -1,6 +1,6 @@
 # youtube-atlas-backend
 
-`World-Best-YouTube`의 YouTube 조회, Google 로그인, 실시간 댓글, 급상승 스냅샷, 랭킹 기반 포인트 게임과 시즌 코인 기능을 Spring Boot로 제공하는 백엔드입니다.
+`World-Best-YouTube`의 YouTube 조회, Google 로그인, 실시간 댓글, 급상승 스냅샷, 랭킹 기반 포인트 게임을 Spring Boot로 제공하는 백엔드입니다.
 
 ## 현재 구현 범위
 
@@ -13,7 +13,7 @@
 - 급상승 스냅샷 동기화
 - 급상승 시그널 조회
 - 랭킹 기반 포인트 게임 시즌/지갑/매수/매도/리더보드
-- Top 200 시즌 코인 생산과 코인 개요 조회
+- 하이라이트 점수 기반 티어 조회
 - 시즌 종료 시 오픈 포지션 자동 청산
 - H2 로컬 실행 + PostgreSQL 전환 가능한 기본 설정
 
@@ -83,10 +83,13 @@ GAME_PAYOUT_SLOT_MINUTES=5
 TRENDING_SCHEDULER_ENABLED=false
 TRENDING_SYNC_CRON=0 0 * * * *
 TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
+SKIP_DB_MIGRATIONS=false
 ```
 
 - `DB_*`를 비워 두면 로컬에서는 H2 인메모리 DB로 실행됩니다.
 - 배포 DB에 로컬 앱을 직접 붙일 때는 `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` 또는 `none` 으로 두는 편이 안전합니다.
+- Docker 배포에서는 컨테이너 시작 시 `sql/*.sql` 이 자동 실행된 뒤 애플리케이션이 시작됩니다.
+- 마이그레이션을 건너뛰려면 `SKIP_DB_MIGRATIONS=true` 를 설정하면 됩니다.
 - `ALLOWED_ORIGINS` 기본값에는 로컬 개발 주소와 Vercel 배포 주소 패턴이 포함됩니다.
 - `GOOGLE_CLIENT_ID` 는 프론트의 Google OAuth Client ID와 동일해야 합니다.
 - `GOOGLE_CLIENT_SECRET` 는 같은 Google OAuth Web Client의 secret 이어야 합니다.
@@ -94,6 +97,24 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - 로컬에서 빠르게 확인하려면 `GAME_SETTLEMENT_CRON=0 */1 * * * *` 로 두면 1분마다 시즌 정리를 테스트할 수 있습니다.
 - `ADMIN_ALLOWED_EMAILS` 에 관리자 이메일을 쉼표로 구분해서 넣으면 `/api/admin/*` 엔드포인트 접근을 허용합니다.
 - `TRENDING_SYNC_MAX_PAGES_PER_SOURCE` 는 급상승 동기화 시 소스 카테고리별로 몇 페이지까지 수집할지 결정합니다.
+
+## 배포 + SQL 마이그레이션
+
+Docker 이미지로 배포하면 컨테이너 시작 시 아래 순서로 동작합니다.
+
+1. `scripts/run-db-migrations.sh` 가 PostgreSQL 연결을 확인합니다.
+2. `sql/*.sql` 파일을 파일명 순서대로 실행합니다.
+3. 마이그레이션이 끝나면 Spring Boot 애플리케이션을 시작합니다.
+
+권장 배포 환경:
+
+```bash
+DB_URL=jdbc:postgresql://your-host:5432/youtube_atlas?sslmode=require
+DB_USERNAME=postgres
+DB_PASSWORD=your_password
+SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+SKIP_DB_MIGRATIONS=false
+```
 
 ## API 요약
 
@@ -123,7 +144,7 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `GET /api/game/wallet`
 - `GET /api/game/market`
 - `GET /api/game/leaderboard`
-- `GET /api/game/coins/overview`
+- `GET /api/game/tiers/current`
 - `GET /api/game/notifications`
 - `GET /api/game/positions/me?status=OPEN`
 - `POST /api/game/positions`
@@ -139,19 +160,8 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - 랭킹별 가격 곡선 기반 손익 정산
 - 거래 가능 마켓 목록 조회
 - 실시간 평가손익 반영 리더보드
-- Top 200 보유 포지션 대상 시즌 코인 생산
-- 시즌 코인 개요/예상 생산량 조회
+- 하이라이트 점수 기반 티어 진행도 조회
 - 시즌 종료 시 오픈 포지션 자동 청산 스케줄러
-
-시즌 코인 규칙:
-
-- 코인은 돈이 아니라 시즌 명예 재화입니다.
-- 실시간 차트 1위부터 200위까지의 보유 포지션이 코인을 생산합니다.
-- 코인 생산률은 순위에 따라 감쇠하며, 1위는 `1.0%`, 10위는 `0.46%`, 50위는 `0.3%`, 100위는 `0.15%`, 200위는 `0%`입니다.
-- 순위가 높을수록 코인 생산률이 높습니다.
-- 최소 보유 시간이 지난 포지션만 코인 생산에 반영됩니다.
-- 차트아웃되면 코인 생산이 중단됩니다.
-- 시즌 종료 시 코인 자체는 소멸하고, 최종 성과는 티어/뱃지 같은 시즌 결과로 남기는 방향을 전제로 합니다.
 
 핵심 정산 규칙:
 
@@ -204,7 +214,7 @@ profitPoints = settledPoints - buyPricePoints
 
 1. 로그인 후 `GET /api/game/seasons/current` 호출
 2. `GET /api/game/market` 으로 거래 가능 영상 목록 조회
-3. `GET /api/game/coins/overview` 로 내 시즌 코인 현황 조회
+3. `GET /api/game/tiers/current` 로 내 하이라이트 티어 현황 조회
 4. `GET /api/game/positions/me?status=OPEN` 으로 내 보유 포지션 조회
 5. `GET /api/game/leaderboard` 로 랭킹 조회
 6. 매수 시 `POST /api/game/positions`
@@ -261,7 +271,6 @@ values
     "balancePoints": 10000,
     "reservedPoints": 0,
     "realizedPnlPoints": 0,
-    "coinBalance": 0,
     "totalAssetPoints": 10000
   },
   "notifications": []
@@ -271,20 +280,6 @@ values
 ### `GET /api/game/wallet`
 
 현재 시즌 기준 내 게임 지갑 정보를 반환합니다.
-
-### `GET /api/game/coins/overview`
-
-현재 시즌 기준 내 시즌 코인 현황을 반환합니다.
-
-- `myCoinBalance`: 현재까지 누적된 시즌 코인
-- `myEstimatedCoinYield`: 지금 상태가 유지될 때 예상되는 코인 생산량
-- `myActiveProducerCount`: 현재 생산 중인 포지션 수
-- `myWarmingUpPositionCount`: Top 200 안에 있지만 최소 보유 시간을 아직 채우지 못한 포지션 수
-- 최소 보유 시간 이후부터 보유 시간이 길수록 채굴 부스트가 붙습니다.
-- 기본 부스트 규칙은 `10분마다 +10%` 이며, 최대 `2배` 까지 증가합니다.
-- 각 포지션에는 기본 수익률 `coinRatePercent`, 보유 시간 부스트 `holdBoostPercent`, 최종 적용 수익률 `effectiveCoinRatePercent` 가 함께 내려갑니다.
-
-후속 티어/뱃지 API 설계와 배포 체크리스트는 [docs/season-coin-roadmap.md](docs/season-coin-roadmap.md) 에 정리되어 있습니다.
 
 ### `GET /api/game/market`
 
@@ -332,9 +327,8 @@ values
 
 현재 시즌 리더보드를 반환합니다.
 
-- 정렬 기준은 `coinBalance desc` 입니다.
+- 정렬 기준은 `highlightScore desc`, `highlightCount desc` 입니다.
 - 동률이면 `totalAssetPoints desc`, 이후 `realizedPnlPoints desc` 순서로 비교합니다.
-- `coinBalance` 는 현재 시즌 누적 코인 보유량입니다.
 - `totalStakePoints` 는 현재 오픈 포지션의 총 매수금액입니다.
 - `totalEvaluationPoints` 는 현재 오픈 포지션의 총 평가금액입니다.
 - `profitRatePercent` 는 현재 오픈 포지션 기준 실시간 수익률이며, 계산식은 `(totalEvaluationPoints - totalStakePoints) / totalStakePoints * 100` 입니다.
@@ -350,7 +344,8 @@ values
     "userId": 7,
     "displayName": "Atlas User",
     "pictureUrl": "https://lh3.googleusercontent.com/...",
-    "coinBalance": 900000,
+    "highlightScore": 600000,
+    "highlightCount": 2,
     "totalAssetPoints": 12400,
     "balancePoints": 8000,
     "reservedPoints": 2000,
@@ -701,7 +696,7 @@ Authorization: Bearer {accessToken}
 - `deleteBefore` 는 필수입니다.
 - 미래 시각은 허용되지 않습니다.
 - `deleteBefore` 보다 이전에 종료된 `CLOSED`, `AUTO_CLOSED` 거래내역만 삭제됩니다.
-- 해당 거래내역에 연결된 원장, 코인 지급, 배당 지급 데이터도 함께 삭제됩니다.
+- 해당 거래내역에 연결된 원장, 배당 지급 데이터도 함께 삭제됩니다.
 - `OPEN` 포지션은 삭제 대상이 아닙니다.
 
 응답 예시:
@@ -712,7 +707,6 @@ Authorization: Bearer {accessToken}
   "deletedAt": "2026-04-15T03:00:00Z",
   "deletedPositionCount": 42,
   "deletedLedgerCount": 84,
-  "deletedCoinPayoutCount": 128,
   "deletedDividendPayoutCount": 56
 }
 ```
@@ -738,7 +732,7 @@ Authorization: Bearer {accessToken}
 
 관리자가 활성 시즌을 즉시 종료합니다.
 
-- 오픈 포지션 자동 정산과 시즌 코인 결과 확정이 바로 수행됩니다.
+- 오픈 포지션 자동 정산이 바로 수행됩니다.
 - 종료 후 관리 대상 지역에 활성 시즌이 없으면 후속 활성 시즌이 자동 생성됩니다.
 
 ### `GET /api/admin/users`
@@ -812,7 +806,6 @@ Authorization: Bearer {accessToken}
     "reservedPoints": 3000,
     "realizedPnlPoints": 1500,
     "tierScore": 600000,
-    "coinBalance": 900000,
     "totalAssetPoints": 15000,
     "openPositionCount": 2,
     "closedPositionCount": 5
@@ -827,7 +820,6 @@ Authorization: Bearer {accessToken}
       "reservedPoints": 3000,
       "realizedPnlPoints": 1500,
       "tierScore": 600000,
-      "coinBalance": 900000,
       "totalAssetPoints": 15000,
       "openPositionCount": 2,
       "closedPositionCount": 5
@@ -841,7 +833,6 @@ Authorization: Bearer {accessToken}
       "reservedPoints": 0,
       "realizedPnlPoints": 0,
       "tierScore": 0,
-      "coinBalance": 0,
       "totalAssetPoints": 10000,
       "openPositionCount": 0,
       "closedPositionCount": 0

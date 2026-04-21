@@ -70,7 +70,7 @@ final class GameNotificationFactory {
 
     static List<GameNotificationResponse> fromTierPromotion(
         GamePosition position,
-        GameSeasonCoinTier tier,
+        GameSeasonTier tier,
         long highlightScore,
         Instant createdAt
     ) {

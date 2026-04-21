@@ -75,7 +75,6 @@ class AdminPositionServiceTest {
         wallet.setBalancePoints(8800L);
         wallet.setReservedPoints(1200L);
         wallet.setRealizedPnlPoints(0L);
-        wallet.setCoinBalance(0L);
 
         when(appUserRepository.existsById(7L)).thenReturn(true);
         when(gamePositionRepository.findByIdAndUserIdForUpdate(11L, 7L)).thenReturn(Optional.of(position));
@@ -101,7 +100,6 @@ class AdminPositionServiceTest {
         wallet.setBalancePoints(8800L);
         wallet.setReservedPoints(1200L);
         wallet.setRealizedPnlPoints(0L);
-        wallet.setCoinBalance(0L);
         Instant requestedCreatedAt = Instant.parse("2026-04-01T01:30:00Z");
         TrendSnapshot snapshot = snapshot(55L, requestedCreatedAt.minusSeconds(300), 42);
 

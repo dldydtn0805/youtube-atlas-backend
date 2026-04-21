@@ -15,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminTradeHistoryCleanupRequest;
-import com.yongsoo.youtubeatlasbackend.game.GameCoinPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameDividendPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePosition;
@@ -26,7 +25,6 @@ class AdminTradeHistoryServiceTest {
 
     private GamePositionRepository gamePositionRepository;
     private GameLedgerRepository gameLedgerRepository;
-    private GameCoinPayoutRepository gameCoinPayoutRepository;
     private GameDividendPayoutRepository gameDividendPayoutRepository;
     private AdminTradeHistoryService adminTradeHistoryService;
 
@@ -34,13 +32,11 @@ class AdminTradeHistoryServiceTest {
     void setUp() {
         gamePositionRepository = org.mockito.Mockito.mock(GamePositionRepository.class);
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
-        gameCoinPayoutRepository = org.mockito.Mockito.mock(GameCoinPayoutRepository.class);
         gameDividendPayoutRepository = org.mockito.Mockito.mock(GameDividendPayoutRepository.class);
         Clock clock = Clock.fixed(Instant.parse("2026-04-15T03:00:00Z"), ZoneOffset.UTC);
         adminTradeHistoryService = new AdminTradeHistoryService(
             gamePositionRepository,
             gameLedgerRepository,
-            gameCoinPayoutRepository,
             gameDividendPayoutRepository,
             clock
         );
@@ -57,7 +53,6 @@ class AdminTradeHistoryServiceTest {
             deleteBefore
         )).thenReturn(List.of(first, second));
         when(gameLedgerRepository.deleteByPositionIds(List.of(101L, 102L))).thenReturn(4L);
-        when(gameCoinPayoutRepository.deleteByPositionIds(List.of(101L, 102L))).thenReturn(6L);
         when(gameDividendPayoutRepository.deleteByPositionIds(List.of(101L, 102L))).thenReturn(2L);
         when(gamePositionRepository.deleteByIds(List.of(101L, 102L))).thenReturn(2L);
 
@@ -69,10 +64,8 @@ class AdminTradeHistoryServiceTest {
         assertThat(response.deletedAt()).isEqualTo(Instant.parse("2026-04-15T03:00:00Z"));
         assertThat(response.deletedPositionCount()).isEqualTo(2L);
         assertThat(response.deletedLedgerCount()).isEqualTo(4L);
-        assertThat(response.deletedCoinPayoutCount()).isEqualTo(6L);
         assertThat(response.deletedDividendPayoutCount()).isEqualTo(2L);
         verify(gameLedgerRepository).deleteByPositionIds(List.of(101L, 102L));
-        verify(gameCoinPayoutRepository).deleteByPositionIds(List.of(101L, 102L));
         verify(gameDividendPayoutRepository).deleteByPositionIds(List.of(101L, 102L));
         verify(gamePositionRepository).deleteByIds(List.of(101L, 102L));
     }
@@ -91,7 +84,6 @@ class AdminTradeHistoryServiceTest {
 
         assertThat(response.deletedPositionCount()).isZero();
         assertThat(response.deletedLedgerCount()).isZero();
-        assertThat(response.deletedCoinPayoutCount()).isZero();
         assertThat(response.deletedDividendPayoutCount()).isZero();
     }
 

@@ -45,9 +45,6 @@ public class GameWallet {
     @Column(name = "realized_pnl_points", nullable = false)
     private Long realizedPnlPoints;
 
-    @Column(name = "coin_balance", nullable = false)
-    private Long coinBalance;
-
     @Column(name = "manual_tier_score_adjustment", nullable = false)
     private Long manualTierScoreAdjustment;
 
@@ -96,14 +93,6 @@ public class GameWallet {
 
     public void setRealizedPnlPoints(Long realizedPnlPoints) {
         this.realizedPnlPoints = realizedPnlPoints;
-    }
-
-    public Long getCoinBalance() {
-        return coinBalance;
-    }
-
-    public void setCoinBalance(Long coinBalance) {
-        this.coinBalance = coinBalance;
     }
 
     public Long getManualTierScoreAdjustment() {

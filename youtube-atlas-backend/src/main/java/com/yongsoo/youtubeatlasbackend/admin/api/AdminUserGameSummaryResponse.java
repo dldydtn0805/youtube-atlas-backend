@@ -11,10 +11,9 @@ public record AdminUserGameSummaryResponse(
     Long calculatedTierScore,
     Long manualTierScoreAdjustment,
     Long tierScore,
-    Long coinBalance,
     Long totalAssetPoints,
-    AdminCoinTierSummaryResponse currentCoinTier,
-    AdminCoinTierSummaryResponse nextCoinTier,
+    AdminTierSummaryResponse currentTier,
+    AdminTierSummaryResponse nextTier,
     long openPositionCount,
     long closedPositionCount
 ) {

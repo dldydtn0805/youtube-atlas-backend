@@ -43,24 +43,6 @@ run_rewrites as (
     from duplicate_runs
     where old_id <> keep_id
 )
-update game_coin_payouts payout
-set trend_run_id = rewrite.keep_id
-from run_rewrites rewrite
-where payout.trend_run_id = rewrite.old_id;
-
-with duplicate_runs as (
-    select
-        id as old_id,
-        max(id) over (
-            partition by region_code, category_id, source, captured_at
-        ) as keep_id
-    from video_trend_runs
-),
-run_rewrites as (
-    select old_id, keep_id
-    from duplicate_runs
-    where old_id <> keep_id
-)
 update game_dividend_payouts payout
 set trend_run_id = rewrite.keep_id
 from run_rewrites rewrite

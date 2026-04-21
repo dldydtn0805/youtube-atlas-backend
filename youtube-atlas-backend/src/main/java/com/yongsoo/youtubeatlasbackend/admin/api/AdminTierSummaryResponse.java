@@ -1,9 +1,9 @@
 package com.yongsoo.youtubeatlasbackend.admin.api;
 
-public record AdminCoinTierSummaryResponse(
+public record AdminTierSummaryResponse(
     String tierCode,
     String displayName,
-    Long minCoinBalance,
+    Long minScore,
     String badgeCode,
     String titleCode,
     String profileThemeCode

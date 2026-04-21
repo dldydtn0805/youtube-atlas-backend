@@ -76,14 +76,6 @@ public class GameController {
         return gameService.getLeaderboard(authService.requireCurrentUser(authorizationHeader), regionCode);
     }
 
-    @GetMapping("/coins/overview")
-    public CoinOverviewResponse getCoinOverview(
-        @RequestHeader("Authorization") String authorizationHeader,
-        @RequestParam String regionCode
-    ) {
-        return gameService.getCoinOverview(authService.requireCurrentUser(authorizationHeader), regionCode);
-    }
-
     @GetMapping("/highlights")
     public List<GameHighlightResponse> getHighlights(
         @RequestHeader("Authorization") String authorizationHeader,
@@ -125,19 +117,11 @@ public class GameController {
     }
 
     @GetMapping("/tiers/current")
-    public CoinTierProgressResponse getCurrentCoinTier(
+    public TierProgressResponse getCurrentTier(
         @RequestHeader("Authorization") String authorizationHeader,
         @RequestParam String regionCode
     ) {
-        return gameService.getCurrentCoinTier(authService.requireCurrentUser(authorizationHeader), regionCode);
-    }
-
-    @GetMapping("/seasons/{seasonId}/results/me")
-    public SeasonCoinResultResponse getSeasonCoinResult(
-        @RequestHeader("Authorization") String authorizationHeader,
-        @PathVariable Long seasonId
-    ) {
-        return gameService.getSeasonCoinResult(authService.requireCurrentUser(authorizationHeader), seasonId);
+        return gameService.getCurrentTier(authService.requireCurrentUser(authorizationHeader), regionCode);
     }
 
     @GetMapping("/leaderboard/{userId}/positions")

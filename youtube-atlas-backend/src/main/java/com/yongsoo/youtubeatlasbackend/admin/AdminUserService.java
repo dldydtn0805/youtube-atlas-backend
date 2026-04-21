@@ -11,7 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminUserDetailResponse;
-import com.yongsoo.youtubeatlasbackend.admin.api.AdminCoinTierSummaryResponse;
+import com.yongsoo.youtubeatlasbackend.admin.api.AdminTierSummaryResponse;
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminUserHighlightSummaryResponse;
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminUserGameSummaryResponse;
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminUserListResponse;
@@ -22,16 +22,14 @@ import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.auth.AuthSessionRepository;
 import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
-import com.yongsoo.youtubeatlasbackend.game.GameCoinPayoutRepository;
-import com.yongsoo.youtubeatlasbackend.game.GameCoinTierService;
+import com.yongsoo.youtubeatlasbackend.game.GameTierService;
 import com.yongsoo.youtubeatlasbackend.game.GameDividendPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameHighlightStateRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameNotificationRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameService;
 import com.yongsoo.youtubeatlasbackend.game.GameSeason;
-import com.yongsoo.youtubeatlasbackend.game.GameSeasonCoinResultRepository;
-import com.yongsoo.youtubeatlasbackend.game.GameSeasonCoinTier;
+import com.yongsoo.youtubeatlasbackend.game.GameSeasonTier;
 import com.yongsoo.youtubeatlasbackend.game.GameSeasonRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameWallet;
 import com.yongsoo.youtubeatlasbackend.game.GameWalletRepository;
@@ -56,12 +54,10 @@ public class AdminUserService {
     private final GameWalletRepository gameWalletRepository;
     private final GamePositionRepository gamePositionRepository;
     private final GameLedgerRepository gameLedgerRepository;
-    private final GameCoinPayoutRepository gameCoinPayoutRepository;
     private final GameDividendPayoutRepository gameDividendPayoutRepository;
     private final GameHighlightStateRepository gameHighlightStateRepository;
     private final GameNotificationRepository gameNotificationRepository;
-    private final GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
-    private final GameCoinTierService gameCoinTierService;
+    private final GameTierService gameTierService;
     private final GameService gameService;
     private final AdminAccessService adminAccessService;
     private final Clock clock;
@@ -76,12 +72,10 @@ public class AdminUserService {
         GameWalletRepository gameWalletRepository,
         GamePositionRepository gamePositionRepository,
         GameLedgerRepository gameLedgerRepository,
-        GameCoinPayoutRepository gameCoinPayoutRepository,
         GameDividendPayoutRepository gameDividendPayoutRepository,
         GameHighlightStateRepository gameHighlightStateRepository,
         GameNotificationRepository gameNotificationRepository,
-        GameSeasonCoinResultRepository gameSeasonCoinResultRepository,
-        GameCoinTierService gameCoinTierService,
+        GameTierService gameTierService,
         GameService gameService,
         AdminAccessService adminAccessService,
         Clock clock
@@ -95,12 +89,10 @@ public class AdminUserService {
         this.gameWalletRepository = gameWalletRepository;
         this.gamePositionRepository = gamePositionRepository;
         this.gameLedgerRepository = gameLedgerRepository;
-        this.gameCoinPayoutRepository = gameCoinPayoutRepository;
         this.gameDividendPayoutRepository = gameDividendPayoutRepository;
         this.gameHighlightStateRepository = gameHighlightStateRepository;
         this.gameNotificationRepository = gameNotificationRepository;
-        this.gameSeasonCoinResultRepository = gameSeasonCoinResultRepository;
-        this.gameCoinTierService = gameCoinTierService;
+        this.gameTierService = gameTierService;
         this.gameService = gameService;
         this.adminAccessService = adminAccessService;
         this.clock = clock;
@@ -180,12 +172,10 @@ public class AdminUserService {
         playbackProgressRepository.deleteByUserId(userId);
         favoriteStreamerRepository.deleteByUserId(userId);
         gameLedgerRepository.deleteByUserId(userId);
-        gameCoinPayoutRepository.deleteByUserId(userId);
         gameDividendPayoutRepository.deleteByUserId(userId);
         gameHighlightStateRepository.deleteByUserId(userId);
         gameNotificationRepository.deleteByUserId(userId);
         gamePositionRepository.deleteByUserId(userId);
-        gameSeasonCoinResultRepository.deleteByUserId(userId);
         gameWalletRepository.deleteByUserId(userId);
         appUserRepository.delete(user);
     }
@@ -246,7 +236,7 @@ public class AdminUserService {
     }
 
     private AdminUserGameSummaryResponse toGameSummary(Long userId, GameSeason activeSeason) {
-        List<GameSeasonCoinTier> tiers = gameCoinTierService.getOrCreateTiers(activeSeason);
+        List<GameSeasonTier> tiers = gameTierService.getOrCreateTiers(activeSeason);
         long highlightScore = gameService.calculateSettledUserHighlightScore(activeSeason.getId(), userId);
         long openPositionCount = gamePositionRepository.countBySeasonIdAndUserIdAndStatus(
             activeSeason.getId(),
@@ -261,11 +251,10 @@ public class AdminUserService {
 
         return gameWalletRepository.findBySeasonIdAndUserId(activeSeason.getId(), userId)
             .map(wallet -> {
-                long coinBalance = normalizeNonNegative(wallet.getCoinBalance());
                 long manualTierScoreAdjustment = normalizeTierScoreAdjustment(wallet.getManualTierScoreAdjustment());
                 long tierScore = highlightScore + manualTierScoreAdjustment;
-                GameSeasonCoinTier currentCoinTier = resolveCurrentTier(tiers, tierScore);
-                GameSeasonCoinTier nextCoinTier = resolveNextTier(tiers, tierScore);
+                GameSeasonTier currentTier = resolveCurrentTier(tiers, tierScore);
+                GameSeasonTier nextTier = resolveNextTier(tiers, tierScore);
 
                 return new AdminUserGameSummaryResponse(
                     activeSeason.getId(),
@@ -278,10 +267,9 @@ public class AdminUserService {
                     highlightScore,
                     manualTierScoreAdjustment,
                     tierScore,
-                    coinBalance,
                     wallet.getBalancePoints() + wallet.getReservedPoints(),
-                    toCoinTierSummary(currentCoinTier),
-                    toCoinTierSummary(nextCoinTier),
+                    toTierSummary(currentTier),
+                    toTierSummary(nextTier),
                     openPositionCount,
                     closedPositionCount
                 );
@@ -297,10 +285,9 @@ public class AdminUserService {
                 highlightScore,
                 0L,
                 highlightScore,
-                0L,
                 activeSeason.getStartingBalancePoints(),
-                toCoinTierSummary(resolveCurrentTier(tiers, highlightScore)),
-                toCoinTierSummary(resolveNextTier(tiers, highlightScore)),
+                toTierSummary(resolveCurrentTier(tiers, highlightScore)),
+                toTierSummary(resolveNextTier(tiers, highlightScore)),
                 openPositionCount,
                 closedPositionCount
             ));
@@ -318,7 +305,6 @@ public class AdminUserService {
         wallet.setBalancePoints(season.getStartingBalancePoints());
         wallet.setReservedPoints(0L);
         wallet.setRealizedPnlPoints(0L);
-        wallet.setCoinBalance(0L);
         wallet.setManualTierScoreAdjustment(0L);
         wallet.setUpdatedAt(Instant.now(clock));
         return gameWalletRepository.save(wallet);
@@ -364,37 +350,33 @@ public class AdminUserService {
         }
     }
 
-    private long normalizeNonNegative(Long value) {
-        return value != null ? value : 0L;
-    }
-
     private long normalizeTierScoreAdjustment(Long value) {
         return value != null ? value : 0L;
     }
 
-    private GameSeasonCoinTier resolveCurrentTier(List<GameSeasonCoinTier> tiers, long tierScore) {
-        return tiers.isEmpty() ? null : gameCoinTierService.resolveTier(tiers, tierScore);
+    private GameSeasonTier resolveCurrentTier(List<GameSeasonTier> tiers, long tierScore) {
+        return tiers.isEmpty() ? null : gameTierService.resolveTier(tiers, tierScore);
     }
 
-    private GameSeasonCoinTier resolveNextTier(List<GameSeasonCoinTier> tiers, long tierScore) {
+    private GameSeasonTier resolveNextTier(List<GameSeasonTier> tiers, long tierScore) {
         return tiers.stream()
-            .filter(tier -> tier.getMinCoinBalance() > tierScore)
+            .filter(tier -> tier.getMinScore() > tierScore)
             .min(
-                java.util.Comparator.comparingLong(GameSeasonCoinTier::getMinCoinBalance)
-                    .thenComparingInt(GameSeasonCoinTier::getSortOrder)
+                java.util.Comparator.comparingLong(GameSeasonTier::getMinScore)
+                    .thenComparingInt(GameSeasonTier::getSortOrder)
             )
             .orElse(null);
     }
 
-    private AdminCoinTierSummaryResponse toCoinTierSummary(GameSeasonCoinTier tier) {
+    private AdminTierSummaryResponse toTierSummary(GameSeasonTier tier) {
         if (tier == null) {
             return null;
         }
 
-        return new AdminCoinTierSummaryResponse(
+        return new AdminTierSummaryResponse(
             tier.getTierCode(),
             tier.getDisplayName(),
-            tier.getMinCoinBalance(),
+            tier.getMinScore(),
             tier.getBadgeCode(),
             tier.getTitleCode(),
             tier.getProfileThemeCode()

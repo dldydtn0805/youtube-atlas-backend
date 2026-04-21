@@ -9,7 +9,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminTradeHistoryCleanupRequest;
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminTradeHistoryCleanupResponse;
-import com.yongsoo.youtubeatlasbackend.game.GameCoinPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameDividendPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
@@ -20,20 +19,17 @@ public class AdminTradeHistoryService {
 
     private final GamePositionRepository gamePositionRepository;
     private final GameLedgerRepository gameLedgerRepository;
-    private final GameCoinPayoutRepository gameCoinPayoutRepository;
     private final GameDividendPayoutRepository gameDividendPayoutRepository;
     private final Clock clock;
 
     public AdminTradeHistoryService(
         GamePositionRepository gamePositionRepository,
         GameLedgerRepository gameLedgerRepository,
-        GameCoinPayoutRepository gameCoinPayoutRepository,
         GameDividendPayoutRepository gameDividendPayoutRepository,
         Clock clock
     ) {
         this.gamePositionRepository = gamePositionRepository;
         this.gameLedgerRepository = gameLedgerRepository;
-        this.gameCoinPayoutRepository = gameCoinPayoutRepository;
         this.gameDividendPayoutRepository = gameDividendPayoutRepository;
         this.clock = clock;
     }
@@ -55,11 +51,10 @@ public class AdminTradeHistoryService {
             .toList();
 
         if (positionIds.isEmpty()) {
-            return new AdminTradeHistoryCleanupResponse(deleteBefore, now, 0L, 0L, 0L, 0L);
+            return new AdminTradeHistoryCleanupResponse(deleteBefore, now, 0L, 0L, 0L);
         }
 
         long deletedLedgerCount = gameLedgerRepository.deleteByPositionIds(positionIds);
-        long deletedCoinPayoutCount = gameCoinPayoutRepository.deleteByPositionIds(positionIds);
         long deletedDividendPayoutCount = gameDividendPayoutRepository.deleteByPositionIds(positionIds);
         long deletedPositionCount = gamePositionRepository.deleteByIds(positionIds);
 
@@ -68,7 +63,6 @@ public class AdminTradeHistoryService {
             now,
             deletedPositionCount,
             deletedLedgerCount,
-            deletedCoinPayoutCount,
             deletedDividendPayoutCount
         );
     }

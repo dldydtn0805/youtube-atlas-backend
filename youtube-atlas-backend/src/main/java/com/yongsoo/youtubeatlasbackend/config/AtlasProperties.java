@@ -286,9 +286,6 @@ public class AtlasProperties {
         private int seasonDurationDays = 7;
         private long startingBalancePoints = 10_000L;
         private int minHoldSeconds = 600;
-        private int coinHoldBoostIntervalSeconds = 600;
-        private int coinHoldBoostBasisPoints = 1_000;
-        private int coinHoldBoostMaxBasisPoints = 10_000;
         private int maxOpenPositions = 5;
         private int rankPointMultiplier = 100;
 
@@ -338,30 +335,6 @@ public class AtlasProperties {
 
         public void setMinHoldSeconds(int minHoldSeconds) {
             this.minHoldSeconds = minHoldSeconds;
-        }
-
-        public int getCoinHoldBoostIntervalSeconds() {
-            return coinHoldBoostIntervalSeconds;
-        }
-
-        public void setCoinHoldBoostIntervalSeconds(int coinHoldBoostIntervalSeconds) {
-            this.coinHoldBoostIntervalSeconds = coinHoldBoostIntervalSeconds;
-        }
-
-        public int getCoinHoldBoostBasisPoints() {
-            return coinHoldBoostBasisPoints;
-        }
-
-        public void setCoinHoldBoostBasisPoints(int coinHoldBoostBasisPoints) {
-            this.coinHoldBoostBasisPoints = coinHoldBoostBasisPoints;
-        }
-
-        public int getCoinHoldBoostMaxBasisPoints() {
-            return coinHoldBoostMaxBasisPoints;
-        }
-
-        public void setCoinHoldBoostMaxBasisPoints(int coinHoldBoostMaxBasisPoints) {
-            this.coinHoldBoostMaxBasisPoints = coinHoldBoostMaxBasisPoints;
         }
 
         public int getMaxOpenPositions() {

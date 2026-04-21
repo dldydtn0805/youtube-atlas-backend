@@ -2,16 +2,15 @@ package com.yongsoo.youtubeatlasbackend.game.api;
 
 import java.util.List;
 
-public record CoinTierProgressResponse(
+public record TierProgressResponse(
     Long seasonId,
     String seasonName,
     String regionCode,
     Long highlightScore,
     Long calculatedHighlightScore,
     Long manualTierScoreAdjustment,
-    Long coinBalance,
-    CoinTierResponse currentTier,
-    CoinTierResponse nextTier,
-    List<CoinTierResponse> tiers
+    TierResponse currentTier,
+    TierResponse nextTier,
+    List<TierResponse> tiers
 ) {
 }

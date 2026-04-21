@@ -47,8 +47,7 @@ class GameServiceTest {
     private GamePositionRepository gamePositionRepository;
     private GameHighlightStateRepository gameHighlightStateRepository;
     private GameLedgerRepository gameLedgerRepository;
-    private GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
-    private GameCoinTierService gameCoinTierService;
+    private GameTierService gameTierService;
     private GameNotificationService gameNotificationService;
     private AppUserRepository appUserRepository;
     private TrendSignalRepository trendSignalRepository;
@@ -65,8 +64,7 @@ class GameServiceTest {
         gamePositionRepository = org.mockito.Mockito.mock(GamePositionRepository.class);
         gameHighlightStateRepository = org.mockito.Mockito.mock(GameHighlightStateRepository.class);
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
-        gameSeasonCoinResultRepository = org.mockito.Mockito.mock(GameSeasonCoinResultRepository.class);
-        gameCoinTierService = org.mockito.Mockito.mock(GameCoinTierService.class);
+        gameTierService = org.mockito.Mockito.mock(GameTierService.class);
         gameNotificationService = org.mockito.Mockito.mock(GameNotificationService.class);
         appUserRepository = org.mockito.Mockito.mock(AppUserRepository.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
@@ -84,8 +82,7 @@ class GameServiceTest {
             gamePositionRepository,
             gameHighlightStateRepository,
             gameLedgerRepository,
-            gameSeasonCoinResultRepository,
-            gameCoinTierService,
+            gameTierService,
             gameNotificationService,
             appUserRepository,
             trendSignalRepository,
@@ -176,7 +173,6 @@ class GameServiceTest {
         assertThat(response.seasonId()).isEqualTo(1L);
         assertThat(response.wallet().balancePoints()).isEqualTo(10_000L);
         assertThat(response.wallet().reservedPoints()).isZero();
-        assertThat(response.wallet().coinBalance()).isZero();
         assertThat(response.notifications()).isEmpty();
         verify(gameLedgerRepository).save(any(GameLedger.class));
     }
@@ -450,10 +446,10 @@ class GameServiceTest {
             Instant.parse("2026-04-01T05:45:00Z")
         );
         TrendSignal latestSignal = signal("video-1", 10, 0);
-        GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
-        GameSeasonCoinTier diamondTier = coinTier(season, "DIAMOND", "다이아몬드", 40_000L, 5);
-        GameSeasonCoinTier masterTier = coinTier(season, "MASTER", "마스터", 80_000L, 6);
-        List<GameSeasonCoinTier> tiers = List.of(bronzeTier, diamondTier, masterTier);
+        GameSeasonTier bronzeTier = tier(season, "BRONZE", "브론즈", 0L, 1);
+        GameSeasonTier diamondTier = tier(season, "DIAMOND", "다이아몬드", 40_000L, 5);
+        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 80_000L, 6);
+        List<GameSeasonTier> tiers = List.of(bronzeTier, diamondTier, masterTier);
 
         when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
         when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of(position));
@@ -462,8 +458,8 @@ class GameServiceTest {
         when(gamePositionRepository.save(position)).thenReturn(position);
         when(gameWalletRepository.save(wallet)).thenReturn(wallet);
         when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(tiers);
-        when(gameCoinTierService.resolveTier(
+        when(gameTierService.getOrCreateTiers(season)).thenReturn(tiers);
+        when(gameTierService.resolveTier(
             org.mockito.ArgumentMatchers.eq(tiers),
             org.mockito.ArgumentMatchers.anyLong()
         )).thenAnswer(invocation -> {
@@ -1456,176 +1452,6 @@ class GameServiceTest {
     }
 
     @Test
-    void getLeaderboardOrdersByCoinBalanceBeforeMarkedToMarketTotalAssets() {
-        GameSeason season = activeSeason();
-        AppUser me = user(7L, "Atlas User");
-        AppUser rival = user(8L, "Rival User");
-        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 120_000L, 4);
-        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", "골드", 30_000L, 3);
-        long myBuyPricePoints = GamePointCalculator.calculatePricePoints(170);
-        long rivalBuyPricePoints = GamePointCalculator.calculatePricePoints(180);
-        long myMarkedPricePoints = GamePointCalculator.calculatePricePoints(180);
-        long rivalMarkedPricePoints = GamePointCalculator.calculatePricePoints(170);
-        GameWallet myWallet = wallet(season, me, 10_000L - myBuyPricePoints, myBuyPricePoints, 0L);
-        GameWallet rivalWallet = wallet(season, rival, 10_000L - rivalBuyPricePoints, rivalBuyPricePoints, 0L);
-        myWallet.setCoinBalance(2_500_000L);
-        rivalWallet.setCoinBalance(1_199_999L);
-        GamePosition myPosition = openPosition(
-            season,
-            me,
-            "video-1",
-            170,
-            myBuyPricePoints,
-            Instant.parse("2026-04-01T05:45:00Z")
-        );
-        GamePosition rivalPosition = openPosition(
-            season,
-            rival,
-            "video-2",
-            180,
-            rivalBuyPricePoints,
-            Instant.parse("2026-04-01T05:40:00Z")
-        );
-        TrendSignal mySignal = signal("video-1", 180, 0);
-        TrendSignal rivalSignal = signal("video-2", 170, 0);
-
-        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
-            .thenReturn(Optional.of(season));
-        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(myWallet));
-        when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(List.of(goldTier, platinumTier));
-        when(gameCoinTierService.resolveTier(List.of(goldTier, platinumTier), 0L)).thenReturn(goldTier);
-        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
-            .thenReturn(List.of(mySignal, rivalSignal));
-        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN))
-            .thenReturn(List.of(myPosition, rivalPosition));
-        when(gamePositionRepository.findBySeasonId(1L)).thenReturn(List.of(myPosition, rivalPosition));
-        when(gameWalletRepository.findBySeasonId(1L)).thenReturn(List.of(myWallet, rivalWallet));
-
-        var response = gameService.getLeaderboard(authenticatedUser(), "KR");
-
-        assertThat(response).hasSize(2);
-        assertThat(response.get(0).userId()).isEqualTo(7L);
-        assertThat(response.get(0).rank()).isEqualTo(1);
-        assertThat(response.get(0).currentTier().tierCode()).isEqualTo("GOLD");
-        assertThat(response.get(0).currentTier().displayName()).isEqualTo("골드");
-        assertThat(response.get(0).highlightScore()).isZero();
-        assertThat(response.get(0).highlightCount()).isZero();
-        assertThat(response.get(0).coinBalance()).isEqualTo(2_500_000L);
-        assertThat(response.get(0).totalStakePoints()).isEqualTo(myBuyPricePoints);
-        assertThat(response.get(0).totalEvaluationPoints()).isEqualTo(myMarkedPricePoints);
-        assertThat(response.get(0).profitRatePercent()).isEqualTo(-26.7D);
-        assertThat(response.get(0).totalAssetPoints()).isEqualTo((10_000L - myBuyPricePoints) + myMarkedPricePoints);
-        assertThat(response.get(0).unrealizedPnlPoints()).isEqualTo(myMarkedPricePoints - myBuyPricePoints);
-        assertThat(response.get(0).me()).isTrue();
-        assertThat(response.get(1).userId()).isEqualTo(8L);
-        assertThat(response.get(1).rank()).isEqualTo(2);
-        assertThat(response.get(1).currentTier().tierCode()).isEqualTo("GOLD");
-        assertThat(response.get(1).currentTier().displayName()).isEqualTo("골드");
-        assertThat(response.get(1).coinBalance()).isEqualTo(1_199_999L);
-        assertThat(response.get(1).totalStakePoints()).isEqualTo(rivalBuyPricePoints);
-        assertThat(response.get(1).totalEvaluationPoints()).isEqualTo(rivalMarkedPricePoints);
-        assertThat(response.get(1).profitRatePercent()).isEqualTo(36.4D);
-        assertThat(response.get(1).totalAssetPoints()).isEqualTo((10_000L - rivalBuyPricePoints) + rivalMarkedPricePoints);
-        assertThat(response.get(1).unrealizedPnlPoints()).isEqualTo(rivalMarkedPricePoints - rivalBuyPricePoints);
-        assertThat(response.get(1).me()).isFalse();
-        assertThat(response.get(0).totalAssetPoints()).isLessThan(response.get(1).totalAssetPoints());
-    }
-
-    @Test
-    void getCoinOverviewReturnsFixedEstimatedCoinYieldAndWarmupPositions() {
-        GameSeason season = activeSeason();
-        AppUser me = user(7L, "Atlas User");
-        AppUser rival = user(8L, "Rival User");
-        GameWallet wallet = wallet(season, me, 10_000L, 0L, 0L);
-        GamePosition myEligiblePosition = openPosition(
-            season,
-            me,
-            "video-1",
-            12,
-            GamePointCalculator.calculatePricePoints(12),
-            Instant.parse("2026-04-01T05:40:00Z")
-        );
-        GamePosition myWarmupPosition = openPosition(
-            season,
-            me,
-            "video-2",
-            6,
-            GamePointCalculator.calculatePricePoints(6),
-            Instant.parse("2026-04-01T05:55:30Z")
-        );
-        GamePosition rivalEligiblePosition = openPosition(
-            season,
-            rival,
-            "video-3",
-            15,
-            GamePointCalculator.calculatePricePoints(15),
-            Instant.parse("2026-04-01T05:35:00Z")
-        );
-        long myEligibleValuePoints = GamePointCalculator.calculatePricePoints(5);
-        int myHoldBoostBasisPoints = GameService.calculateHoldBoostBasisPoints(1_200L, 600, 600, 1_000, 10_000);
-        int myEffectiveCoinRateBasisPoints = GameService.calculateEffectiveCoinRateBasisPoints(76, myHoldBoostBasisPoints);
-        long myEstimatedCoinYield = GameService.calculateEstimatedCoinYield(myEligibleValuePoints, myEffectiveCoinRateBasisPoints);
-
-        ReflectionTestUtils.setField(myEligiblePosition, "id", 501L);
-        ReflectionTestUtils.setField(myWarmupPosition, "id", 502L);
-        ReflectionTestUtils.setField(rivalEligiblePosition, "id", 503L);
-
-        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
-            .thenReturn(Optional.of(season));
-        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
-        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
-            .thenReturn(List.of(
-                signal("video-2", 2, 0),
-                signal("video-1", 5, 0),
-                signal("video-3", 10, 0)
-            ));
-        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN))
-            .thenReturn(List.of(myEligiblePosition, myWarmupPosition, rivalEligiblePosition));
-
-        var response = gameService.getCoinOverview(authenticatedUser(), "KR");
-
-        assertThat(response.eligibleRankCutoff()).isEqualTo(200);
-        assertThat(response.minimumHoldSeconds()).isEqualTo(600);
-        assertThat(response.myCoinBalance()).isZero();
-        assertThat(response.myEstimatedCoinYield()).isEqualTo(myEstimatedCoinYield);
-        assertThat(response.myActiveProducerCount()).isEqualTo(1);
-        assertThat(response.myWarmingUpPositionCount()).isEqualTo(1);
-        assertThat(response.ranks()).hasSize(200);
-        assertThat(response.ranks().getFirst().rank()).isEqualTo(1);
-        assertThat(response.ranks().getFirst().coinRatePercent()).isEqualTo(1.0D);
-        assertThat(response.ranks().get(4).coinRatePercent()).isEqualTo(0.76D);
-        assertThat(response.ranks().get(19).coinRatePercent()).isEqualTo(0.42D);
-        assertThat(response.ranks().get(199).coinRatePercent()).isZero();
-        assertThat(response.positions()).hasSize(2);
-        assertThat(response.positions().get(0).positionId()).isEqualTo(501L);
-        assertThat(response.positions().get(0).rankEligible()).isTrue();
-        assertThat(response.positions().get(0).productionActive()).isTrue();
-        assertThat(response.positions().get(0).coinRatePercent()).isEqualTo(0.76D);
-        assertThat(response.positions().get(0).holdBoostPercent()).isEqualTo(10.0D);
-        assertThat(response.positions().get(0).effectiveCoinRatePercent()).isEqualTo(0.84D);
-        assertThat(response.positions().get(0).estimatedCoinYield()).isEqualTo(myEstimatedCoinYield);
-        assertThat(response.positions().get(0).nextPayoutInSeconds()).isEqualTo(300L);
-        assertThat(response.positions().get(1).positionId()).isEqualTo(502L);
-        assertThat(response.positions().get(1).rankEligible()).isTrue();
-        assertThat(response.positions().get(1).productionActive()).isFalse();
-        assertThat(response.positions().get(1).coinRatePercent()).isEqualTo(0.94D);
-        assertThat(response.positions().get(1).holdBoostPercent()).isZero();
-        assertThat(response.positions().get(1).effectiveCoinRatePercent()).isEqualTo(0.94D);
-        assertThat(response.positions().get(1).estimatedCoinYield()).isZero();
-        assertThat(response.positions().get(1).nextProductionInSeconds()).isEqualTo(330L);
-        assertThat(response.positions().get(1).nextPayoutInSeconds()).isNull();
-    }
-
-    @Test
-    void calculateHoldBoostCapsAtDoubleBaseRate() {
-        int holdBoostBasisPoints = GameService.calculateHoldBoostBasisPoints(8_400L, 600, 600, 1_000, 10_000);
-        int effectiveCoinRateBasisPoints = GameService.calculateEffectiveCoinRateBasisPoints(300, holdBoostBasisPoints);
-
-        assertThat(holdBoostBasisPoints).isEqualTo(10_000);
-        assertThat(effectiveCoinRateBasisPoints).isEqualTo(600);
-    }
-
-    @Test
     void calculateProfitPointsHighlightBonusUsesThresholdAndSqrtCap() {
         assertThat(GameService.calculateProfitPointsHighlightBonus(null)).isZero();
         assertThat(GameService.calculateProfitPointsHighlightBonus(4_999L)).isZero();
@@ -1636,48 +1462,36 @@ class GameServiceTest {
     }
 
     @Test
-    void resolveCoinRateUsesReducedLowerRankAnchors() {
-        assertThat(GameService.resolveCoinRateBasisPoints(1)).isEqualTo(100);
-        assertThat(GameService.resolveCoinRateBasisPoints(10)).isEqualTo(46);
-        assertThat(GameService.resolveCoinRateBasisPoints(50)).isEqualTo(30);
-        assertThat(GameService.resolveCoinRateBasisPoints(100)).isEqualTo(15);
-        assertThat(GameService.resolveCoinRateBasisPoints(150)).isEqualTo(4);
-        assertThat(GameService.resolveCoinRateBasisPoints(200)).isZero();
-    }
-
-    @Test
-    void getCurrentCoinTierReturnsCurrentAndNextTierFromHighlightScore() {
+    void getCurrentTierReturnsCurrentAndNextTierFromHighlightScore() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
-        wallet.setCoinBalance(2_500_000L);
-        GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
-        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 10_000L, 2);
-        GameSeasonCoinTier goldTier = coinTier(season, "GOLD", "골드", 30_000L, 3);
-        GameSeasonCoinTier platinumTier = coinTier(season, "PLATINUM", "플래티넘", 120_000L, 4);
-        GameSeasonCoinTier diamondTier = coinTier(season, "DIAMOND", "다이아몬드", 600_000L, 5);
-        GameSeasonCoinTier masterTier = coinTier(season, "MASTER", "마스터", 3_600_000L, 6);
-        GameSeasonCoinTier legendTier = coinTier(season, "LEGEND", "레전드", 25_200_000L, 7);
+        GameSeasonTier bronzeTier = tier(season, "BRONZE", "브론즈", 0L, 1);
+        GameSeasonTier silverTier = tier(season, "SILVER", "실버", 10_000L, 2);
+        GameSeasonTier goldTier = tier(season, "GOLD", "골드", 30_000L, 3);
+        GameSeasonTier platinumTier = tier(season, "PLATINUM", "플래티넘", 120_000L, 4);
+        GameSeasonTier diamondTier = tier(season, "DIAMOND", "다이아몬드", 600_000L, 5);
+        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 3_600_000L, 6);
+        GameSeasonTier legendTier = tier(season, "LEGEND", "레전드", 25_200_000L, 7);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
-        when(gameCoinTierService.getOrCreateTiers(season))
+        when(gameTierService.getOrCreateTiers(season))
             .thenReturn(List.of(bronzeTier, silverTier, goldTier, platinumTier, diamondTier, masterTier, legendTier));
         when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of());
-        when(gameCoinTierService.resolveTier(
+        when(gameTierService.resolveTier(
             List.of(bronzeTier, silverTier, goldTier, platinumTier, diamondTier, masterTier, legendTier),
             0L
         ))
             .thenReturn(bronzeTier);
 
-        var response = gameService.getCurrentCoinTier(authenticatedUser(), "KR");
+        var response = gameService.getCurrentTier(authenticatedUser(), "KR");
 
         assertThat(response.seasonId()).isEqualTo(1L);
         assertThat(response.highlightScore()).isZero();
         assertThat(response.calculatedHighlightScore()).isZero();
         assertThat(response.manualTierScoreAdjustment()).isZero();
-        assertThat(response.coinBalance()).isEqualTo(2_500_000L);
         assertThat(response.currentTier().tierCode()).isEqualTo("BRONZE");
         assertThat(response.currentTier().displayName()).isEqualTo("브론즈");
         assertThat(response.nextTier().tierCode()).isEqualTo("SILVER");
@@ -1685,7 +1499,7 @@ class GameServiceTest {
     }
 
     @Test
-    void getCurrentCoinTierIgnoresOpenPositionHighlightsUntilSold() {
+    void getCurrentTierIgnoresOpenPositionHighlightsUntilSold() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
@@ -1697,21 +1511,21 @@ class GameServiceTest {
             GamePointCalculator.calculatePricePoints(150),
             Instant.parse("2026-04-01T05:40:00Z")
         );
-        GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
-        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 10_000L, 2);
-        List<GameSeasonCoinTier> tiers = List.of(bronzeTier, silverTier);
+        GameSeasonTier bronzeTier = tier(season, "BRONZE", "브론즈", 0L, 1);
+        GameSeasonTier silverTier = tier(season, "SILVER", "실버", 10_000L, 2);
+        List<GameSeasonTier> tiers = List.of(bronzeTier, silverTier);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
-        when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(tiers);
+        when(gameTierService.getOrCreateTiers(season)).thenReturn(tiers);
         when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L))
             .thenReturn(List.of(openMoonshotPosition));
         when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1")))
             .thenReturn(Optional.of(signal("video-1", 10, 0)));
-        when(gameCoinTierService.resolveTier(tiers, 0L)).thenReturn(bronzeTier);
+        when(gameTierService.resolveTier(tiers, 0L)).thenReturn(bronzeTier);
 
-        var response = gameService.getCurrentCoinTier(authenticatedUser(), "KR");
+        var response = gameService.getCurrentTier(authenticatedUser(), "KR");
 
         assertThat(response.highlightScore()).isZero();
         assertThat(response.calculatedHighlightScore()).isZero();
@@ -1719,7 +1533,7 @@ class GameServiceTest {
     }
 
     @Test
-    void getCurrentCoinTierCountsHighlightScoreAfterPositionIsSold() {
+    void getCurrentTierCountsHighlightScoreAfterPositionIsSold() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
@@ -1743,55 +1557,27 @@ class GameServiceTest {
             settledPoints
         ));
         closedMoonshotPosition.setClosedAt(Instant.parse("2026-04-01T06:01:00Z"));
-        GameSeasonCoinTier bronzeTier = coinTier(season, "BRONZE", "브론즈", 0L, 1);
-        GameSeasonCoinTier silverTier = coinTier(season, "SILVER", "실버", 10_000L, 2);
-        List<GameSeasonCoinTier> tiers = List.of(bronzeTier, silverTier);
+        GameSeasonTier bronzeTier = tier(season, "BRONZE", "브론즈", 0L, 1);
+        GameSeasonTier silverTier = tier(season, "SILVER", "실버", 10_000L, 2);
+        List<GameSeasonTier> tiers = List.of(bronzeTier, silverTier);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
-        when(gameCoinTierService.getOrCreateTiers(season)).thenReturn(tiers);
+        when(gameTierService.getOrCreateTiers(season)).thenReturn(tiers);
         when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L))
             .thenReturn(List.of(closedMoonshotPosition));
-        when(gameCoinTierService.resolveTier(
+        when(gameTierService.resolveTier(
             org.mockito.ArgumentMatchers.eq(tiers),
             org.mockito.ArgumentMatchers.longThat(score -> score > 0L)
         ))
             .thenReturn(silverTier);
 
-        var response = gameService.getCurrentCoinTier(authenticatedUser(), "KR");
+        var response = gameService.getCurrentTier(authenticatedUser(), "KR");
 
         assertThat(response.highlightScore()).isPositive();
         assertThat(response.calculatedHighlightScore()).isPositive();
         assertThat(response.currentTier().tierCode()).isEqualTo("SILVER");
-    }
-
-    @Test
-    void getSeasonCoinResultReturnsFinalizedSeasonCoinResult() {
-        GameSeason season = activeSeason();
-        season.setStatus(SeasonStatus.ENDED);
-        GameSeasonCoinResult result = new GameSeasonCoinResult();
-        result.setSeason(season);
-        result.setUser(user(7L));
-        result.setFinalCoinBalance(5_500_000L);
-        result.setFinalTierCode("PLATINUM");
-        result.setFinalTierDisplayName("플래티넘");
-        result.setFinalTierMinCoinBalance(5_000_000L);
-        result.setBadgeCode("season-platinum");
-        result.setTitleCode("platinum-investor");
-        result.setProfileThemeCode("platinum");
-        result.setCreatedAt(Instant.parse("2026-04-08T00:01:00Z"));
-
-        when(gameSeasonRepository.findById(1L)).thenReturn(Optional.of(season));
-        when(gameSeasonCoinResultRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(result));
-
-        var response = gameService.getSeasonCoinResult(authenticatedUser(), 1L);
-
-        assertThat(response.seasonId()).isEqualTo(1L);
-        assertThat(response.finalCoinBalance()).isEqualTo(5_500_000L);
-        assertThat(response.finalTier().tierCode()).isEqualTo("PLATINUM");
-        assertThat(response.finalTier().displayName()).isEqualTo("플래티넘");
-        assertThat(response.finalizedAt()).isEqualTo(Instant.parse("2026-04-08T00:01:00Z"));
     }
 
     @Test
@@ -2063,18 +1849,17 @@ class GameServiceTest {
         wallet.setBalancePoints(balance);
         wallet.setReservedPoints(reserved);
         wallet.setRealizedPnlPoints(realizedPnl);
-        wallet.setCoinBalance(0L);
         wallet.setUpdatedAt(Instant.parse("2026-04-01T05:30:00Z"));
         return wallet;
     }
 
-    private GameSeasonCoinTier coinTier(GameSeason season, String tierCode, String displayName, long minCoinBalance, int sortOrder) {
-        GameSeasonCoinTier tier = new GameSeasonCoinTier();
+    private GameSeasonTier tier(GameSeason season, String tierCode, String displayName, long minScore, int sortOrder) {
+        GameSeasonTier tier = new GameSeasonTier();
         ReflectionTestUtils.setField(tier, "id", (long) sortOrder);
         tier.setSeason(season);
         tier.setTierCode(tierCode);
         tier.setDisplayName(displayName);
-        tier.setMinCoinBalance(minCoinBalance);
+        tier.setMinScore(minScore);
         tier.setBadgeCode("badge-" + tierCode.toLowerCase());
         tier.setTitleCode("title-" + tierCode.toLowerCase());
         tier.setProfileThemeCode(tierCode.toLowerCase());

@@ -2,8 +2,6 @@ package com.yongsoo.youtubeatlasbackend.game;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -17,7 +15,6 @@ import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -27,11 +24,8 @@ import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
-import com.yongsoo.youtubeatlasbackend.game.api.CoinOverviewResponse;
-import com.yongsoo.youtubeatlasbackend.game.api.CoinPositionResponse;
-import com.yongsoo.youtubeatlasbackend.game.api.CoinRankResponse;
-import com.yongsoo.youtubeatlasbackend.game.api.CoinTierProgressResponse;
-import com.yongsoo.youtubeatlasbackend.game.api.CoinTierResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.TierProgressResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.TierResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.CreatePositionRequest;
 import com.yongsoo.youtubeatlasbackend.game.api.CurrentSeasonResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.GameHighlightResponse;
@@ -45,7 +39,6 @@ import com.yongsoo.youtubeatlasbackend.game.api.SellPreviewItemResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPreviewResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPositionResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPositionsRequest;
-import com.yongsoo.youtubeatlasbackend.game.api.SeasonCoinResultResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.WalletResponse;
 import com.yongsoo.youtubeatlasbackend.trending.TrendRun;
 import com.yongsoo.youtubeatlasbackend.trending.TrendRunRepository;
@@ -73,7 +66,6 @@ public class GameService {
     private static final int BUYABLE_CHART_MAX_COUNT = 200;
     private static final int BUYABLE_CHART_PAGE_SIZE = 50;
     private static final int DEFAULT_FALLBACK_RANK = 201;
-    private static final int COIN_ELIGIBLE_RANK_CUTOFF = 200;
     private static final int MOONSHOT_BUY_RANK_MIN = 100;
     private static final int MOONSHOT_TARGET_RANK_MAX = 20;
     private static final int SNIPE_BUY_RANK_MIN = 150;
@@ -88,22 +80,13 @@ public class GameService {
     private static final long MIN_PROFIT_POINTS_HIGHLIGHT_BONUS = 5_000L;
     private static final double PROFIT_POINTS_HIGHLIGHT_SQRT_SCALE = 3D;
     private static final long MAX_PROFIT_POINTS_HIGHLIGHT_BONUS = 30_000L;
-    private static final CoinRateAnchor[] COIN_RATE_ANCHORS = {
-        new CoinRateAnchor(1, 100),
-        new CoinRateAnchor(10, 46),
-        new CoinRateAnchor(50, 30),
-        new CoinRateAnchor(100, 15),
-        new CoinRateAnchor(150, 4),
-        new CoinRateAnchor(200, 0)
-    };
 
     private final GameSeasonRepository gameSeasonRepository;
     private final GameWalletRepository gameWalletRepository;
     private final GamePositionRepository gamePositionRepository;
     private final GameHighlightStateRepository gameHighlightStateRepository;
     private final GameLedgerRepository gameLedgerRepository;
-    private final GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
-    private final GameCoinTierService gameCoinTierService;
+    private final GameTierService gameTierService;
     private final GameNotificationService gameNotificationService;
     private final AppUserRepository appUserRepository;
     private final TrendSignalRepository trendSignalRepository;
@@ -111,9 +94,7 @@ public class GameService {
     private final TrendSnapshotRepository trendSnapshotRepository;
     private final CommentService commentService;
     private final Clock clock;
-    private final CronExpression gameSettlementCron;
     private final int trendCaptureSlotMinutes;
-    private final AtlasProperties.Game gameProperties;
 
     public GameService(
         GameSeasonRepository gameSeasonRepository,
@@ -121,8 +102,7 @@ public class GameService {
         GamePositionRepository gamePositionRepository,
         GameHighlightStateRepository gameHighlightStateRepository,
         GameLedgerRepository gameLedgerRepository,
-        GameSeasonCoinResultRepository gameSeasonCoinResultRepository,
-        GameCoinTierService gameCoinTierService,
+        GameTierService gameTierService,
         GameNotificationService gameNotificationService,
         AppUserRepository appUserRepository,
         TrendSignalRepository trendSignalRepository,
@@ -137,8 +117,7 @@ public class GameService {
         this.gamePositionRepository = gamePositionRepository;
         this.gameHighlightStateRepository = gameHighlightStateRepository;
         this.gameLedgerRepository = gameLedgerRepository;
-        this.gameSeasonCoinResultRepository = gameSeasonCoinResultRepository;
-        this.gameCoinTierService = gameCoinTierService;
+        this.gameTierService = gameTierService;
         this.gameNotificationService = gameNotificationService;
         this.appUserRepository = appUserRepository;
         this.trendSignalRepository = trendSignalRepository;
@@ -146,8 +125,6 @@ public class GameService {
         this.trendSnapshotRepository = trendSnapshotRepository;
         this.commentService = commentService;
         this.clock = clock;
-        this.gameProperties = atlasProperties.getGame();
-        this.gameSettlementCron = CronExpression.parse(atlasProperties.getGame().getCron());
         this.trendCaptureSlotMinutes = atlasProperties.getTrending().getCaptureSlotMinutes();
     }
 
@@ -528,7 +505,7 @@ public class GameService {
     public List<LeaderboardEntryResponse> getLeaderboard(AuthenticatedUser authenticatedUser, String regionCode) {
         GameSeason season = requireActiveSeason(regionCode);
         getOrCreateWallet(season, authenticatedUser);
-        List<GameSeasonCoinTier> tiers = gameCoinTierService.getOrCreateTiers(season);
+        List<GameSeasonTier> tiers = gameTierService.getOrCreateTiers(season);
 
         Map<String, TrendSignal> signalByVideoId = trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
             season.getRegionCode(),
@@ -560,7 +537,6 @@ public class GameService {
             .sorted(
                 Comparator.comparingLong(LeaderboardSnapshot::highlightScore).reversed()
                     .thenComparing(Comparator.comparingInt(LeaderboardSnapshot::highlightCount).reversed())
-                    .thenComparing(Comparator.comparingLong(LeaderboardSnapshot::coinBalance).reversed())
                     .thenComparing(Comparator.comparingLong(LeaderboardSnapshot::totalAssetPoints).reversed())
                     .thenComparing(Comparator.comparingLong(LeaderboardSnapshot::realizedPnlPoints).reversed())
                     .thenComparing(LeaderboardSnapshot::displayName, String.CASE_INSENSITIVE_ORDER)
@@ -571,97 +547,31 @@ public class GameService {
     }
 
     @Transactional
-    public CoinOverviewResponse getCoinOverview(AuthenticatedUser authenticatedUser, String regionCode) {
+    public TierProgressResponse getCurrentTier(AuthenticatedUser authenticatedUser, String regionCode) {
         GameSeason season = requireActiveSeason(regionCode);
         GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
-
-        Map<String, TrendSignal> signalByVideoId = trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
-            season.getRegionCode(),
-            TRENDING_CATEGORY_ID
-        ).stream().collect(Collectors.toMap(signal -> signal.getId().getVideoId(), Function.identity()));
-        Instant now = Instant.now(clock);
-
-        List<CoinPositionCandidate> candidates = gamePositionRepository.findBySeasonIdAndStatus(season.getId(), PositionStatus.OPEN)
-            .stream()
-            .map(position -> toCoinPositionCandidate(position, signalByVideoId.get(position.getVideoId()), now))
-            .toList();
-
-        List<CoinPositionCandidate> myCandidates = candidates.stream()
-            .filter(candidate -> candidate.position().getUser().getId().equals(authenticatedUser.id()))
-            .filter(candidate -> candidate.rankEligible())
-            .sorted(
-                Comparator.comparing(CoinPositionCandidate::productionActive).reversed()
-                    .thenComparing(CoinPositionCandidate::currentRank, Comparator.nullsLast(Integer::compareTo))
-                    .thenComparing((CoinPositionCandidate candidate) -> candidate.position().getCreatedAt())
-            )
-            .toList();
-
-        long myEstimatedCoinYield = myCandidates.stream()
-            .mapToLong(CoinPositionCandidate::estimatedCoinYield)
-            .sum();
-
-        return new CoinOverviewResponse(
-            COIN_ELIGIBLE_RANK_CUTOFF,
-            season.getMinHoldSeconds(),
-            wallet.getCoinBalance(),
-            myEstimatedCoinYield,
-            (int) myCandidates.stream().filter(CoinPositionCandidate::productionActive).count(),
-            (int) myCandidates.stream().filter(candidate -> !candidate.productionActive()).count(),
-            buildCoinRankResponses(),
-            myCandidates.stream()
-                .map(this::toCoinPositionResponse)
-                .toList()
-        );
-    }
-
-    @Transactional
-    public CoinTierProgressResponse getCurrentCoinTier(AuthenticatedUser authenticatedUser, String regionCode) {
-        GameSeason season = requireActiveSeason(regionCode);
-        GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
-        List<GameSeasonCoinTier> tiers = gameCoinTierService.getOrCreateTiers(season);
+        List<GameSeasonTier> tiers = gameTierService.getOrCreateTiers(season);
         long calculatedHighlightScore = calculateUserHighlightScore(season.getId(), authenticatedUser.id());
         long highlightScore = applyManualTierScoreAdjustment(wallet, calculatedHighlightScore);
-        GameSeasonCoinTier currentTier = gameCoinTierService.resolveTier(tiers, highlightScore);
-        GameSeasonCoinTier nextTier = tiers.stream()
-            .filter(tier -> tier.getMinCoinBalance() > highlightScore)
+        GameSeasonTier currentTier = gameTierService.resolveTier(tiers, highlightScore);
+        GameSeasonTier nextTier = tiers.stream()
+            .filter(tier -> tier.getMinScore() > highlightScore)
             .min(
-                Comparator.comparingLong(GameSeasonCoinTier::getMinCoinBalance)
-                    .thenComparingInt(GameSeasonCoinTier::getSortOrder)
+                Comparator.comparingLong(GameSeasonTier::getMinScore)
+                    .thenComparingInt(GameSeasonTier::getSortOrder)
             )
             .orElse(null);
 
-        return new CoinTierProgressResponse(
+        return new TierProgressResponse(
             season.getId(),
             season.getName(),
             season.getRegionCode(),
             highlightScore,
             calculatedHighlightScore,
             normalizeTierScoreAdjustment(wallet.getManualTierScoreAdjustment()),
-            wallet.getCoinBalance(),
-            toCoinTierResponse(currentTier),
-            nextTier != null ? toCoinTierResponse(nextTier) : null,
-            tiers.stream().map(this::toCoinTierResponse).toList()
-        );
-    }
-
-    @Transactional(readOnly = true)
-    public SeasonCoinResultResponse getSeasonCoinResult(AuthenticatedUser authenticatedUser, Long seasonId) {
-        if (seasonId == null) {
-            throw new IllegalArgumentException("seasonId는 필수입니다.");
-        }
-
-        GameSeason season = gameSeasonRepository.findById(seasonId)
-            .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 시즌입니다."));
-        GameSeasonCoinResult result = gameSeasonCoinResultRepository.findBySeasonIdAndUserId(seasonId, authenticatedUser.id())
-            .orElseThrow(() -> new IllegalArgumentException("시즌 코인 결과가 아직 확정되지 않았습니다."));
-
-        return new SeasonCoinResultResponse(
-            season.getId(),
-            season.getName(),
-            season.getRegionCode(),
-            result.getFinalCoinBalance(),
-            toCoinTierResponse(result),
-            result.getCreatedAt()
+            toTierResponse(currentTier),
+            nextTier != null ? toTierResponse(nextTier) : null,
+            tiers.stream().map(this::toTierResponse).toList()
         );
     }
 
@@ -1233,124 +1143,18 @@ public class GameService {
             wallet.getBalancePoints(),
             wallet.getReservedPoints(),
             wallet.getRealizedPnlPoints(),
-            wallet.getCoinBalance(),
             wallet.getBalancePoints() + wallet.getReservedPoints()
         );
     }
 
-    private List<CoinRankResponse> buildCoinRankResponses() {
-        return java.util.stream.IntStream.rangeClosed(1, COIN_ELIGIBLE_RANK_CUTOFF)
-            .mapToObj(rank -> new CoinRankResponse(rank, resolveCoinRatePercent(rank)))
-            .toList();
-    }
-
-    private CoinPositionCandidate toCoinPositionCandidate(GamePosition position, TrendSignal signal, Instant now) {
-        OpenPositionSnapshot snapshot = signal != null
-            ? new OpenPositionSnapshot(signal.getCurrentRank(), signal.getRankChange(), signal.getCapturedAt(), false)
-            : resolveOpenPositionSnapshot(position);
-        Integer currentRank = snapshot != null ? snapshot.currentRank() : null;
-        boolean rankEligible = currentRank != null
-            && !snapshot.chartOut()
-            && currentRank >= 1
-            && currentRank <= COIN_ELIGIBLE_RANK_CUTOFF;
-        boolean productionActive = rankEligible && canSellPosition(position, now);
-        Long currentValuePoints = snapshot != null
-            ? GamePointCalculator.calculatePositionPoints(
-                resolveOpenPositionUnitPricePoints(snapshot),
-                getPositionQuantity(position)
-            )
-            : null;
-        long heldSeconds = Math.max(0L, now.getEpochSecond() - position.getCreatedAt().getEpochSecond());
-        int coinRateBasisPoints = rankEligible ? resolveCoinRateBasisPoints(currentRank) : 0;
-        int holdBoostBasisPoints = rankEligible
-            ? calculateHoldBoostBasisPoints(
-                heldSeconds,
-                position.getSeason().getMinHoldSeconds(),
-                gameProperties.getCoinHoldBoostIntervalSeconds(),
-                gameProperties.getCoinHoldBoostBasisPoints(),
-                gameProperties.getCoinHoldBoostMaxBasisPoints()
-            )
-            : 0;
-        int effectiveCoinRateBasisPoints = rankEligible
-            ? calculateEffectiveCoinRateBasisPoints(coinRateBasisPoints, holdBoostBasisPoints)
-            : 0;
-        long estimatedCoinYield = rankEligible && productionActive && currentValuePoints != null
-            ? calculateEstimatedCoinYield(currentValuePoints, effectiveCoinRateBasisPoints)
-            : 0L;
-        Long nextProductionInSeconds = rankEligible && !productionActive
-            ? Math.max(0L, position.getSeason().getMinHoldSeconds() - heldSeconds)
-            : null;
-        Long nextPayoutInSeconds = rankEligible && productionActive
-            ? resolveNextPayoutInSeconds(now)
-            : null;
-
-        return new CoinPositionCandidate(
-            position,
-            currentRank,
-            currentValuePoints,
-            rankEligible,
-            productionActive,
-            coinRateBasisPoints,
-            holdBoostBasisPoints,
-            effectiveCoinRateBasisPoints,
-            estimatedCoinYield,
-            nextProductionInSeconds,
-            nextPayoutInSeconds
-        );
-    }
-
-    private CoinPositionResponse toCoinPositionResponse(CoinPositionCandidate candidate) {
-        return new CoinPositionResponse(
-            candidate.position().getId(),
-            candidate.position().getVideoId(),
-            candidate.position().getTitle(),
-            candidate.position().getThumbnailUrl(),
-            candidate.currentRank(),
-            getPositionQuantity(candidate.position()),
-            candidate.currentValuePoints(),
-            candidate.rankEligible(),
-            candidate.productionActive(),
-            basisPointsToPercent(candidate.coinRateBasisPoints()),
-            basisPointsToPercent(candidate.holdBoostBasisPoints()),
-            basisPointsToPercent(candidate.effectiveCoinRateBasisPoints()),
-            candidate.estimatedCoinYield(),
-            candidate.nextProductionInSeconds(),
-            candidate.nextPayoutInSeconds()
-        );
-    }
-
-    private Long resolveNextPayoutInSeconds(Instant now) {
-        ZonedDateTime nextRun = gameSettlementCron.next(now.atZone(resolveClockZone()));
-        if (nextRun == null) {
-            return null;
-        }
-
-        return Math.max(0L, nextRun.toEpochSecond() - now.getEpochSecond());
-    }
-
-    private ZoneId resolveClockZone() {
-        return clock.getZone() != null ? clock.getZone() : ZoneId.of("UTC");
-    }
-
-    private CoinTierResponse toCoinTierResponse(GameSeasonCoinTier tier) {
-        return new CoinTierResponse(
+    private TierResponse toTierResponse(GameSeasonTier tier) {
+        return new TierResponse(
             tier.getTierCode(),
             tier.getDisplayName(),
-            tier.getMinCoinBalance(),
+            tier.getMinScore(),
             tier.getBadgeCode(),
             tier.getTitleCode(),
             tier.getProfileThemeCode()
-        );
-    }
-
-    private CoinTierResponse toCoinTierResponse(GameSeasonCoinResult result) {
-        return new CoinTierResponse(
-            result.getFinalTierCode(),
-            result.getFinalTierDisplayName(),
-            result.getFinalTierMinCoinBalance(),
-            result.getBadgeCode(),
-            result.getTitleCode(),
-            result.getProfileThemeCode()
         );
     }
 
@@ -1817,7 +1621,7 @@ public class GameService {
         List<GamePosition> openPositions,
         List<GameHighlightResponse> highlights,
         Map<String, TrendSignal> signalByVideoId,
-        List<GameSeasonCoinTier> tiers
+        List<GameSeasonTier> tiers
     ) {
         long totalStakePoints = 0L;
         long markedOpenPositionPoints = 0L;
@@ -1856,11 +1660,10 @@ public class GameService {
             wallet.getUser().getId(),
             wallet.getUser().getDisplayName(),
             wallet.getUser().getPictureUrl(),
-            toCoinTierResponse(gameCoinTierService.resolveTier(tiers, highlightScore)),
+            toTierResponse(gameTierService.resolveTier(tiers, highlightScore)),
             highlightScore,
             highlights.size(),
             topHighlight != null ? topHighlight.highlightType() : null,
-            wallet.getCoinBalance(),
             wallet.getBalancePoints() + markedOpenPositionPoints,
             wallet.getBalancePoints(),
             wallet.getReservedPoints(),
@@ -1886,7 +1689,6 @@ public class GameService {
                     snapshot.highlightScore(),
                     snapshot.highlightCount(),
                     snapshot.topHighlightType(),
-                    snapshot.coinBalance(),
                     snapshot.totalAssetPoints(),
                     snapshot.balancePoints(),
                     snapshot.reservedPoints(),
@@ -1912,7 +1714,6 @@ public class GameService {
         wallet.setBalancePoints(season.getStartingBalancePoints());
         wallet.setReservedPoints(0L);
         wallet.setRealizedPnlPoints(0L);
-        wallet.setCoinBalance(0L);
         wallet.setManualTierScoreAdjustment(0L);
         wallet.setUpdatedAt(now);
         GameWallet savedWallet = gameWalletRepository.saveAndFlush(wallet);
@@ -2376,13 +2177,13 @@ public class GameService {
             settledPosition.getSeason().getId(),
             settledPosition.getUser().getId()
         );
-        List<GameSeasonCoinTier> tiers = gameCoinTierService.getOrCreateTiers(settledPosition.getSeason());
+        List<GameSeasonTier> tiers = gameTierService.getOrCreateTiers(settledPosition.getSeason());
         if (tiers == null || tiers.isEmpty()) {
             return;
         }
 
-        GameSeasonCoinTier previousTier = gameCoinTierService.resolveTier(tiers, previousHighlightScore);
-        GameSeasonCoinTier currentTier = gameCoinTierService.resolveTier(tiers, currentHighlightScore);
+        GameSeasonTier previousTier = gameTierService.resolveTier(tiers, previousHighlightScore);
+        GameSeasonTier currentTier = gameTierService.resolveTier(tiers, currentHighlightScore);
         if (previousTier == null || currentTier == null || currentTier.getSortOrder() <= previousTier.getSortOrder()) {
             return;
         }
@@ -2577,90 +2378,12 @@ public class GameService {
             : GamePointCalculator.calculateMomentumAdjustedPricePoints(sellSnapshot.rank(), sellSnapshot.rankChange());
     }
 
-    static int resolveCoinRateBasisPoints(int rank) {
-        if (rank < 1 || rank > COIN_ELIGIBLE_RANK_CUTOFF) {
-            return 0;
-        }
-
-        CoinRateAnchor previousAnchor = COIN_RATE_ANCHORS[0];
-        for (CoinRateAnchor anchor : COIN_RATE_ANCHORS) {
-            if (anchor.rank() == rank) {
-                return anchor.rateBasisPoints();
-            }
-
-            if (anchor.rank() > rank) {
-                return interpolateCoinRateBasisPoints(previousAnchor, anchor, rank);
-            }
-
-            previousAnchor = anchor;
-        }
-
-        return COIN_RATE_ANCHORS[COIN_RATE_ANCHORS.length - 1].rateBasisPoints();
-    }
-
-    private static int interpolateCoinRateBasisPoints(CoinRateAnchor betterAnchor, CoinRateAnchor worseAnchor, int rank) {
-        if (betterAnchor.rank() == worseAnchor.rank()) {
-            return betterAnchor.rateBasisPoints();
-        }
-
-        double progress = (double) (rank - betterAnchor.rank()) / (worseAnchor.rank() - betterAnchor.rank());
-        return (int) Math.round(
-            betterAnchor.rateBasisPoints()
-                + (worseAnchor.rateBasisPoints() - betterAnchor.rateBasisPoints()) * progress
-        );
-    }
-
-    private double resolveCoinRatePercent(int rank) {
-        return basisPointsToPercent(resolveCoinRateBasisPoints(rank));
-    }
-
-    private double basisPointsToPercent(int basisPoints) {
-        return basisPoints / 100D;
-    }
-
     private Double calculateProfitRatePercent(long profitPoints, long stakePoints) {
         if (stakePoints <= 0L) {
             return null;
         }
 
         return Math.round((double) profitPoints * 1000D / stakePoints) / 10D;
-    }
-
-    static long calculateEstimatedCoinYield(long currentValuePoints, int coinRateBasisPoints) {
-        if (currentValuePoints <= 0L || coinRateBasisPoints <= 0) {
-            return 0L;
-        }
-
-        return Math.round((double) currentValuePoints * coinRateBasisPoints / 10_000D);
-    }
-
-    static int calculateHoldBoostBasisPoints(
-        long heldSeconds,
-        int minHoldSeconds,
-        int boostIntervalSeconds,
-        int boostBasisPoints,
-        int maxBoostBasisPoints
-    ) {
-        if (heldSeconds < minHoldSeconds || boostIntervalSeconds <= 0 || boostBasisPoints <= 0 || maxBoostBasisPoints <= 0) {
-            return 0;
-        }
-
-        long eligibleHeldSeconds = heldSeconds - minHoldSeconds;
-        long completedIntervals = eligibleHeldSeconds / boostIntervalSeconds;
-        long accumulatedBoost = completedIntervals * (long) boostBasisPoints;
-        return (int) Math.min(Math.max(0L, accumulatedBoost), maxBoostBasisPoints);
-    }
-
-    static int calculateEffectiveCoinRateBasisPoints(int baseCoinRateBasisPoints, int holdBoostBasisPoints) {
-        if (baseCoinRateBasisPoints <= 0) {
-            return 0;
-        }
-
-        if (holdBoostBasisPoints <= 0) {
-            return baseCoinRateBasisPoints;
-        }
-
-        return (int) Math.round(baseCoinRateBasisPoints * (10_000D + holdBoostBasisPoints) / 10_000D);
     }
 
     private long resolveUnitStakePoints(GamePosition position) {
@@ -2767,11 +2490,10 @@ public class GameService {
         Long userId,
         String displayName,
         String pictureUrl,
-        CoinTierResponse currentTier,
+        TierResponse currentTier,
         Long highlightScore,
         Integer highlightCount,
         String topHighlightType,
-        Long coinBalance,
         Long totalAssetPoints,
         Long balancePoints,
         Long reservedPoints,
@@ -2803,24 +2525,6 @@ public class GameService {
     }
 
     private record PositionHistoryWindow(Long startRunId, Long endRunId, Integer latestRank, Instant latestCapturedAt) {
-    }
-
-    private record CoinPositionCandidate(
-        GamePosition position,
-        Integer currentRank,
-        Long currentValuePoints,
-        boolean rankEligible,
-        boolean productionActive,
-        int coinRateBasisPoints,
-        int holdBoostBasisPoints,
-        int effectiveCoinRateBasisPoints,
-        long estimatedCoinYield,
-        Long nextProductionInSeconds,
-        Long nextPayoutInSeconds
-    ) {
-    }
-
-    private record CoinRateAnchor(int rank, int rateBasisPoints) {
     }
 
     private List<PositionRankHistoryPointResponse> collapsePositionHistoryPoints(List<PositionRankHistoryPointResponse> points) {
