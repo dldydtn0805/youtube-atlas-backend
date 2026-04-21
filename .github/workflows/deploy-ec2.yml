@@ -61,17 +61,6 @@ jobs:
             exit 1
           fi
 
-          DB_URL="${DB_URL#jdbc:}"
-
-          for migration in $(find sql -maxdepth 1 -type f -name 'migrate_*.sql' | sort); do
-            echo "Applying ${migration}"
-            sudo docker run --rm -i \
-              -e PGPASSWORD="$DB_PASSWORD" \
-              -v /home/ec2-user/youtube-atlas-backend/sql:/sql:ro \
-              postgres:18 \
-              psql "$DB_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 -f "/sql/$(basename "$migration")"
-          done
-
           sudo docker build -t youtube-atlas-backend:latest .
           sudo docker rm -f youtube-atlas-backend || true
           sudo docker run -d \
