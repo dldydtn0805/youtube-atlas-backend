@@ -19,6 +19,7 @@ import com.yongsoo.youtubeatlasbackend.game.api.GameNotificationResponse;
 public class GameNotificationService {
 
     private static final String USER_GAME_NOTIFICATIONS_QUEUE = "/queue/game/notifications";
+    private static final String PROJECTED_EVENT_PREFIX = "projected-game-";
     private static final int NOTIFICATION_LIMIT = 20;
 
     private final GameNotificationRepository gameNotificationRepository;
@@ -74,7 +75,17 @@ public class GameNotificationService {
             currentValuePoints,
             capturedAt
         );
-        return createAndPush(position.getUser(), position.getSeason(), notifications);
+        return notifications.stream()
+            .map(notification -> saveProjectedNotificationResult(position.getUser(), position.getSeason(), notification))
+            .filter(savedNotification -> savedNotification.created())
+            .filter(savedNotification -> savedNotification.notification().getDeletedAt() == null)
+            .map(savedNotification -> toResponse(savedNotification.notification()))
+            .peek(notification -> messagingTemplate.convertAndSendToUser(
+                position.getUser().getId().toString(),
+                USER_GAME_NOTIFICATIONS_QUEUE,
+                notification
+            ))
+            .toList();
     }
 
     @Transactional
@@ -142,6 +153,42 @@ public class GameNotificationService {
             });
     }
 
+    private SavedNotification saveProjectedNotificationResult(
+        AppUser user,
+        GameSeason season,
+        GameNotificationResponse response
+    ) {
+        return gameNotificationRepository.findByUserIdAndEventKey(user.getId(), response.id())
+            .map(notification -> updateProjectedNotification(notification, response))
+            .orElseGet(() -> new SavedNotification(gameNotificationRepository.save(toEntity(user, season, response)), true));
+    }
+
+    private SavedNotification updateProjectedNotification(
+        GameNotification notification,
+        GameNotificationResponse response
+    ) {
+        Long nextScore = response.highlightScore();
+        Long currentScore = notification.getHighlightScore();
+        if (nextScore == null || (currentScore != null && nextScore <= currentScore)) {
+            return new SavedNotification(notification, false);
+        }
+
+        notification.setNotificationType(response.notificationType());
+        notification.setTitle(response.title());
+        notification.setMessage(response.message());
+        notification.setPositionId(response.positionId());
+        notification.setVideoId(response.videoId());
+        notification.setVideoTitle(response.videoTitle());
+        notification.setChannelTitle(response.channelTitle());
+        notification.setThumbnailUrl(response.thumbnailUrl());
+        notification.setStrategyTags(joinStrategyTags(response.strategyTags()));
+        notification.setHighlightScore(nextScore);
+        notification.setReadAt(null);
+        notification.setDeletedAt(null);
+        notification.setCreatedAt(response.createdAt() != null ? response.createdAt() : Instant.now(clock));
+        return new SavedNotification(gameNotificationRepository.save(notification), true);
+    }
+
     private GameNotification toEntity(AppUser user, GameSeason season, GameNotificationResponse response) {
         GameNotification notification = new GameNotification();
         notification.setUser(user);
@@ -176,8 +223,12 @@ public class GameNotificationService {
             notification.getHighlightScore(),
             notification.getReadAt(),
             notification.getCreatedAt(),
-            true
+            !isProjectedEventKey(notification.getEventKey())
         );
+    }
+
+    private boolean isProjectedEventKey(String eventKey) {
+        return eventKey != null && eventKey.startsWith(PROJECTED_EVENT_PREFIX);
     }
 
     private String joinStrategyTags(List<GameStrategyType> strategyTags) {

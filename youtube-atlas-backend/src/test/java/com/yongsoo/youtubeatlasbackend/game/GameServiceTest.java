@@ -3,6 +3,7 @@ package com.yongsoo.youtubeatlasbackend.game;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -118,25 +119,25 @@ class GameServiceTest {
     }
 
     @Test
-    void getCurrentSeasonIncludesActiveGameNotifications() {
+    void getCurrentSeasonIncludesSettledHighlightNotifications() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
-        GamePosition position = openPosition(
+        GamePosition position = closedPosition(
             season,
             appUser,
-            "video-1",
-            150,
+            300L,
             GamePointCalculator.calculatePricePoints(150),
-            Instant.parse("2026-04-01T05:40:00Z")
+            150,
+            10,
+            Instant.parse("2026-04-01T05:40:00Z"),
+            Instant.parse("2026-04-01T06:00:00Z")
         );
-        TrendSignal signal = signal("video-1", 10, 0);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
         when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of(position));
-        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal));
 
         var response = gameService.getCurrentSeason(authenticatedUser(), "KR");
 
@@ -144,42 +145,41 @@ class GameServiceTest {
         assertThat(response.notifications().get(0).id()).isEqualTo("game-300-MOONSHOT");
         assertThat(response.notifications().get(0).notificationType()).isEqualTo("MOONSHOT");
         assertThat(response.notifications().get(0).title()).isEqualTo("문샷 적중");
-        assertThat(response.notifications().get(0).videoTitle()).isEqualTo("Title video-1");
+        assertThat(response.notifications().get(0).videoTitle()).isEqualTo("Title video-300");
         assertThat(response.notifications().get(0).strategyTags()).contains(GameStrategyType.MOONSHOT);
         assertThat(response.notifications().get(1).notificationType()).isEqualTo("BIG_CASHOUT");
         assertThat(response.notifications().get(2).notificationType()).isEqualTo("SNIPE");
     }
 
     @Test
-    void getNotificationsReturnsCashoutMoonshotAndSnipeAlerts() {
+    void getNotificationsReturnsSettledHighlightAlertsOnly() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
-        GamePosition moonshotPosition = openPosition(
+        GamePosition moonshotPosition = closedPosition(
             season,
             appUser,
-            "video-1",
-            150,
+            300L,
             GamePointCalculator.calculatePricePoints(150),
-            Instant.parse("2026-04-01T05:40:00Z")
+            150,
+            10,
+            Instant.parse("2026-04-01T05:40:00Z"),
+            Instant.parse("2026-04-01T06:00:00Z")
         );
-        GamePosition cashoutPosition = openPosition(
+        GamePosition cashoutPosition = closedPosition(
             season,
             appUser,
-            "video-2",
-            100,
+            301L,
             GamePointCalculator.calculatePricePoints(100),
-            Instant.parse("2026-04-01T05:39:00Z")
+            100,
+            40,
+            Instant.parse("2026-04-01T05:39:00Z"),
+            Instant.parse("2026-04-01T06:01:00Z")
         );
-        ReflectionTestUtils.setField(cashoutPosition, "id", 301L);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
         when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L))
             .thenReturn(List.of(moonshotPosition, cashoutPosition));
-        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1")))
-            .thenReturn(Optional.of(signal("video-1", 10, 0)));
-        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-2")))
-            .thenReturn(Optional.of(signal("video-2", 40, 0)));
 
         var response = gameService.getNotifications(authenticatedUser(), "KR");
 
@@ -188,6 +188,31 @@ class GameServiceTest {
             .containsExactlyInAnyOrder("MOONSHOT", "BIG_CASHOUT", "SNIPE", "SMALL_CASHOUT");
         assertThat(response.stream().filter(notification -> notification.notificationType().equals("SMALL_CASHOUT")).findFirst())
             .hasValueSatisfying(notification -> assertThat(notification.title()).isEqualTo("스몰 캐시아웃"));
+    }
+
+    @Test
+    void getNotificationsSkipsProjectedOpenPositionAlerts() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GamePosition openPosition = openPosition(
+            season,
+            appUser,
+            "video-1",
+            150,
+            GamePointCalculator.calculatePricePoints(150),
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L))
+            .thenReturn(List.of(openPosition));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1")))
+            .thenReturn(Optional.of(signal("video-1", 10, 0)));
+
+        var response = gameService.getNotifications(authenticatedUser(), "KR");
+
+        assertThat(response).isEmpty();
     }
 
     @Test
@@ -379,7 +404,7 @@ class GameServiceTest {
         List<GameSeasonCoinTier> tiers = List.of(bronzeTier, diamondTier, masterTier);
 
         when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
-        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of());
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of(position));
         when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
         when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
         when(gamePositionRepository.save(position)).thenReturn(position);
@@ -554,6 +579,273 @@ class GameServiceTest {
         assertThat(thirdPosition.getStatus()).isEqualTo(PositionStatus.OPEN);
         assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints);
         assertThat(wallet.getBalancePoints()).isEqualTo((10_000L - (buyPricePoints * 3)) + (settledPoints * 2));
+    }
+
+    @Test
+    void partialSellKeepsOriginalPositionLineageForHighlightScoring() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long unitBuyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        long totalBuyPricePoints = GamePointCalculator.calculatePositionPoints(unitBuyPricePoints, TWO_SHARES);
+        GameWallet wallet = wallet(season, appUser, 20_000L - totalBuyPricePoints, totalBuyPricePoints, 0L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            170,
+            totalBuyPricePoints,
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+        position.setQuantity(TWO_SHARES);
+        ReflectionTestUtils.setField(position, "id", 301L);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(301L, 7L)).thenReturn(Optional.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1")))
+            .thenReturn(Optional.of(signal("video-1", 120, 0)));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of(position));
+        when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        gameService.sell(authenticatedUser(), new SellPositionsRequest("KR", 301L, null, ONE_SHARE));
+
+        verify(gamePositionRepository).save(argThat(savedPosition ->
+            savedPosition != position
+                && Long.valueOf(301L).equals(savedPosition.getOriginPositionId())
+                && savedPosition.getStatus() == PositionStatus.CLOSED
+        ));
+    }
+
+    @Test
+    void splitSellPushesHighlightNotificationWhenSellSetsNewRecordedHighScore() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long unitBuyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        long totalBuyPricePoints = GamePointCalculator.calculatePositionPoints(unitBuyPricePoints, TWO_SHARES);
+        GameWallet wallet = wallet(season, appUser, 20_000L - totalBuyPricePoints, totalBuyPricePoints, 0L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            170,
+            totalBuyPricePoints,
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+        position.setQuantity(TWO_SHARES);
+        ReflectionTestUtils.setField(position, "id", 301L);
+
+        java.util.concurrent.atomic.AtomicReference<GamePosition> closedSplitRef = new java.util.concurrent.atomic.AtomicReference<>();
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(301L, 7L)).thenReturn(Optional.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(
+            Optional.of(signal("video-1", 110, 0)),
+            Optional.of(signal("video-1", 120, 0))
+        );
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenAnswer(invocation -> {
+            GamePosition closedSplit = closedSplitRef.get();
+            if (closedSplit == null) {
+                return List.of(position);
+            }
+
+            if (position.getStatus() == PositionStatus.OPEN) {
+                return List.of(closedSplit, position);
+            }
+
+            return List.of(position, closedSplit);
+        });
+        when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> {
+            GamePosition savedPosition = invocation.getArgument(0, GamePosition.class);
+            if (savedPosition != position && savedPosition.getId() == null) {
+                ReflectionTestUtils.setField(savedPosition, "id", 302L);
+                closedSplitRef.set(savedPosition);
+            }
+            return savedPosition;
+        });
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        gameService.sell(authenticatedUser(), new SellPositionsRequest("KR", 301L, null, ONE_SHARE));
+        gameService.sell(authenticatedUser(), 301L);
+
+        verify(gameNotificationService, org.mockito.Mockito.times(1))
+            .createAndPush(
+                org.mockito.ArgumentMatchers.eq(appUser),
+                org.mockito.ArgumentMatchers.eq(season),
+                org.mockito.ArgumentMatchers.argThat(notifications ->
+                    notifications.stream().anyMatch(notification ->
+                        "game-302-SMALL_CASHOUT".equals(notification.id())
+                    )
+                )
+            );
+    }
+
+    @Test
+    void publishProjectedHighlightNotificationsPushesWhenProjectedScoreBeatsRecordedHighScore() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GamePosition openPosition = openPosition(
+            season,
+            appUser,
+            "video-1",
+            150,
+            GamePointCalculator.calculatePricePoints(150),
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+        GamePosition settledPosition = closedPosition(
+            season,
+            appUser,
+            301L,
+            GamePointCalculator.calculatePricePoints(150),
+            150,
+            60,
+            Instant.parse("2026-04-01T05:20:00Z"),
+            Instant.parse("2026-04-01T05:30:00Z")
+        );
+        settledPosition.setOriginPositionId(300L);
+        openPosition.setOriginPositionId(300L);
+        ReflectionTestUtils.setField(openPosition, "id", 300L);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gamePositionRepository.findBySeasonId(1L)).thenReturn(List.of(openPosition, settledPosition));
+        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(openPosition));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
+            .thenReturn(List.of(signal("video-1", 10, 0)));
+
+        gameService.publishProjectedHighlightNotifications("KR");
+
+        verify(gameNotificationService).createAndPushPositionSnapshot(
+            org.mockito.ArgumentMatchers.eq(openPosition),
+            org.mockito.ArgumentMatchers.eq(10),
+            org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.any(Instant.class)
+        );
+    }
+
+    @Test
+    void calculateSettledUserHighlightScoreCountsSplitPositionOnlyOnce() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GamePosition firstSplit = closedPosition(
+            season,
+            appUser,
+            301L,
+            900L,
+            170,
+            120,
+            Instant.parse("2026-04-01T05:40:00Z"),
+            Instant.parse("2026-04-01T06:00:00Z")
+        );
+        firstSplit.setOriginPositionId(300L);
+        GamePosition secondSplit = closedPosition(
+            season,
+            appUser,
+            302L,
+            900L,
+            170,
+            110,
+            Instant.parse("2026-04-01T05:40:00Z"),
+            Instant.parse("2026-04-01T06:05:00Z")
+        );
+        secondSplit.setOriginPositionId(300L);
+        GamePosition standalone = closedPosition(
+            season,
+            appUser,
+            303L,
+            900L,
+            160,
+            100,
+            Instant.parse("2026-04-01T05:30:00Z"),
+            Instant.parse("2026-04-01T06:10:00Z")
+        );
+
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L))
+            .thenReturn(List.of(secondSplit, firstSplit, standalone));
+
+        long firstSplitScore = highlightScore(firstSplit);
+        long secondSplitScore = highlightScore(secondSplit);
+        long standaloneScore = highlightScore(standalone);
+
+        assertThat(gameService.calculateSettledUserHighlightScore(1L, 7L))
+            .isEqualTo(Math.max(firstSplitScore, secondSplitScore) + standaloneScore);
+    }
+
+    @Test
+    void getHighlightsKeepsOnlyBestSplitHighlightPerOriginPosition() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GamePosition firstSplit = closedPosition(
+            season,
+            appUser,
+            301L,
+            900L,
+            170,
+            120,
+            Instant.parse("2026-04-01T05:40:00Z"),
+            Instant.parse("2026-04-01T06:00:00Z")
+        );
+        firstSplit.setOriginPositionId(300L);
+        GamePosition secondSplit = closedPosition(
+            season,
+            appUser,
+            302L,
+            900L,
+            170,
+            110,
+            Instant.parse("2026-04-01T05:40:00Z"),
+            Instant.parse("2026-04-01T06:05:00Z")
+        );
+        secondSplit.setOriginPositionId(300L);
+        GamePosition standalone = closedPosition(
+            season,
+            appUser,
+            303L,
+            900L,
+            160,
+            100,
+            Instant.parse("2026-04-01T05:30:00Z"),
+            Instant.parse("2026-04-01T06:10:00Z")
+        );
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L))
+            .thenReturn(List.of(secondSplit, firstSplit, standalone));
+
+        var response = gameService.getHighlights(authenticatedUser(), "KR");
+
+        assertThat(response).hasSize(2);
+        assertThat(response).extracting(highlight -> highlight.positionId())
+            .containsExactly(303L, 302L);
+    }
+
+    @Test
+    void getHighlightsExcludesOpenPositions() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GamePosition openPosition = openPosition(
+            season,
+            appUser,
+            "video-1",
+            150,
+            GamePointCalculator.calculatePricePoints(150),
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L))
+            .thenReturn(List.of(openPosition));
+
+        var response = gameService.getHighlights(authenticatedUser(), "KR");
+
+        assertThat(response).isEmpty();
     }
 
     @Test
@@ -1721,6 +2013,36 @@ class GameServiceTest {
         position.setStatus(PositionStatus.OPEN);
         position.setCreatedAt(createdAt);
         return position;
+    }
+
+    private GamePosition closedPosition(
+        GameSeason season,
+        AppUser appUser,
+        Long positionId,
+        long stakePoints,
+        int buyRank,
+        int sellRank,
+        Instant createdAt,
+        Instant closedAt
+    ) {
+        GamePosition position = openPosition(season, appUser, "video-" + positionId, buyRank, stakePoints, createdAt);
+        ReflectionTestUtils.setField(position, "id", positionId);
+        long sellPricePoints = GamePointCalculator.calculatePricePoints(sellRank);
+        long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
+        position.setStatus(PositionStatus.CLOSED);
+        position.setSellRunId(55L);
+        position.setSellRank(sellRank);
+        position.setSellCapturedAt(closedAt);
+        position.setRankDiff(buyRank - sellRank);
+        position.setPnlPoints(GamePointCalculator.calculateProfitPoints(stakePoints, settledPoints));
+        position.setSettledPoints(settledPoints);
+        position.setClosedAt(closedAt);
+        return position;
+    }
+
+    private long highlightScore(GamePosition position) {
+        Object highlight = ReflectionTestUtils.invokeMethod(gameService, "toSettledGameHighlightResponse", position);
+        return GameService.calculateHighlightScore((com.yongsoo.youtubeatlasbackend.game.api.GameHighlightResponse) highlight);
     }
 
     private TrendSignal signal(String videoId, int currentRank, int rankChange) {

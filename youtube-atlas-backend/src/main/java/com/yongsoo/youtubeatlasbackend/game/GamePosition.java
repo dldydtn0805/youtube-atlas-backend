@@ -59,6 +59,9 @@ public class GamePosition {
     @Column(name = "buy_captured_at", nullable = false)
     private Instant buyCapturedAt;
 
+    @Column(name = "origin_position_id")
+    private Long originPositionId;
+
     @Column(name = "stake_points", nullable = false)
     private Long stakePoints;
 
@@ -183,6 +186,14 @@ public class GamePosition {
 
     public void setBuyCapturedAt(Instant buyCapturedAt) {
         this.buyCapturedAt = buyCapturedAt;
+    }
+
+    public Long getOriginPositionId() {
+        return originPositionId;
+    }
+
+    public void setOriginPositionId(Long originPositionId) {
+        this.originPositionId = originPositionId;
     }
 
     public Long getStakePoints() {

@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
+import com.yongsoo.youtubeatlasbackend.game.GameService;
 import com.yongsoo.youtubeatlasbackend.trending.api.NewChartEntriesResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.RealtimeSurgingResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.SyncTrendingRequest;
@@ -63,19 +64,22 @@ public class TrendingService {
     private final TrendRunRepository trendRunRepository;
     private final TrendSnapshotRepository trendSnapshotRepository;
     private final TrendSignalRepository trendSignalRepository;
+    private final GameService gameService;
 
     public TrendingService(
         AtlasProperties atlasProperties,
         YouTubeCatalogService youTubeCatalogService,
         TrendRunRepository trendRunRepository,
         TrendSnapshotRepository trendSnapshotRepository,
-        TrendSignalRepository trendSignalRepository
+        TrendSignalRepository trendSignalRepository,
+        GameService gameService
     ) {
         this.atlasProperties = atlasProperties;
         this.youTubeCatalogService = youTubeCatalogService;
         this.trendRunRepository = trendRunRepository;
         this.trendSnapshotRepository = trendSnapshotRepository;
         this.trendSignalRepository = trendSignalRepository;
+        this.gameService = gameService;
     }
 
     @Transactional(readOnly = true)
@@ -466,6 +470,8 @@ public class TrendingService {
             signal.setUpdatedAt(now);
             trendSignalRepository.save(signal);
         }
+
+        gameService.publishProjectedHighlightNotifications(regionCode);
 
         purgeExpiredRuns(regionCode, categoryId, now);
 

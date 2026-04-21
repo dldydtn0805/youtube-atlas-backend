@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
+import com.yongsoo.youtubeatlasbackend.game.GameService;
 import com.yongsoo.youtubeatlasbackend.trending.api.SyncTrendingRequest;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeCatalogService;
 import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategoryResponse;
@@ -33,6 +34,7 @@ class TrendingServiceTest {
     private TrendRunRepository trendRunRepository;
     private TrendSnapshotRepository trendSnapshotRepository;
     private TrendSignalRepository trendSignalRepository;
+    private GameService gameService;
     private TrendingService trendingService;
 
     @BeforeEach
@@ -41,6 +43,7 @@ class TrendingServiceTest {
         trendRunRepository = org.mockito.Mockito.mock(TrendRunRepository.class);
         trendSnapshotRepository = org.mockito.Mockito.mock(TrendSnapshotRepository.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
+        gameService = org.mockito.Mockito.mock(GameService.class);
 
         AtlasProperties atlasProperties = new AtlasProperties();
         atlasProperties.getTrending().setCaptureSlotMinutes(5);
@@ -56,7 +59,8 @@ class TrendingServiceTest {
             youTubeCatalogService,
             trendRunRepository,
             trendSnapshotRepository,
-            trendSignalRepository
+            trendSignalRepository,
+            gameService
         );
     }
 

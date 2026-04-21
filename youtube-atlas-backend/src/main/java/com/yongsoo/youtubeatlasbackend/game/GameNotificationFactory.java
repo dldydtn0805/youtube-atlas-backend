@@ -47,14 +47,13 @@ final class GameNotificationFactory {
         }
 
         int rankDiff = position.getBuyRank() - currentRank;
-        long highlightScore = GameService.calculateProjectedPositionHighlightScore(
+        long projectedHighlightScore = GameService.calculateProjectedPositionHighlightScore(
             position.getBuyRank(),
             rankDiff,
             profitRatePercent,
             profitPoints,
             strategyTags
         );
-
         return strategyTags.stream()
             .map(strategyType -> fromPositionSnapshot(
                 position,
@@ -62,7 +61,7 @@ final class GameNotificationFactory {
                 rankDiff,
                 profitRatePercent,
                 strategyTags,
-                highlightScore,
+                projectedHighlightScore,
                 createdAt,
                 strategyType
             ))
@@ -122,25 +121,25 @@ final class GameNotificationFactory {
         int rankDiff,
         Double profitRatePercent,
         List<GameStrategyType> strategyTags,
-        long highlightScore,
+        long projectedHighlightScore,
         Instant createdAt,
         GameStrategyType strategyType
     ) {
         return new GameNotificationResponse(
-            resolveId(position.getId(), strategyType),
+            resolveProjectedId(position.getId(), strategyType),
             strategyType.name(),
-            resolveTitle(strategyType),
-            resolveMessage(position.getBuyRank(), currentRank, rankDiff, profitRatePercent, strategyType),
+            resolveProjectedTitle(strategyType),
+            resolveProjectedMessage(position.getBuyRank(), currentRank, rankDiff, profitRatePercent, strategyType),
             position.getId(),
             position.getVideoId(),
             position.getTitle(),
             position.getChannelTitle(),
             position.getThumbnailUrl(),
             strategyTags,
-            highlightScore,
+            projectedHighlightScore,
             null,
             createdAt,
-            true
+            false
         );
     }
 
@@ -152,12 +151,25 @@ final class GameNotificationFactory {
         return "tier-promotion-" + seasonId + "-" + tierCode;
     }
 
+    private static String resolveProjectedId(Long positionId, GameStrategyType strategyType) {
+        return "projected-game-" + positionId + "-" + strategyType.name();
+    }
+
     private static String resolveTitle(GameStrategyType strategyType) {
         return switch (strategyType) {
             case MOONSHOT -> "문샷 적중";
             case BIG_CASHOUT -> "빅 캐시아웃";
             case SMALL_CASHOUT -> "스몰 캐시아웃";
             case SNIPE -> "스나이프 성공";
+        };
+    }
+
+    private static String resolveProjectedTitle(GameStrategyType strategyType) {
+        return switch (strategyType) {
+            case MOONSHOT -> "문샷 예상";
+            case BIG_CASHOUT -> "빅 캐시아웃 예상";
+            case SMALL_CASHOUT -> "스몰 캐시아웃 예상";
+            case SNIPE -> "스나이프 예상";
         };
     }
 
@@ -173,5 +185,16 @@ final class GameNotificationFactory {
             case BIG_CASHOUT, SMALL_CASHOUT -> "수익률 " + profitRatePercent + "% 플레이가 기록됐습니다.";
             case SNIPE -> buyRank + "위에서 진입해 " + rankDiff + "계단을 앞질렀습니다.";
         };
+    }
+
+    private static String resolveProjectedMessage(
+        Integer buyRank,
+        Integer highlightRank,
+        Integer rankDiff,
+        Double profitRatePercent,
+        GameStrategyType strategyType
+    ) {
+        return resolveMessage(buyRank, highlightRank, rankDiff, profitRatePercent, strategyType)
+            + " 매도 시 하이라이트 점수로 확정됩니다.";
     }
 }
