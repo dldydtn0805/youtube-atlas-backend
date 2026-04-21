@@ -92,6 +92,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return new RateLimitPolicy("comment", rateLimit.getCommentPerMinute());
         }
 
+        if ("POST".equalsIgnoreCase(method) && isTradePreviewPath(path)) {
+            return new RateLimitPolicy("preview", rateLimit.getPreviewPerMinute());
+        }
+
         if ("POST".equalsIgnoreCase(method) && isTradePath(path)) {
             return new RateLimitPolicy("trade", rateLimit.getTradePerMinute());
         }
@@ -107,6 +111,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return "/api/game/positions".equals(path)
             || "/api/game/positions/sell".equals(path)
             || (path.startsWith("/api/game/positions/") && path.endsWith("/sell"));
+    }
+
+    private boolean isTradePreviewPath(String path) {
+        return "/api/game/positions/sell-preview".equals(path);
     }
 
     private String resolveClientIp(HttpServletRequest request) {

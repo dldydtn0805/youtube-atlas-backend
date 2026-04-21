@@ -27,6 +27,7 @@ class RateLimitFilterTest {
         atlasProperties.getRateLimit().setLoginPerMinute(1);
         atlasProperties.getRateLimit().setCommentPerMinute(1);
         atlasProperties.getRateLimit().setTradePerMinute(1);
+        atlasProperties.getRateLimit().setPreviewPerMinute(1);
         atlasProperties.getRateLimit().setSensitivePerMinute(1);
         rateLimitFilter = new RateLimitFilter(
             atlasProperties,
@@ -112,6 +113,17 @@ class RateLimitFilterTest {
 
         assertThat(firstResponse.getStatus()).isEqualTo(200);
         assertThat(secondResponse.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void rateLimitsSellPreviewSeparatelyFromTradeRequests() throws Exception {
+        MockHttpServletResponse tradeResponse = doRequest("POST", "/api/game/positions/sell", "203.0.113.60");
+        MockHttpServletResponse firstPreviewResponse = doRequest("POST", "/api/game/positions/sell-preview", "203.0.113.60");
+        MockHttpServletResponse secondPreviewResponse = doRequest("POST", "/api/game/positions/sell-preview", "203.0.113.60");
+
+        assertThat(tradeResponse.getStatus()).isEqualTo(200);
+        assertThat(firstPreviewResponse.getStatus()).isEqualTo(200);
+        assertThat(secondPreviewResponse.getStatus()).isEqualTo(429);
     }
 
     private MockHttpServletResponse doRequest(String method, String path, String remoteAddr) throws Exception {

@@ -399,6 +399,7 @@ public class AtlasProperties {
         private int loginPerMinute = 10;
         private int commentPerMinute = 20;
         private int tradePerMinute = 60;
+        private int previewPerMinute = 180;
         private int sensitivePerMinute = 5;
         private long maxTrackedClients = 10_000L;
         private boolean trustForwardedHeaders;
@@ -441,6 +442,14 @@ public class AtlasProperties {
 
         public void setTradePerMinute(int tradePerMinute) {
             this.tradePerMinute = tradePerMinute;
+        }
+
+        public int getPreviewPerMinute() {
+            return previewPerMinute;
+        }
+
+        public void setPreviewPerMinute(int previewPerMinute) {
+            this.previewPerMinute = previewPerMinute;
         }
 
         public int getSensitivePerMinute() {
