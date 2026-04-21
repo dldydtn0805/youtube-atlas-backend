@@ -6,10 +6,12 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -96,6 +98,7 @@ public class GameService {
     private final GameSeasonRepository gameSeasonRepository;
     private final GameWalletRepository gameWalletRepository;
     private final GamePositionRepository gamePositionRepository;
+    private final GameHighlightStateRepository gameHighlightStateRepository;
     private final GameLedgerRepository gameLedgerRepository;
     private final GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
     private final GameCoinTierService gameCoinTierService;
@@ -114,6 +117,7 @@ public class GameService {
         GameSeasonRepository gameSeasonRepository,
         GameWalletRepository gameWalletRepository,
         GamePositionRepository gamePositionRepository,
+        GameHighlightStateRepository gameHighlightStateRepository,
         GameLedgerRepository gameLedgerRepository,
         GameSeasonCoinResultRepository gameSeasonCoinResultRepository,
         GameCoinTierService gameCoinTierService,
@@ -129,6 +133,7 @@ public class GameService {
         this.gameSeasonRepository = gameSeasonRepository;
         this.gameWalletRepository = gameWalletRepository;
         this.gamePositionRepository = gamePositionRepository;
+        this.gameHighlightStateRepository = gameHighlightStateRepository;
         this.gameLedgerRepository = gameLedgerRepository;
         this.gameSeasonCoinResultRepository = gameSeasonCoinResultRepository;
         this.gameCoinTierService = gameCoinTierService;
@@ -532,16 +537,17 @@ public class GameService {
             season.getId(),
             PositionStatus.OPEN
         ).stream().collect(Collectors.groupingBy(position -> position.getUser().getId()));
-        Map<Long, List<GameHighlightResponse>> highlightsByUserId = gamePositionRepository.findBySeasonId(season.getId())
+        List<GameWallet> wallets = gameWalletRepository.findBySeasonId(season.getId());
+        wallets.forEach(wallet -> ensureHighlightStatesBackfilled(season, wallet.getUser().getId()));
+        Map<Long, List<GameHighlightResponse>> highlightsByUserId = gameHighlightStateRepository
+            .findBySeasonIdAndBestSettledHighlightScoreGreaterThan(season.getId(), 0L)
             .stream()
-            .map(position -> new UserHighlight(position.getUser().getId(), toSettledGameHighlightResponse(position)))
-            .filter(entry -> entry.highlight() != null)
             .collect(Collectors.groupingBy(
-                UserHighlight::userId,
-                Collectors.mapping(UserHighlight::highlight, Collectors.toList())
+                state -> state.getUser().getId(),
+                Collectors.mapping(this::toStoredHighlightResponse, Collectors.toList())
             ));
 
-        List<LeaderboardSnapshot> snapshots = gameWalletRepository.findBySeasonId(season.getId()).stream()
+        List<LeaderboardSnapshot> snapshots = wallets.stream()
             .map(wallet -> toLeaderboardSnapshot(
                 wallet,
                 openPositionsByUserId.getOrDefault(wallet.getUser().getId(), List.of()),
@@ -1086,22 +1092,147 @@ public class GameService {
     }
 
     private List<GameNotificationResponse> buildGeneratedNotifications(GameSeason season, Long userId) {
-        return buildSettledHighlights(season, userId).stream()
-            .flatMap(highlight -> GameNotificationFactory.fromHighlight(highlight).stream())
-            .toList();
+        return List.of();
     }
 
     private List<GameHighlightResponse> buildSettledHighlights(GameSeason season, Long userId) {
-        return buildHighlightResponses(
-            gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(season.getId(), userId),
-            this::toSettledGameHighlightResponse
-        ).stream()
+        ensureHighlightStatesBackfilled(season, userId);
+        return gameHighlightStateRepository
+            .findBySeasonIdAndUserIdAndBestSettledHighlightScoreGreaterThanOrderByBestSettledCreatedAtDesc(
+                season.getId(),
+                userId,
+                0L
+            ).stream()
+            .map(this::toStoredHighlightResponse)
             .sorted(
                 Comparator
                     .comparing(GameHighlightResponse::createdAt, Comparator.nullsLast(Comparator.reverseOrder()))
                     .thenComparing(GameHighlightResponse::positionId, Comparator.nullsLast(Comparator.reverseOrder()))
             )
             .toList();
+    }
+
+    private GameHighlightResponse toStoredHighlightResponse(GameHighlightState state) {
+        return new GameHighlightResponse(
+            state.getBestSettledPositionId() + "-" + state.getBestSettledHighlightType(),
+            state.getBestSettledHighlightType(),
+            state.getBestSettledTitle(),
+            state.getBestSettledDescription(),
+            state.getBestSettledPositionId(),
+            state.getVideoId(),
+            state.getVideoTitle(),
+            state.getChannelTitle(),
+            state.getThumbnailUrl(),
+            state.getBuyRank(),
+            state.getHighlightRank(),
+            state.getSellRank(),
+            state.getRankDiff(),
+            state.getQuantity(),
+            state.getStakePoints(),
+            state.getCurrentPricePoints(),
+            state.getProfitPoints(),
+            state.getProfitRatePercent(),
+            parseStoredStrategyTags(state.getStrategyTags()),
+            state.getBestSettledHighlightScore(),
+            PositionStatus.CLOSED.name(),
+            state.getBestSettledCreatedAt()
+        );
+    }
+
+    private List<GameStrategyType> parseStoredStrategyTags(String strategyTags) {
+        if (!StringUtils.hasText(strategyTags)) {
+            return List.of();
+        }
+
+        return java.util.Arrays.stream(strategyTags.split(","))
+            .map(String::trim)
+            .filter(StringUtils::hasText)
+            .map(GameStrategyType::valueOf)
+            .toList();
+    }
+
+    private String serializeStrategyTags(List<GameStrategyType> strategyTags) {
+        if (strategyTags == null || strategyTags.isEmpty()) {
+            return null;
+        }
+
+        return strategyTags.stream()
+            .map(Enum::name)
+            .collect(Collectors.joining(","));
+    }
+
+    private void ensureHighlightStatesBackfilled(GameSeason season, Long userId) {
+        ensureHighlightStatesBackfilled(
+            season,
+            userId,
+            gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(season.getId(), userId)
+        );
+    }
+
+    private void ensureHighlightStatesBackfilled(GameSeason season, Long userId, List<GamePosition> positions) {
+        List<GamePosition> closedPositions = positions.stream()
+            .filter(position -> position.getStatus() == PositionStatus.CLOSED)
+            .toList();
+        if (closedPositions.isEmpty()) {
+            return;
+        }
+
+        Set<Long> existingRootIds = gameHighlightStateRepository.findBySeasonIdAndUserId(season.getId(), userId).stream()
+            .map(GameHighlightState::getRootPositionId)
+            .collect(Collectors.toCollection(HashSet::new));
+
+        AppUser user = closedPositions.get(0).getUser();
+        List<GameHighlightState> missingStates = buildHighlightResponsesByRootId(closedPositions, this::toSettledGameHighlightResponse)
+            .entrySet()
+            .stream()
+            .filter(entry -> !existingRootIds.contains(entry.getKey()))
+            .map(entry -> createStoredHighlightState(season, user, entry.getKey(), entry.getValue()))
+            .toList();
+
+        if (!missingStates.isEmpty()) {
+            gameHighlightStateRepository.saveAll(missingStates);
+        }
+    }
+
+    private GameHighlightState createStoredHighlightState(
+        GameSeason season,
+        AppUser user,
+        Long rootPositionId,
+        GameHighlightResponse highlight
+    ) {
+        Instant now = Instant.now(clock);
+        GameHighlightState state = new GameHighlightState();
+        state.setSeason(season);
+        state.setUser(user);
+        state.setRootPositionId(rootPositionId);
+        state.setCreatedAt(now);
+        state.setUpdatedAt(now);
+        applyStoredHighlight(state, highlight);
+        return state;
+    }
+
+    private void applyStoredHighlight(GameHighlightState state, GameHighlightResponse highlight) {
+        state.setBestSettledPositionId(highlight.positionId());
+        state.setBestSettledHighlightType(highlight.highlightType());
+        state.setBestSettledTitle(highlight.title());
+        state.setBestSettledDescription(highlight.description());
+        state.setVideoId(highlight.videoId());
+        state.setVideoTitle(highlight.videoTitle());
+        state.setChannelTitle(highlight.channelTitle());
+        state.setThumbnailUrl(highlight.thumbnailUrl());
+        state.setBuyRank(highlight.buyRank());
+        state.setHighlightRank(highlight.highlightRank());
+        state.setSellRank(highlight.sellRank());
+        state.setRankDiff(highlight.rankDiff());
+        state.setQuantity(highlight.quantity());
+        state.setStakePoints(highlight.stakePoints());
+        state.setCurrentPricePoints(highlight.currentPricePoints());
+        state.setProfitPoints(highlight.profitPoints());
+        state.setProfitRatePercent(highlight.profitRatePercent());
+        state.setStrategyTags(serializeStrategyTags(highlight.strategyTags()));
+        state.setBestSettledHighlightScore(calculateHighlightScore(highlight));
+        state.setBestSettledCreatedAt(highlight.createdAt());
+        state.setUpdatedAt(Instant.now(clock));
     }
 
     private WalletResponse toWalletResponse(GameWallet wallet) {
@@ -1571,18 +1702,18 @@ public class GameService {
     }
 
     private long calculateUserHighlightScore(Long seasonId, Long userId) {
-        return gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(seasonId, userId).stream()
-            .map(position -> new PositionHighlightScore(position, toSettledGameHighlightResponse(position)))
-            .filter(positionHighlight -> positionHighlight.highlight() != null)
-            .collect(Collectors.toMap(
-                positionHighlight -> resolvePositionScoreRootId(positionHighlight.position()),
-                positionHighlight -> calculateHighlightScore(positionHighlight.highlight()),
-                Math::max,
-                LinkedHashMap::new
-            ))
-            .values()
-            .stream()
-            .mapToLong(Long::longValue)
+        List<GamePosition> positions = gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(seasonId, userId);
+        if (!positions.isEmpty()) {
+            ensureHighlightStatesBackfilled(positions.get(0).getSeason(), userId, positions);
+        }
+
+        return gameHighlightStateRepository
+            .findBySeasonIdAndUserIdAndBestSettledHighlightScoreGreaterThanOrderByBestSettledCreatedAtDesc(
+                seasonId,
+                userId,
+                0L
+            ).stream()
+            .mapToLong(GameHighlightState::getBestSettledHighlightScore)
             .sum();
     }
 
@@ -1943,6 +2074,7 @@ public class GameService {
         GameWallet wallet,
         Instant now
     ) {
+        ensureHighlightStatesBackfilled(position.getSeason(), position.getUser().getId());
         long previousHighlightScore = calculateUserHighlightScore(position.getSeason().getId(), position.getUser().getId());
         int rankDiff = position.getBuyRank() - sellSnapshot.rank();
         long unitStakePoints = resolveUnitStakePoints(position);
@@ -1989,7 +2121,7 @@ public class GameService {
             wallet.getBalancePoints(),
             now
         );
-        createHighScoreHighlightNotification(settledPosition);
+        publishHighScoreHighlightNotification(settledPosition);
         publishTierPromotionIfNeeded(settledPosition, previousHighlightScore);
 
         return new SellPositionResponse(
@@ -2008,25 +2140,25 @@ public class GameService {
         );
     }
 
-    private void createHighScoreHighlightNotification(GamePosition settledPosition) {
-        List<GamePosition> userPositions = gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(
-            settledPosition.getSeason().getId(),
-            settledPosition.getUser().getId()
-        );
+    private void publishHighScoreHighlightNotification(GamePosition settledPosition) {
         GameHighlightResponse currentHighlight = toSettledGameHighlightResponse(settledPosition);
         if (currentHighlight == null) {
             return;
         }
 
-        long previousBestScore = resolveBestSettledHighlightScoreForRoot(
-            userPositions,
-            resolvePositionScoreRootId(settledPosition),
-            settledPosition.getId()
+        GameHighlightState state = findOrCreateHighlightStateForUpdate(
+            settledPosition.getSeason(),
+            settledPosition.getUser(),
+            resolvePositionScoreRootId(settledPosition)
         );
+        long previousBestScore = state.getBestSettledHighlightScore();
         long currentScore = calculateHighlightScore(currentHighlight);
         if (currentScore <= previousBestScore) {
             return;
         }
+
+        applyStoredHighlight(state, currentHighlight);
+        gameHighlightStateRepository.save(state);
 
         gameNotificationService.createAndPush(
             settledPosition.getUser(),
@@ -2045,21 +2177,18 @@ public class GameService {
             return;
         }
 
-        Map<Long, List<GamePosition>> positionsByUserId = gamePositionRepository.findBySeasonId(season.getId()).stream()
-            .collect(Collectors.groupingBy(position -> position.getUser().getId()));
         Map<String, TrendSignal> signalsByVideoId = trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
             season.getRegionCode(),
             TRENDING_CATEGORY_ID
         ).stream().collect(Collectors.toMap(signal -> signal.getId().getVideoId(), Function.identity()));
 
         gamePositionRepository.findBySeasonIdAndStatus(season.getId(), PositionStatus.OPEN).forEach(position ->
-            publishProjectedHighlightNotification(position, positionsByUserId.getOrDefault(position.getUser().getId(), List.of()), signalsByVideoId)
+            publishProjectedHighlightNotification(position, signalsByVideoId)
         );
     }
 
     private void publishProjectedHighlightNotification(
         GamePosition position,
-        List<GamePosition> userPositions,
         Map<String, TrendSignal> signalsByVideoId
     ) {
         TrendSignal signal = signalsByVideoId.get(position.getVideoId());
@@ -2085,14 +2214,20 @@ public class GameService {
             return;
         }
 
-        long bestSettledScore = resolveBestSettledHighlightScoreForRoot(
-            userPositions,
-            resolvePositionScoreRootId(position),
-            null
+        ensureHighlightStatesBackfilled(position.getSeason(), position.getUser().getId());
+        GameHighlightState state = findOrCreateHighlightStateForUpdate(
+            position.getSeason(),
+            position.getUser(),
+            resolvePositionScoreRootId(position)
         );
-        if (projectedScore <= bestSettledScore) {
+        if (projectedScore <= state.getBestSettledHighlightScore()
+            || projectedScore <= state.getBestProjectedNotificationScore()) {
             return;
         }
+
+        state.setBestProjectedNotificationScore(projectedScore);
+        state.setUpdatedAt(Instant.now(clock));
+        gameHighlightStateRepository.save(state);
 
         gameNotificationService.createAndPushPositionSnapshot(
             position,
@@ -2102,19 +2237,32 @@ public class GameService {
         );
     }
 
-    private long resolveBestSettledHighlightScoreForRoot(
-        List<GamePosition> userPositions,
-        Long scoreRootId,
-        Long excludedPositionId
-    ) {
-        return userPositions.stream()
-            .filter(position -> excludedPositionId == null || !Objects.equals(position.getId(), excludedPositionId))
-            .filter(position -> Objects.equals(resolvePositionScoreRootId(position), scoreRootId))
-            .map(this::toSettledGameHighlightResponse)
-            .filter(Objects::nonNull)
-            .mapToLong(GameService::calculateHighlightScore)
-            .max()
-            .orElse(0L);
+    private GameHighlightState findOrCreateHighlightStateForUpdate(GameSeason season, AppUser user, Long rootPositionId) {
+        return gameHighlightStateRepository.findBySeasonIdAndUserIdAndRootPositionIdForUpdate(
+                season.getId(),
+                user.getId(),
+                rootPositionId
+            )
+            .orElseGet(() -> createHighlightStateForUpdate(season, user, rootPositionId));
+    }
+
+    private GameHighlightState createHighlightStateForUpdate(GameSeason season, AppUser user, Long rootPositionId) {
+        Instant now = Instant.now(clock);
+        GameHighlightState state = new GameHighlightState();
+        state.setSeason(season);
+        state.setUser(user);
+        state.setRootPositionId(rootPositionId);
+        state.setCreatedAt(now);
+        state.setUpdatedAt(now);
+        try {
+            return gameHighlightStateRepository.save(state);
+        } catch (DataIntegrityViolationException exception) {
+            return gameHighlightStateRepository.findBySeasonIdAndUserIdAndRootPositionIdForUpdate(
+                season.getId(),
+                user.getId(),
+                rootPositionId
+            ).orElseThrow(() -> exception);
+        }
     }
 
     private void publishTierPromotionIfNeeded(GamePosition settledPosition, long previousHighlightScore) {
@@ -2478,9 +2626,6 @@ public class GameService {
     }
 
     private record HighlightDefinition(String highlightType, String title, String description) {
-    }
-
-    private record UserHighlight(Long userId, GameHighlightResponse highlight) {
     }
 
     private record LatestTrendRun(TrendRun run, List<TrendSnapshot> snapshots) {

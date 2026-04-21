@@ -157,10 +157,10 @@ final class GameNotificationFactory {
 
     private static String resolveTitle(GameStrategyType strategyType) {
         return switch (strategyType) {
-            case MOONSHOT -> "문샷 적중";
-            case BIG_CASHOUT -> "빅 캐시아웃";
-            case SMALL_CASHOUT -> "스몰 캐시아웃";
-            case SNIPE -> "스나이프 성공";
+            case MOONSHOT -> "문샷 기록";
+            case BIG_CASHOUT -> "빅 캐시아웃 기록";
+            case SMALL_CASHOUT -> "스몰 캐시아웃 기록";
+            case SNIPE -> "스나이프 기록";
         };
     }
 

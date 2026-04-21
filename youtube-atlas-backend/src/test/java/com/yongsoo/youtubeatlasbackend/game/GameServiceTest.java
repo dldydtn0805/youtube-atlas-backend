@@ -11,6 +11,8 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,6 +45,7 @@ class GameServiceTest {
     private GameSeasonRepository gameSeasonRepository;
     private GameWalletRepository gameWalletRepository;
     private GamePositionRepository gamePositionRepository;
+    private GameHighlightStateRepository gameHighlightStateRepository;
     private GameLedgerRepository gameLedgerRepository;
     private GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
     private GameCoinTierService gameCoinTierService;
@@ -53,12 +56,14 @@ class GameServiceTest {
     private TrendSnapshotRepository trendSnapshotRepository;
     private CommentService commentService;
     private GameService gameService;
+    private List<GameHighlightState> storedHighlightStates;
 
     @BeforeEach
     void setUp() {
         gameSeasonRepository = org.mockito.Mockito.mock(GameSeasonRepository.class);
         gameWalletRepository = org.mockito.Mockito.mock(GameWalletRepository.class);
         gamePositionRepository = org.mockito.Mockito.mock(GamePositionRepository.class);
+        gameHighlightStateRepository = org.mockito.Mockito.mock(GameHighlightStateRepository.class);
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
         gameSeasonCoinResultRepository = org.mockito.Mockito.mock(GameSeasonCoinResultRepository.class);
         gameCoinTierService = org.mockito.Mockito.mock(GameCoinTierService.class);
@@ -68,6 +73,7 @@ class GameServiceTest {
         trendRunRepository = org.mockito.Mockito.mock(TrendRunRepository.class);
         trendSnapshotRepository = org.mockito.Mockito.mock(TrendSnapshotRepository.class);
         commentService = org.mockito.Mockito.mock(CommentService.class);
+        storedHighlightStates = new ArrayList<>();
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-01T06:00:00Z"), ZoneOffset.UTC);
         AtlasProperties atlasProperties = new AtlasProperties();
         atlasProperties.getTrending().setCaptureSlotMinutes(5);
@@ -76,6 +82,7 @@ class GameServiceTest {
             gameSeasonRepository,
             gameWalletRepository,
             gamePositionRepository,
+            gameHighlightStateRepository,
             gameLedgerRepository,
             gameSeasonCoinResultRepository,
             gameCoinTierService,
@@ -88,6 +95,62 @@ class GameServiceTest {
             fixedClock,
             atlasProperties
         );
+        when(gameHighlightStateRepository.findBySeasonIdAndUserId(any(), any())).thenAnswer(invocation ->
+            storedHighlightStates.stream()
+                .filter(state -> state.getSeason().getId().equals(invocation.getArgument(0, Long.class)))
+                .filter(state -> state.getUser().getId().equals(invocation.getArgument(1, Long.class)))
+                .toList()
+        );
+        when(gameHighlightStateRepository.findBySeasonIdAndUserIdAndBestSettledHighlightScoreGreaterThanOrderByBestSettledCreatedAtDesc(any(), any(), any()))
+            .thenAnswer(invocation ->
+                storedHighlightStates.stream()
+                    .filter(state -> state.getSeason().getId().equals(invocation.getArgument(0, Long.class)))
+                    .filter(state -> state.getUser().getId().equals(invocation.getArgument(1, Long.class)))
+                    .filter(state -> state.getBestSettledHighlightScore() > invocation.getArgument(2, Long.class))
+                    .sorted(
+                        Comparator.comparing(
+                            GameHighlightState::getBestSettledCreatedAt,
+                            Comparator.nullsLast(Comparator.reverseOrder())
+                        )
+                    )
+                    .toList()
+            );
+        when(gameHighlightStateRepository.findBySeasonIdAndBestSettledHighlightScoreGreaterThan(any(), any())).thenAnswer(invocation ->
+            storedHighlightStates.stream()
+                .filter(state -> state.getSeason().getId().equals(invocation.getArgument(0, Long.class)))
+                .filter(state -> state.getBestSettledHighlightScore() > invocation.getArgument(1, Long.class))
+                .toList()
+        );
+        when(gameHighlightStateRepository.findBySeasonIdAndUserIdAndRootPositionIdForUpdate(any(), any(), any()))
+            .thenAnswer(invocation ->
+                storedHighlightStates.stream()
+                    .filter(state -> state.getSeason().getId().equals(invocation.getArgument(0, Long.class)))
+                    .filter(state -> state.getUser().getId().equals(invocation.getArgument(1, Long.class)))
+                    .filter(state -> state.getRootPositionId().equals(invocation.getArgument(2, Long.class)))
+                    .findFirst()
+            );
+        when(gameHighlightStateRepository.save(any(GameHighlightState.class))).thenAnswer(invocation -> {
+            GameHighlightState state = invocation.getArgument(0, GameHighlightState.class);
+            storedHighlightStates.removeIf(existing ->
+                existing.getSeason().getId().equals(state.getSeason().getId())
+                    && existing.getUser().getId().equals(state.getUser().getId())
+                    && existing.getRootPositionId().equals(state.getRootPositionId())
+            );
+            storedHighlightStates.add(state);
+            return state;
+        });
+        when(gameHighlightStateRepository.saveAll(any())).thenAnswer(invocation -> {
+            Iterable<GameHighlightState> states = invocation.getArgument(0);
+            states.forEach(state -> {
+                storedHighlightStates.removeIf(existing ->
+                    existing.getSeason().getId().equals(state.getSeason().getId())
+                        && existing.getUser().getId().equals(state.getUser().getId())
+                        && existing.getRootPositionId().equals(state.getRootPositionId())
+                );
+                storedHighlightStates.add(state);
+            });
+            return states;
+        });
         when(gameNotificationService.syncAndListSeasonNotifications(any(GameSeason.class), any(), any()))
             .thenAnswer(invocation -> invocation.getArgument(2));
     }
@@ -119,7 +182,7 @@ class GameServiceTest {
     }
 
     @Test
-    void getCurrentSeasonIncludesSettledHighlightNotifications() {
+    void getCurrentSeasonDoesNotRegenerateSettledHighlightNotifications() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
@@ -141,18 +204,11 @@ class GameServiceTest {
 
         var response = gameService.getCurrentSeason(authenticatedUser(), "KR");
 
-        assertThat(response.notifications()).hasSize(3);
-        assertThat(response.notifications().get(0).id()).isEqualTo("game-300-MOONSHOT");
-        assertThat(response.notifications().get(0).notificationType()).isEqualTo("MOONSHOT");
-        assertThat(response.notifications().get(0).title()).isEqualTo("문샷 적중");
-        assertThat(response.notifications().get(0).videoTitle()).isEqualTo("Title video-300");
-        assertThat(response.notifications().get(0).strategyTags()).contains(GameStrategyType.MOONSHOT);
-        assertThat(response.notifications().get(1).notificationType()).isEqualTo("BIG_CASHOUT");
-        assertThat(response.notifications().get(2).notificationType()).isEqualTo("SNIPE");
+        assertThat(response.notifications()).isEmpty();
     }
 
     @Test
-    void getNotificationsReturnsSettledHighlightAlertsOnly() {
+    void getNotificationsReturnsStoredAlertsOnly() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         GamePosition moonshotPosition = closedPosition(
@@ -183,11 +239,7 @@ class GameServiceTest {
 
         var response = gameService.getNotifications(authenticatedUser(), "KR");
 
-        assertThat(response).hasSize(4);
-        assertThat(response.stream().map(notification -> notification.notificationType()).toList())
-            .containsExactlyInAnyOrder("MOONSHOT", "BIG_CASHOUT", "SNIPE", "SMALL_CASHOUT");
-        assertThat(response.stream().filter(notification -> notification.notificationType().equals("SMALL_CASHOUT")).findFirst())
-            .hasValueSatisfying(notification -> assertThat(notification.title()).isEqualTo("스몰 캐시아웃"));
+        assertThat(response).isEmpty();
     }
 
     @Test
