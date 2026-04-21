@@ -112,7 +112,6 @@ TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
 - `GET /api/trending/signals?regionCode=KR&categoryId=0&videoIds=abc&videoIds=def`
 - `GET /api/trending/top-videos?regionCode=KR&pageToken=50`
 - `GET /api/trending/realtime-surging?regionCode=KR`
-- `POST /api/trending/sync`
 - `GET /api/admin/dashboard`
 - `PATCH /api/admin/seasons/{seasonId}`
 - `POST /api/admin/seasons/{seasonId}/close`
@@ -1253,35 +1252,6 @@ Authorization: Bearer {accessToken}
       "capturedAt": "2026-04-01T05:30:00Z"
     }
   ]
-}
-```
-
-### `POST /api/trending/sync`
-
-요청 본문:
-
-```json
-{
-  "regionCode": "KR",
-  "categoryId": "0",
-  "categoryLabel": "전체",
-  "sourceCategoryIds": []
-}
-```
-
-- `regionCode`, `categoryId`, `categoryLabel` 은 필수입니다.
-- 현재 트렌드 동기화는 국가 전체 인기 영상 기준으로만 동작합니다.
-- `sourceCategoryIds` 값은 보내더라도 전체 인기 영상 기준으로 동기화합니다.
-
-응답 예시:
-
-```json
-{
-  "regionCode": "KR",
-  "categoryId": "0",
-  "syncedVideos": 50,
-  "signalCount": 50,
-  "capturedAt": "2026-03-24T12:00:00Z"
 }
 ```
 

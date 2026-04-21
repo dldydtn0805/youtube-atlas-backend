@@ -25,6 +25,10 @@ public interface GameHighlightStateRepository extends JpaRepository<GameHighligh
 
     List<GameHighlightState> findBySeasonIdAndBestSettledHighlightScoreGreaterThan(Long seasonId, Long score);
 
+    long deleteByBestSettledCreatedAtBefore(java.time.Instant deleteBefore);
+
+    void deleteByUserId(Long userId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
         select state

@@ -1693,6 +1693,21 @@ public class GameService {
         return calculateUserHighlightScore(seasonId, userId);
     }
 
+    @Transactional(readOnly = true)
+    public List<GameHighlightResponse> getSettledUserHighlights(Long seasonId, Long userId) {
+        GameSeason season = gameSeasonRepository.findById(seasonId)
+            .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 시즌입니다."));
+
+        return buildSettledHighlights(season, userId).stream()
+            .sorted(
+                Comparator
+                    .comparingLong(GameService::calculateHighlightScore)
+                    .reversed()
+                    .thenComparing(GameHighlightResponse::createdAt, Comparator.nullsLast(Comparator.reverseOrder()))
+            )
+            .toList();
+    }
+
     private long calculateUserHighlightScore(Long seasonId, Long userId) {
         List<GamePosition> positions = gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(seasonId, userId);
         if (!positions.isEmpty()) {

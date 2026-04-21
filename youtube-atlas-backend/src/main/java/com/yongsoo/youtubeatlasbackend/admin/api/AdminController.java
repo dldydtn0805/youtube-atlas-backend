@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.yongsoo.youtubeatlasbackend.admin.AdminAccessService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminCommentService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminDashboardService;
+import com.yongsoo.youtubeatlasbackend.admin.AdminHighlightHistoryService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminPositionService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminSeasonService;
 import com.yongsoo.youtubeatlasbackend.admin.AdminTradeHistoryService;
@@ -29,6 +30,7 @@ public class AdminController {
     private final AdminAccessService adminAccessService;
     private final AdminCommentService adminCommentService;
     private final AdminDashboardService adminDashboardService;
+    private final AdminHighlightHistoryService adminHighlightHistoryService;
     private final AdminPositionService adminPositionService;
     private final AdminUserService adminUserService;
     private final AdminSeasonService adminSeasonService;
@@ -39,6 +41,7 @@ public class AdminController {
         AdminAccessService adminAccessService,
         AdminCommentService adminCommentService,
         AdminDashboardService adminDashboardService,
+        AdminHighlightHistoryService adminHighlightHistoryService,
         AdminPositionService adminPositionService,
         AdminUserService adminUserService,
         AdminSeasonService adminSeasonService,
@@ -48,6 +51,7 @@ public class AdminController {
         this.adminAccessService = adminAccessService;
         this.adminCommentService = adminCommentService;
         this.adminDashboardService = adminDashboardService;
+        this.adminHighlightHistoryService = adminHighlightHistoryService;
         this.adminPositionService = adminPositionService;
         this.adminUserService = adminUserService;
         this.adminSeasonService = adminSeasonService;
@@ -88,6 +92,15 @@ public class AdminController {
     ) {
         adminAccessService.requireAdmin(authorizationHeader);
         return adminTradeHistoryService.deleteClosedTradeHistoryOlderThan(request);
+    }
+
+    @PostMapping("/highlights/purge")
+    public AdminHighlightHistoryCleanupResponse purgeOldHighlights(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @Valid @RequestBody AdminHighlightHistoryCleanupRequest request
+    ) {
+        adminAccessService.requireAdmin(authorizationHeader);
+        return adminHighlightHistoryService.deleteHighlightsOlderThan(request);
     }
 
     @PatchMapping("/seasons/{seasonId}")
@@ -136,6 +149,16 @@ public class AdminController {
     ) {
         adminAccessService.requireAdmin(authorizationHeader);
         return adminUserService.getUser(userId);
+    }
+
+    @GetMapping("/users/{userId}/highlights")
+    public AdminUserHighlightSummaryResponse getUserHighlights(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @PathVariable Long userId,
+        @RequestParam(required = false) Long seasonId
+    ) {
+        adminAccessService.requireAdmin(authorizationHeader);
+        return adminUserService.getUserHighlights(userId, seasonId);
     }
 
     @GetMapping("/users/{userId}/positions")

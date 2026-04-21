@@ -25,6 +25,7 @@ import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameCoinPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameCoinTierService;
 import com.yongsoo.youtubeatlasbackend.game.GameDividendPayoutRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameHighlightStateRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameNotificationRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
@@ -38,6 +39,7 @@ import com.yongsoo.youtubeatlasbackend.game.GameWallet;
 import com.yongsoo.youtubeatlasbackend.game.GameWalletRepository;
 import com.yongsoo.youtubeatlasbackend.game.PositionStatus;
 import com.yongsoo.youtubeatlasbackend.game.SeasonStatus;
+import com.yongsoo.youtubeatlasbackend.game.api.GameHighlightResponse;
 import com.yongsoo.youtubeatlasbackend.playback.PlaybackProgressRepository;
 import com.yongsoo.youtubeatlasbackend.playback.PlaybackProgressService;
 import com.yongsoo.youtubeatlasbackend.playback.api.PlaybackProgressResponse;
@@ -55,6 +57,7 @@ class AdminUserServiceTest {
     private GameLedgerRepository gameLedgerRepository;
     private GameCoinPayoutRepository gameCoinPayoutRepository;
     private GameDividendPayoutRepository gameDividendPayoutRepository;
+    private GameHighlightStateRepository gameHighlightStateRepository;
     private GameNotificationRepository gameNotificationRepository;
     private GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
     private GameService gameService;
@@ -75,6 +78,7 @@ class AdminUserServiceTest {
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
         gameCoinPayoutRepository = org.mockito.Mockito.mock(GameCoinPayoutRepository.class);
         gameDividendPayoutRepository = org.mockito.Mockito.mock(GameDividendPayoutRepository.class);
+        gameHighlightStateRepository = org.mockito.Mockito.mock(GameHighlightStateRepository.class);
         gameNotificationRepository = org.mockito.Mockito.mock(GameNotificationRepository.class);
         gameSeasonCoinResultRepository = org.mockito.Mockito.mock(GameSeasonCoinResultRepository.class);
         gameService = org.mockito.Mockito.mock(GameService.class);
@@ -94,6 +98,7 @@ class AdminUserServiceTest {
             gameLedgerRepository,
             gameCoinPayoutRepository,
             gameDividendPayoutRepository,
+            gameHighlightStateRepository,
             gameNotificationRepository,
             gameSeasonCoinResultRepository,
             gameCoinTierService,
@@ -243,6 +248,54 @@ class AdminUserServiceTest {
     }
 
     @Test
+    void getUserHighlightsSummarizesScoreAndHistoryForSeason() {
+        AppUser user = user(21L, "highlight@example.com", "Highlight User");
+        GameSeason season = activeSeason(4L, "Season 4");
+        GameWallet wallet = new GameWallet();
+        wallet.setManualTierScoreAdjustment(1_500L);
+        GameHighlightResponse highlight = new GameHighlightResponse(
+            "position-1-MOONSHOT",
+            "MOONSHOT",
+            "역주행",
+            "120위에서 20위까지 상승",
+            31L,
+            "video-1",
+            "Highlight Video",
+            "Atlas TV",
+            "https://example.com/thumb.jpg",
+            120,
+            20,
+            22,
+            100,
+            100,
+            5_000L,
+            20_000L,
+            15_000L,
+            300D,
+            List.of(),
+            42_000L,
+            "CLOSED",
+            Instant.parse("2026-04-08T02:00:00Z")
+        );
+
+        when(appUserRepository.findById(21L)).thenReturn(Optional.of(user));
+        when(gameSeasonRepository.findById(4L)).thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(4L, 21L)).thenReturn(Optional.of(wallet));
+        when(gameService.calculateSettledUserHighlightScore(4L, 21L)).thenReturn(42_000L);
+        when(gameService.getSettledUserHighlights(4L, 21L)).thenReturn(List.of(highlight));
+
+        var response = adminUserService.getUserHighlights(21L, 4L);
+
+        assertThat(response.userId()).isEqualTo(21L);
+        assertThat(response.seasonId()).isEqualTo(4L);
+        assertThat(response.calculatedHighlightScore()).isEqualTo(42_000L);
+        assertThat(response.manualTierScoreAdjustment()).isEqualTo(1_500L);
+        assertThat(response.tierScore()).isEqualTo(43_500L);
+        assertThat(response.highlightCount()).isEqualTo(1);
+        assertThat(response.highlights()).containsExactly(highlight);
+    }
+
+    @Test
     void deleteUserRemovesDependentRowsBeforeDeletingUser() {
         AppUser user = user(13L, "delete@example.com", "Delete User");
         when(appUserRepository.findById(13L)).thenReturn(Optional.of(user));
@@ -255,6 +308,7 @@ class AdminUserServiceTest {
         org.mockito.Mockito.verify(gameLedgerRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gameCoinPayoutRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gameDividendPayoutRepository).deleteByUserId(13L);
+        org.mockito.Mockito.verify(gameHighlightStateRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gameNotificationRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gamePositionRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gameSeasonCoinResultRepository).deleteByUserId(13L);
@@ -271,6 +325,7 @@ class AdminUserServiceTest {
 
         org.mockito.Mockito.verify(gameCoinPayoutRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(gameDividendPayoutRepository).deleteByUserId(17L);
+        org.mockito.Mockito.verify(gameHighlightStateRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(gameNotificationRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(gameSeasonCoinResultRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(gamePositionRepository).deleteByUserId(17L);

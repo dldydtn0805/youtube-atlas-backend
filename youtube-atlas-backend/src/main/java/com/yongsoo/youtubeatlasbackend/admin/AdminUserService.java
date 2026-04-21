@@ -12,6 +12,7 @@ import org.springframework.util.StringUtils;
 
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminUserDetailResponse;
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminCoinTierSummaryResponse;
+import com.yongsoo.youtubeatlasbackend.admin.api.AdminUserHighlightSummaryResponse;
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminUserGameSummaryResponse;
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminUserListResponse;
 import com.yongsoo.youtubeatlasbackend.admin.api.AdminUserSummaryResponse;
@@ -24,6 +25,7 @@ import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameCoinPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameCoinTierService;
 import com.yongsoo.youtubeatlasbackend.game.GameDividendPayoutRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameHighlightStateRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameNotificationRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameService;
@@ -56,6 +58,7 @@ public class AdminUserService {
     private final GameLedgerRepository gameLedgerRepository;
     private final GameCoinPayoutRepository gameCoinPayoutRepository;
     private final GameDividendPayoutRepository gameDividendPayoutRepository;
+    private final GameHighlightStateRepository gameHighlightStateRepository;
     private final GameNotificationRepository gameNotificationRepository;
     private final GameSeasonCoinResultRepository gameSeasonCoinResultRepository;
     private final GameCoinTierService gameCoinTierService;
@@ -75,6 +78,7 @@ public class AdminUserService {
         GameLedgerRepository gameLedgerRepository,
         GameCoinPayoutRepository gameCoinPayoutRepository,
         GameDividendPayoutRepository gameDividendPayoutRepository,
+        GameHighlightStateRepository gameHighlightStateRepository,
         GameNotificationRepository gameNotificationRepository,
         GameSeasonCoinResultRepository gameSeasonCoinResultRepository,
         GameCoinTierService gameCoinTierService,
@@ -93,6 +97,7 @@ public class AdminUserService {
         this.gameLedgerRepository = gameLedgerRepository;
         this.gameCoinPayoutRepository = gameCoinPayoutRepository;
         this.gameDividendPayoutRepository = gameDividendPayoutRepository;
+        this.gameHighlightStateRepository = gameHighlightStateRepository;
         this.gameNotificationRepository = gameNotificationRepository;
         this.gameSeasonCoinResultRepository = gameSeasonCoinResultRepository;
         this.gameCoinTierService = gameCoinTierService;
@@ -124,6 +129,30 @@ public class AdminUserService {
         return toDetailResponse(requireUser(userId));
     }
 
+    @Transactional(readOnly = true)
+    public AdminUserHighlightSummaryResponse getUserHighlights(Long userId, Long seasonId) {
+        AppUser user = requireUser(userId);
+        GameSeason season = resolveReadableSeason(seasonId);
+        long calculatedScore = gameService.calculateSettledUserHighlightScore(season.getId(), user.getId());
+        long manualAdjustment = gameWalletRepository.findBySeasonIdAndUserId(season.getId(), user.getId())
+            .map(GameWallet::getManualTierScoreAdjustment)
+            .map(this::normalizeTierScoreAdjustment)
+            .orElse(0L);
+        var highlights = gameService.getSettledUserHighlights(season.getId(), user.getId());
+
+        return new AdminUserHighlightSummaryResponse(
+            user.getId(),
+            season.getId(),
+            season.getName(),
+            season.getRegionCode(),
+            calculatedScore,
+            manualAdjustment,
+            calculatedScore + manualAdjustment,
+            highlights.size(),
+            highlights
+        );
+    }
+
     @Transactional
     public AdminUserDetailResponse updateActiveSeasonWallet(Long userId, AdminWalletUpdateRequest request) {
         AppUser user = requireUser(userId);
@@ -153,6 +182,7 @@ public class AdminUserService {
         gameLedgerRepository.deleteByUserId(userId);
         gameCoinPayoutRepository.deleteByUserId(userId);
         gameDividendPayoutRepository.deleteByUserId(userId);
+        gameHighlightStateRepository.deleteByUserId(userId);
         gameNotificationRepository.deleteByUserId(userId);
         gamePositionRepository.deleteByUserId(userId);
         gameSeasonCoinResultRepository.deleteByUserId(userId);
@@ -308,6 +338,16 @@ public class AdminUserService {
         if (seasonId != null) {
             return gameSeasonRepository.findByIdAndStatus(seasonId, SeasonStatus.ACTIVE)
                 .orElseThrow(() -> new IllegalArgumentException("선택한 활성 시즌을 찾을 수 없습니다."));
+        }
+
+        return gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)
+            .orElseThrow(() -> new IllegalArgumentException("현재 활성 시즌이 없습니다."));
+    }
+
+    private GameSeason resolveReadableSeason(Long seasonId) {
+        if (seasonId != null) {
+            return gameSeasonRepository.findById(seasonId)
+                .orElseThrow(() -> new IllegalArgumentException("선택한 시즌을 찾을 수 없습니다."));
         }
 
         return gameSeasonRepository.findTopByStatusOrderByStartAtDesc(SeasonStatus.ACTIVE)
