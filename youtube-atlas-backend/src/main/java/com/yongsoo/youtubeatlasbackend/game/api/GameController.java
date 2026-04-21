@@ -207,6 +207,14 @@ public class GameController {
         return gameService.sell(authService.requireCurrentUser(authorizationHeader), request);
     }
 
+    @PostMapping("/positions/sell-preview")
+    public SellPreviewResponse previewSell(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @Valid @RequestBody SellPositionsRequest request
+    ) {
+        return gameService.previewSell(authService.requireCurrentUser(authorizationHeader), request);
+    }
+
     @PostMapping("/positions/{positionId}/sell")
     public SellPositionResponse sell(
         @RequestHeader("Authorization") String authorizationHeader,

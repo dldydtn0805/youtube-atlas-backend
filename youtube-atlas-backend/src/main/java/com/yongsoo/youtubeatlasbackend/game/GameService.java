@@ -41,6 +41,8 @@ import com.yongsoo.youtubeatlasbackend.game.api.MarketVideoResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionRankHistoryPointResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionRankHistoryResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.SellPreviewItemResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.SellPreviewResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPositionResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPositionsRequest;
 import com.yongsoo.youtubeatlasbackend.game.api.SeasonCoinResultResponse;
@@ -1012,36 +1014,8 @@ public class GameService {
         GameSeason season = requireActiveSeason(request.regionCode());
         int quantity = normalizeQuantity(request.quantity());
         Instant now = Instant.now(clock);
-        List<GamePosition> sellablePositions;
-
-        if (request.positionId() != null) {
-            GamePosition position = gamePositionRepository.findByIdAndUserIdForUpdate(request.positionId(), authenticatedUser.id())
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 포지션입니다."));
-            ensurePositionOpen(position);
-            if (!position.getSeason().getId().equals(season.getId())) {
-                throw new IllegalArgumentException("현재 시즌 포지션만 매도할 수 있습니다.");
-            }
-            sellablePositions = canSellPosition(position, now) ? List.of(position) : List.of();
-        } else {
-            String videoId = normalizeRequired(request.videoId(), "videoId는 필수입니다.");
-            sellablePositions = gamePositionRepository
-                .findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(
-                    season.getId(),
-                    authenticatedUser.id(),
-                    videoId,
-                    PositionStatus.OPEN
-                )
-                .stream()
-                .filter(position -> canSellPosition(position, now))
-                .toList();
-        }
-
-        int totalSellableQuantity = sellablePositions.stream()
-            .mapToInt(this::getPositionQuantity)
-            .sum();
-        if (totalSellableQuantity < quantity) {
-            throw new IllegalArgumentException("지금 매도 가능한 포지션 수가 부족합니다.");
-        }
+        List<GamePosition> sellablePositions = resolveSellablePositionsForUpdate(authenticatedUser, request, season, now);
+        ensureSellableQuantity(sellablePositions, quantity);
 
         SellSnapshot sellSnapshot = resolveSellSnapshot(sellablePositions.get(0));
         GameWallet wallet = requireWalletForUpdate(season.getId(), authenticatedUser.id());
@@ -1060,6 +1034,24 @@ public class GameService {
         }
 
         return responses;
+    }
+
+    @Transactional
+    public SellPreviewResponse previewSell(AuthenticatedUser authenticatedUser, SellPositionsRequest request) {
+        GameSeason season = requireActiveSeason(request.regionCode());
+        int quantity = normalizeQuantity(request.quantity());
+        Instant now = Instant.now(clock);
+        List<GamePosition> sellablePositions = resolveSellablePositions(authenticatedUser, request, season, now);
+        ensureSellableQuantity(sellablePositions, quantity);
+        SellSnapshot sellSnapshot = resolveSellSnapshot(sellablePositions.get(0));
+
+        ensureHighlightStatesBackfilled(season, authenticatedUser.id());
+        Map<Long, Long> bestScoreByRootPositionId = gameHighlightStateRepository
+            .findBySeasonIdAndUserId(season.getId(), authenticatedUser.id())
+            .stream()
+            .collect(Collectors.toMap(GameHighlightState::getRootPositionId, GameHighlightState::getBestSettledHighlightScore));
+
+        return buildSellPreviewResponse(sellablePositions, quantity, sellSnapshot, bestScoreByRootPositionId, now);
     }
 
     private CurrentSeasonResponse toCurrentSeasonResponse(
@@ -2121,6 +2113,7 @@ public class GameService {
             wallet.getBalancePoints(),
             now
         );
+        long highlightScore = resolveSettledHighlightScore(settledPosition);
         publishHighScoreHighlightNotification(settledPosition);
         publishTierPromotionIfNeeded(settledPosition, previousHighlightScore);
 
@@ -2135,8 +2128,101 @@ public class GameService {
             sellPricePoints,
             pnlPoints,
             settledPoints,
+            highlightScore,
             wallet.getBalancePoints(),
             settledPosition.getClosedAt()
+        );
+    }
+
+    private long resolveSettledHighlightScore(GamePosition position) {
+        GameHighlightResponse highlight = toSettledGameHighlightResponse(position);
+        return highlight != null ? highlight.highlightScore() : 0L;
+    }
+
+    private SellPreviewResponse buildSellPreviewResponse(
+        List<GamePosition> sellablePositions,
+        int quantity,
+        SellSnapshot sellSnapshot,
+        Map<Long, Long> bestScoreByRootPositionId,
+        Instant now
+    ) {
+        List<SellPreviewItemResponse> items = new ArrayList<>();
+        long totalStakePoints = 0L;
+        long totalSellPricePoints = 0L;
+        long totalPnlPoints = 0L;
+        long totalSettledPoints = 0L;
+        long totalProjectedHighlightScore = 0L;
+        long totalAppliedHighlightScoreDelta = 0L;
+        int recordEligibleCount = 0;
+        int remainingQuantity = quantity;
+
+        for (GamePosition position : sellablePositions) {
+            if (remainingQuantity <= 0) {
+                break;
+            }
+
+            int sellQuantity = Math.min(remainingQuantity, getPositionQuantity(position));
+            int rankDiff = position.getBuyRank() - sellSnapshot.rank();
+            long unitStakePoints = resolveUnitStakePoints(position);
+            long soldStakePoints = GamePointCalculator.calculatePositionPoints(unitStakePoints, sellQuantity);
+            long sellPricePoints = GamePointCalculator.calculatePositionPoints(
+                resolveSellUnitPricePoints(sellSnapshot),
+                sellQuantity
+            );
+            long settledPoints = GamePointCalculator.calculateSettledPoints(sellPricePoints);
+            long pnlPoints = GamePointCalculator.calculateProfitPoints(soldStakePoints, settledPoints);
+            GamePosition previewPosition = createClosedPosition(
+                position,
+                sellQuantity,
+                soldStakePoints,
+                sellSnapshot,
+                rankDiff,
+                pnlPoints,
+                settledPoints,
+                now
+            );
+            long projectedHighlightScore = resolveSettledHighlightScore(previewPosition);
+            long bestHighlightScore = bestScoreByRootPositionId.getOrDefault(resolvePositionScoreRootId(position), 0L);
+            long appliedHighlightScoreDelta = Math.max(0L, projectedHighlightScore - bestHighlightScore);
+            boolean willUpdateRecord = appliedHighlightScoreDelta > 0L;
+
+            items.add(new SellPreviewItemResponse(
+                position.getId(),
+                position.getBuyRank(),
+                sellQuantity,
+                soldStakePoints,
+                sellPricePoints,
+                pnlPoints,
+                settledPoints,
+                projectedHighlightScore,
+                bestHighlightScore,
+                appliedHighlightScoreDelta,
+                willUpdateRecord
+            ));
+
+            totalStakePoints += soldStakePoints;
+            totalSellPricePoints += sellPricePoints;
+            totalPnlPoints += pnlPoints;
+            totalSettledPoints += settledPoints;
+            totalProjectedHighlightScore += projectedHighlightScore;
+            totalAppliedHighlightScoreDelta += appliedHighlightScoreDelta;
+            if (willUpdateRecord) {
+                recordEligibleCount += 1;
+            }
+            remainingQuantity -= sellQuantity;
+        }
+
+        return new SellPreviewResponse(
+            quantity,
+            sellSnapshot.rank(),
+            totalStakePoints,
+            totalSellPricePoints,
+            totalPnlPoints,
+            totalSettledPoints,
+            totalProjectedHighlightScore,
+            totalAppliedHighlightScoreDelta,
+            recordEligibleCount,
+            items
         );
     }
 
@@ -2307,6 +2393,73 @@ public class GameService {
     private String formatQuantity(int quantity) {
         int wholeQuantity = quantity / GamePointCalculator.QUANTITY_SCALE;
         return Integer.toString(wholeQuantity);
+    }
+
+    private void ensureSellableQuantity(List<GamePosition> sellablePositions, int quantity) {
+        int totalSellableQuantity = sellablePositions.stream()
+            .mapToInt(this::getPositionQuantity)
+            .sum();
+        if (totalSellableQuantity < quantity) {
+            throw new IllegalArgumentException("지금 매도 가능한 포지션 수가 부족합니다.");
+        }
+    }
+
+    private List<GamePosition> resolveSellablePositions(
+        AuthenticatedUser authenticatedUser,
+        SellPositionsRequest request,
+        GameSeason season,
+        Instant now
+    ) {
+        if (request.positionId() != null) {
+            GamePosition position = gamePositionRepository.findByIdAndUserId(request.positionId(), authenticatedUser.id())
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 포지션입니다."));
+            ensurePositionOpen(position);
+            if (!position.getSeason().getId().equals(season.getId())) {
+                throw new IllegalArgumentException("현재 시즌 포지션만 매도할 수 있습니다.");
+            }
+            return canSellPosition(position, now) ? List.of(position) : List.of();
+        }
+
+        String videoId = normalizeRequired(request.videoId(), "videoId는 필수입니다.");
+        return gamePositionRepository
+            .findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAsc(
+                season.getId(),
+                authenticatedUser.id(),
+                videoId,
+                PositionStatus.OPEN
+            )
+            .stream()
+            .filter(position -> canSellPosition(position, now))
+            .toList();
+    }
+
+    private List<GamePosition> resolveSellablePositionsForUpdate(
+        AuthenticatedUser authenticatedUser,
+        SellPositionsRequest request,
+        GameSeason season,
+        Instant now
+    ) {
+        if (request.positionId() != null) {
+            GamePosition position = gamePositionRepository.findByIdAndUserIdForUpdate(request.positionId(), authenticatedUser.id())
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 포지션입니다."));
+            ensurePositionOpen(position);
+            if (!position.getSeason().getId().equals(season.getId())) {
+                throw new IllegalArgumentException("현재 시즌 포지션만 매도할 수 있습니다.");
+            }
+            return canSellPosition(position, now) ? List.of(position) : List.of();
+        }
+
+        String videoId = normalizeRequired(request.videoId(), "videoId는 필수입니다.");
+        return gamePositionRepository
+            .findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(
+                season.getId(),
+                authenticatedUser.id(),
+                videoId,
+                PositionStatus.OPEN
+            )
+            .stream()
+            .filter(position -> canSellPosition(position, now))
+            .toList();
     }
 
     private void ensureLatestRunLooksHealthy(String regionCode, String categoryId, Long latestRunId, int latestSnapshotCount) {

@@ -474,8 +474,9 @@ class GameServiceTest {
             return score >= 40_000L ? diamondTier : bronzeTier;
         });
 
-        gameService.sell(authenticatedUser(), 300L);
+        var response = gameService.sell(authenticatedUser(), 300L);
 
+        assertThat(response.highlightScore()).isPositive();
         verify(commentService).publishTierSystemMessage("User 7님이 다이아몬드 티어로 상승했습니다.");
         verify(gameNotificationService, org.mockito.Mockito.times(2))
             .createAndPush(
@@ -497,6 +498,49 @@ class GameServiceTest {
                     )
                 )
             );
+    }
+
+    @Test
+    void previewSellReturnsHighlightThresholdDetailsForPartialQuantity() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long unitStakePoints = GamePointCalculator.calculatePricePoints(150);
+        long totalStakePoints = GamePointCalculator.calculatePositionPoints(unitStakePoints, TWO_SHARES);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            150,
+            totalStakePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        position.setQuantity(TWO_SHARES);
+        TrendSignal latestSignal = signal("video-1", 10, 0);
+        GameHighlightState state = new GameHighlightState();
+        state.setSeason(season);
+        state.setUser(appUser);
+        state.setRootPositionId(position.getId());
+        state.setBestSettledHighlightScore(10_000L);
+        storedHighlightStates.add(state);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gamePositionRepository.findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAsc(1L, 7L, "video-1", PositionStatus.OPEN))
+            .thenReturn(List.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
+
+        var response = gameService.previewSell(authenticatedUser(), new SellPositionsRequest("KR", null, "video-1", ONE_SHARE));
+
+        assertThat(response.quantity()).isEqualTo(ONE_SHARE);
+        assertThat(response.projectedHighlightScore()).isPositive();
+        assertThat(response.appliedHighlightScoreDelta()).isPositive();
+        assertThat(response.recordEligibleCount()).isEqualTo(1);
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).bestHighlightScore()).isEqualTo(10_000L);
+        assertThat(response.items().get(0).projectedHighlightScore()).isEqualTo(response.projectedHighlightScore());
+        assertThat(response.items().get(0).appliedHighlightScoreDelta())
+            .isEqualTo(response.projectedHighlightScore() - 10_000L);
+        assertThat(response.items().get(0).willUpdateRecord()).isTrue();
     }
 
     @Test

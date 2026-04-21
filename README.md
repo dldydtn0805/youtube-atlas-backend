@@ -494,6 +494,7 @@ Query:
   "sellPricePoints": 10000,
   "pnlPoints": 2470,
   "settledPoints": 9970,
+  "highlightScore": 42000,
   "balancePoints": 12470,
   "soldAt": "2026-04-04T00:20:00Z"
 }
