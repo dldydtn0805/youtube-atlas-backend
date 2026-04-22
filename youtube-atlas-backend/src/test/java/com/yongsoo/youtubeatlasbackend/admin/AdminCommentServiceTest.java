@@ -34,7 +34,7 @@ class AdminCommentServiceTest {
         when(commentRepository.deleteByVideoIdAndCreatedAtBefore(CommentService.GLOBAL_ROOM_VIDEO_ID, deleteBefore))
             .thenReturn(27L);
 
-        var response = adminCommentService.deleteCommentsOlderThan(new AdminCommentCleanupRequest(deleteBefore));
+        var response = adminCommentService.deleteCommentsOlderThan(new AdminCommentCleanupRequest(deleteBefore, null));
 
         assertThat(response.deleteBefore()).isEqualTo(deleteBefore);
         assertThat(response.deletedAt()).isEqualTo(Instant.parse("2026-04-15T03:00:00Z"));
@@ -43,10 +43,30 @@ class AdminCommentServiceTest {
     }
 
     @Test
+    void deleteCommentsOlderThanPurgesRowsForSingleUser() {
+        Instant deleteBefore = Instant.parse("2026-04-01T00:00:00Z");
+        Long userId = 77L;
+        when(commentRepository.deleteByVideoIdAndUserIdAndCreatedAtBefore(
+            CommentService.GLOBAL_ROOM_VIDEO_ID,
+            userId,
+            deleteBefore
+        )).thenReturn(5L);
+
+        var response = adminCommentService.deleteCommentsOlderThan(new AdminCommentCleanupRequest(deleteBefore, userId));
+
+        assertThat(response.deletedCount()).isEqualTo(5L);
+        verify(commentRepository).deleteByVideoIdAndUserIdAndCreatedAtBefore(
+            CommentService.GLOBAL_ROOM_VIDEO_ID,
+            userId,
+            deleteBefore
+        );
+    }
+
+    @Test
     void deleteCommentsOlderThanRejectsFutureTimestamp() {
         Instant future = Instant.parse("2026-04-16T00:00:00Z");
 
-        assertThatThrownBy(() -> adminCommentService.deleteCommentsOlderThan(new AdminCommentCleanupRequest(future)))
+        assertThatThrownBy(() -> adminCommentService.deleteCommentsOlderThan(new AdminCommentCleanupRequest(future, null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("deleteBefore");
     }

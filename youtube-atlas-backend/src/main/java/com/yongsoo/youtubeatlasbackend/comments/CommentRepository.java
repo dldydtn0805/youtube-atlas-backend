@@ -26,6 +26,8 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
 
     long deleteByVideoIdAndCreatedAtBefore(String videoId, Instant createdAt);
 
+    long deleteByVideoIdAndUserIdAndCreatedAtBefore(String videoId, Long userId, Instant createdAt);
+
     Optional<Comment> findTopByVideoIdAndClientIdOrderByCreatedAtDesc(String videoId, String clientId);
 
     Optional<Comment> findTopByVideoIdAndUserIdOrderByCreatedAtDesc(String videoId, Long userId);

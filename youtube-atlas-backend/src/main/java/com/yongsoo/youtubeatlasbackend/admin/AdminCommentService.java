@@ -25,16 +25,23 @@ public class AdminCommentService {
     @Transactional
     public AdminCommentCleanupResponse deleteCommentsOlderThan(AdminCommentCleanupRequest request) {
         Instant deleteBefore = request.deleteBefore();
+        Long userId = request.userId();
         Instant now = Instant.now(clock);
 
         if (deleteBefore.isAfter(now)) {
             throw new IllegalArgumentException("deleteBefore는 현재 시각 이전이어야 합니다.");
         }
 
-        long deletedCount = commentRepository.deleteByVideoIdAndCreatedAtBefore(
-            CommentService.GLOBAL_ROOM_VIDEO_ID,
-            deleteBefore
-        );
+        long deletedCount = userId == null
+            ? commentRepository.deleteByVideoIdAndCreatedAtBefore(
+                CommentService.GLOBAL_ROOM_VIDEO_ID,
+                deleteBefore
+            )
+            : commentRepository.deleteByVideoIdAndUserIdAndCreatedAtBefore(
+                CommentService.GLOBAL_ROOM_VIDEO_ID,
+                userId,
+                deleteBefore
+            );
         return new AdminCommentCleanupResponse(deleteBefore, now, deletedCount);
     }
 }
