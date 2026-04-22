@@ -695,11 +695,13 @@ Authorization: Bearer {accessToken}
 
 ```json
 {
-  "deleteBefore": "2026-03-01T00:00:00Z"
+  "deleteBefore": "2026-03-01T00:00:00Z",
+  "userId": 123
 }
 ```
 
 - `deleteBefore` 는 필수입니다.
+- `userId` 는 선택값이며, 지정하면 해당 유저의 거래내역만 정리합니다.
 - 미래 시각은 허용되지 않습니다.
 - `deleteBefore` 보다 이전에 종료된 `CLOSED`, `AUTO_CLOSED` 거래내역만 삭제됩니다.
 - 해당 거래내역에 연결된 원장, 배당 지급 데이터도 함께 삭제됩니다.

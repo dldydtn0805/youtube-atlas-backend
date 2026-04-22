@@ -57,7 +57,7 @@ class AdminTradeHistoryServiceTest {
         when(gamePositionRepository.deleteByIds(List.of(101L, 102L))).thenReturn(2L);
 
         var response = adminTradeHistoryService.deleteClosedTradeHistoryOlderThan(
-            new AdminTradeHistoryCleanupRequest(deleteBefore)
+            new AdminTradeHistoryCleanupRequest(deleteBefore, null)
         );
 
         assertThat(response.deleteBefore()).isEqualTo(deleteBefore);
@@ -79,7 +79,7 @@ class AdminTradeHistoryServiceTest {
         )).thenReturn(List.of());
 
         var response = adminTradeHistoryService.deleteClosedTradeHistoryOlderThan(
-            new AdminTradeHistoryCleanupRequest(deleteBefore)
+            new AdminTradeHistoryCleanupRequest(deleteBefore, null)
         );
 
         assertThat(response.deletedPositionCount()).isZero();
@@ -92,10 +92,34 @@ class AdminTradeHistoryServiceTest {
         Instant future = Instant.parse("2026-04-16T00:00:00Z");
 
         assertThatThrownBy(() -> adminTradeHistoryService.deleteClosedTradeHistoryOlderThan(
-            new AdminTradeHistoryCleanupRequest(future)
+            new AdminTradeHistoryCleanupRequest(future, null)
         ))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("deleteBefore");
+    }
+
+    @Test
+    void deleteClosedTradeHistoryOlderThanCanTargetSingleUser() {
+        Instant deleteBefore = Instant.parse("2026-03-01T00:00:00Z");
+        Long userId = 77L;
+        GamePosition first = closedPosition(201L, "2026-02-01T00:00:00Z", PositionStatus.CLOSED);
+
+        when(gamePositionRepository.findCleanupTargetsByUserId(
+            List.of(PositionStatus.CLOSED, PositionStatus.AUTO_CLOSED),
+            deleteBefore,
+            userId
+        )).thenReturn(List.of(first));
+        when(gameLedgerRepository.deleteByPositionIds(List.of(201L))).thenReturn(1L);
+        when(gameDividendPayoutRepository.deleteByPositionIds(List.of(201L))).thenReturn(1L);
+        when(gamePositionRepository.deleteByIds(List.of(201L))).thenReturn(1L);
+
+        var response = adminTradeHistoryService.deleteClosedTradeHistoryOlderThan(
+            new AdminTradeHistoryCleanupRequest(deleteBefore, userId)
+        );
+
+        assertThat(response.deletedPositionCount()).isEqualTo(1L);
+        assertThat(response.deletedLedgerCount()).isEqualTo(1L);
+        assertThat(response.deletedDividendPayoutCount()).isEqualTo(1L);
     }
 
     private GamePosition closedPosition(Long id, String closedAt, PositionStatus status) {

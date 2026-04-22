@@ -32,7 +32,7 @@ class AdminHighlightHistoryServiceTest {
         when(gameHighlightStateRepository.deleteByBestSettledCreatedAtBefore(deleteBefore)).thenReturn(7L);
 
         var response = adminHighlightHistoryService.deleteHighlightsOlderThan(
-            new AdminHighlightHistoryCleanupRequest(deleteBefore)
+            new AdminHighlightHistoryCleanupRequest(deleteBefore, null)
         );
 
         assertThat(response.deleteBefore()).isEqualTo(deleteBefore);
@@ -43,9 +43,22 @@ class AdminHighlightHistoryServiceTest {
     @Test
     void deleteHighlightsOlderThanRejectsFutureTime() {
         assertThatThrownBy(() -> adminHighlightHistoryService.deleteHighlightsOlderThan(
-            new AdminHighlightHistoryCleanupRequest(Instant.parse("2026-04-22T00:00:00Z"))
+            new AdminHighlightHistoryCleanupRequest(Instant.parse("2026-04-22T00:00:00Z"), null)
         ))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("deleteBefore");
+    }
+
+    @Test
+    void deleteHighlightsOlderThanCanTargetSingleUser() {
+        Instant deleteBefore = Instant.parse("2026-04-01T00:00:00Z");
+        Long userId = 55L;
+        when(gameHighlightStateRepository.deleteByUserIdAndBestSettledCreatedAtBefore(userId, deleteBefore)).thenReturn(3L);
+
+        var response = adminHighlightHistoryService.deleteHighlightsOlderThan(
+            new AdminHighlightHistoryCleanupRequest(deleteBefore, userId)
+        );
+
+        assertThat(response.deletedCount()).isEqualTo(3L);
     }
 }

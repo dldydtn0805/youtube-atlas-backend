@@ -37,16 +37,14 @@ public class AdminTradeHistoryService {
     @Transactional
     public AdminTradeHistoryCleanupResponse deleteClosedTradeHistoryOlderThan(AdminTradeHistoryCleanupRequest request) {
         Instant deleteBefore = request.deleteBefore();
+        Long userId = request.userId();
         Instant now = Instant.now(clock);
 
         if (deleteBefore.isAfter(now)) {
             throw new IllegalArgumentException("deleteBefore는 현재 시각 이전이어야 합니다.");
         }
 
-        List<Long> positionIds = gamePositionRepository.findCleanupTargets(
-            List.of(PositionStatus.CLOSED, PositionStatus.AUTO_CLOSED),
-            deleteBefore
-        ).stream()
+        List<Long> positionIds = loadCleanupTargets(deleteBefore, userId).stream()
             .map(position -> position.getId())
             .toList();
 
@@ -65,5 +63,14 @@ public class AdminTradeHistoryService {
             deletedLedgerCount,
             deletedDividendPayoutCount
         );
+    }
+
+    private List<com.yongsoo.youtubeatlasbackend.game.GamePosition> loadCleanupTargets(Instant deleteBefore, Long userId) {
+        List<PositionStatus> statuses = List.of(PositionStatus.CLOSED, PositionStatus.AUTO_CLOSED);
+        if (userId == null) {
+            return gamePositionRepository.findCleanupTargets(statuses, deleteBefore);
+        }
+
+        return gamePositionRepository.findCleanupTargetsByUserId(statuses, deleteBefore, userId);
     }
 }

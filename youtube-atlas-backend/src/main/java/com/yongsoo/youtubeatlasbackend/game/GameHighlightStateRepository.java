@@ -27,6 +27,8 @@ public interface GameHighlightStateRepository extends JpaRepository<GameHighligh
 
     long deleteByBestSettledCreatedAtBefore(java.time.Instant deleteBefore);
 
+    long deleteByUserIdAndBestSettledCreatedAtBefore(Long userId, java.time.Instant deleteBefore);
+
     void deleteByUserId(Long userId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

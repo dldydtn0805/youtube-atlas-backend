@@ -25,6 +25,23 @@ public interface GamePositionRepository extends JpaRepository<GamePosition, Long
     """)
     List<GamePosition> findCleanupTargets(Collection<PositionStatus> statuses, java.time.Instant deleteBefore);
 
+    @Query("""
+        select position
+        from GamePosition position
+        where position.user.id = :userId
+          and position.status in :statuses
+          and (
+            position.closedAt < :deleteBefore
+            or (position.closedAt is null and position.createdAt < :deleteBefore)
+          )
+        order by position.closedAt asc nulls first, position.createdAt asc
+    """)
+    List<GamePosition> findCleanupTargetsByUserId(
+        Collection<PositionStatus> statuses,
+        java.time.Instant deleteBefore,
+        Long userId
+    );
+
     long countBySeasonIdAndUserIdAndStatus(Long seasonId, Long userId, PositionStatus status);
 
     long countBySeasonIdAndUserIdAndStatusIn(Long seasonId, Long userId, Collection<PositionStatus> statuses);

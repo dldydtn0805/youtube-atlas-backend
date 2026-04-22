@@ -29,13 +29,16 @@ public class AdminHighlightHistoryService {
         AdminHighlightHistoryCleanupRequest request
     ) {
         Instant deleteBefore = request.deleteBefore();
+        Long userId = request.userId();
         Instant now = Instant.now(clock);
 
         if (deleteBefore.isAfter(now)) {
             throw new IllegalArgumentException("deleteBefore는 현재 시각 이전이어야 합니다.");
         }
 
-        long deletedCount = gameHighlightStateRepository.deleteByBestSettledCreatedAtBefore(deleteBefore);
+        long deletedCount = userId == null
+            ? gameHighlightStateRepository.deleteByBestSettledCreatedAtBefore(deleteBefore)
+            : gameHighlightStateRepository.deleteByUserIdAndBestSettledCreatedAtBefore(userId, deleteBefore);
         return new AdminHighlightHistoryCleanupResponse(deleteBefore, now, deletedCount);
     }
 }
