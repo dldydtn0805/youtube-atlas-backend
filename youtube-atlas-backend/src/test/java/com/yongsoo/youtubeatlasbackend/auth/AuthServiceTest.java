@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -104,7 +105,7 @@ class AuthServiceTest {
         assertThat(response.expiresAt()).isEqualTo(Instant.parse("2026-05-01T06:00:00Z"));
         assertThat(response.user().email()).isEqualTo("atlas@example.com");
         assertThat(response.user().displayName()).isEqualTo("Atlas User");
-        verify(commentService).publishLoginSystemMessage("Atlas User님이 로그인했습니다.");
+        verify(commentService, never()).publishLoginSystemMessage(any());
     }
 
     @Test

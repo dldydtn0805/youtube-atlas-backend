@@ -3,10 +3,12 @@ package com.yongsoo.youtubeatlasbackend.game.api;
 import java.time.Instant;
 import java.util.List;
 
+import com.yongsoo.youtubeatlasbackend.game.GameNotificationEventType;
 import com.yongsoo.youtubeatlasbackend.game.GameStrategyType;
 
 public record GameNotificationResponse(
     String id,
+    GameNotificationEventType notificationEventType,
     String notificationType,
     String title,
     String message,

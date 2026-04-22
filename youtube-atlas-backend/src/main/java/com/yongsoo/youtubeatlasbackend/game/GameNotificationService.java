@@ -211,6 +211,7 @@ public class GameNotificationService {
     private GameNotificationResponse toResponse(GameNotification notification) {
         return new GameNotificationResponse(
             notification.getId().toString(),
+            resolveNotificationEventType(notification.getNotificationType(), notification.getEventKey()),
             notification.getNotificationType(),
             notification.getTitle(),
             notification.getMessage(),
@@ -225,6 +226,18 @@ public class GameNotificationService {
             notification.getCreatedAt(),
             !isProjectedEventKey(notification.getEventKey())
         );
+    }
+
+    private GameNotificationEventType resolveNotificationEventType(String notificationType, String eventKey) {
+        if ("TIER_PROMOTION".equals(notificationType)) {
+            return GameNotificationEventType.TIER_PROMOTION;
+        }
+
+        if (isProjectedEventKey(eventKey)) {
+            return GameNotificationEventType.PROJECTED_HIGHLIGHT;
+        }
+
+        return GameNotificationEventType.TIER_SCORE_GAIN;
     }
 
     private boolean isProjectedEventKey(String eventKey) {

@@ -96,7 +96,6 @@ public class AuthService {
         session.setCreatedAt(now);
         session.setExpiresAt(now.plusSeconds(sessionTtlDays * 24L * 60L * 60L));
         authSessionRepository.save(session);
-        publishLoginSystemMessage(savedUser);
 
         return new AuthSessionResponse(
             rawToken,
@@ -181,11 +180,6 @@ public class AuthService {
         byte[] bytes = new byte[32];
         secureRandom.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
-
-    private void publishLoginSystemMessage(AppUser user) {
-        String displayName = StringUtils.hasText(user.getDisplayName()) ? user.getDisplayName().trim() : "익명";
-        commentService.publishLoginSystemMessage(displayName + "님이 로그인했습니다.");
     }
 
     private String hashToken(String token) {

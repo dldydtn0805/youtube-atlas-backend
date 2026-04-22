@@ -27,6 +27,7 @@ import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.game.api.CreatePositionRequest;
+import com.yongsoo.youtubeatlasbackend.game.api.GameNotificationResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPositionsRequest;
 import com.yongsoo.youtubeatlasbackend.trending.TrendRun;
 import com.yongsoo.youtubeatlasbackend.trending.TrendRunRepository;
@@ -486,11 +487,161 @@ class GameServiceTest {
                 org.mockito.ArgumentMatchers.eq(season),
                 org.mockito.ArgumentMatchers.argThat(notifications ->
                     notifications.stream().anyMatch(notification ->
-                        notification.notificationType().equals("TIER_PROMOTION")
+                        notification.notificationEventType() == GameNotificationEventType.TIER_PROMOTION
+                            && notification.notificationType().equals("TIER_PROMOTION")
                             && notification.title().equals("티어 승급")
                             && notification.videoTitle().equals("다이아몬드 티어 달성")
                             && notification.message().contains("다이아몬드 티어")
                             && notification.showModal()
+                    )
+                )
+            );
+    }
+
+    @Test
+    void getCurrentSeasonPreservesStoredNotificationEventTypes() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        GameNotificationResponse storedScoreNotification = new GameNotificationResponse(
+            "42",
+            GameNotificationEventType.TIER_SCORE_GAIN,
+            "MOONSHOT",
+            "문샷 기록",
+            "150위에서 잡은 영상이 10위까지 올라왔습니다.",
+            300L,
+            "video-1",
+            "Title video-1",
+            "Channel",
+            "https://example.com/video-1.jpg",
+            List.of(GameStrategyType.MOONSHOT),
+            20_000L,
+            null,
+            Instant.parse("2026-04-01T06:00:00Z"),
+            true
+        );
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of());
+        when(gameNotificationService.syncAndListSeasonNotifications(any(GameSeason.class), any(), any()))
+            .thenReturn(List.of(storedScoreNotification));
+
+        var response = gameService.getCurrentSeason(authenticatedUser(), "KR");
+
+        assertThat(response.notifications())
+            .singleElement()
+            .extracting(com.yongsoo.youtubeatlasbackend.game.api.GameNotificationResponse::notificationEventType)
+            .isEqualTo(GameNotificationEventType.TIER_SCORE_GAIN);
+    }
+
+    @Test
+    void sellPublishesTierPromotionNotificationWithExplicitEventType() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(150);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            150,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        TrendSignal latestSignal = signal("video-1", 10, 0);
+        GameSeasonTier bronzeTier = tier(season, "BRONZE", "브론즈", 0L, 1);
+        GameSeasonTier diamondTier = tier(season, "DIAMOND", "다이아몬드", 40_000L, 5);
+        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 80_000L, 6);
+        List<GameSeasonTier> tiers = List.of(bronzeTier, diamondTier, masterTier);
+
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.save(position)).thenReturn(position);
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameTierService.getOrCreateTiers(season)).thenReturn(tiers);
+        when(gameTierService.resolveTier(
+            org.mockito.ArgumentMatchers.eq(tiers),
+            org.mockito.ArgumentMatchers.anyLong()
+        )).thenAnswer(invocation -> {
+            long score = invocation.getArgument(1, Long.class);
+            if (score >= 80_000L) {
+                return masterTier;
+            }
+            return score >= 40_000L ? diamondTier : bronzeTier;
+        });
+
+        gameService.sell(authenticatedUser(), 300L);
+
+        verify(gameNotificationService)
+            .createAndPush(
+                org.mockito.ArgumentMatchers.eq(appUser),
+                org.mockito.ArgumentMatchers.eq(season),
+                org.mockito.ArgumentMatchers.argThat(notifications ->
+                    notifications.stream().anyMatch(notification ->
+                        notification.notificationType().equals("TIER_PROMOTION")
+                            && notification.notificationEventType() == GameNotificationEventType.TIER_PROMOTION
+                    )
+                )
+            );
+    }
+
+    @Test
+    void sellPublishesTierPromotionWhenManualAdjustmentCausesTierUpgrade() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        wallet.setManualTierScoreAdjustment(30_000L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(150);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            150,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        TrendSignal latestSignal = signal("video-1", 10, 0);
+        GameSeasonTier bronzeTier = tier(season, "BRONZE", "브론즈", 0L, 1);
+        GameSeasonTier silverTier = tier(season, "SILVER", "실버", 35_000L, 2);
+        GameSeasonTier goldTier = tier(season, "GOLD", "골드", 70_000L, 3);
+        List<GameSeasonTier> tiers = List.of(bronzeTier, silverTier, goldTier);
+
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.save(position)).thenReturn(position);
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameTierService.getOrCreateTiers(season)).thenReturn(tiers);
+        when(gameTierService.resolveTier(
+            org.mockito.ArgumentMatchers.eq(tiers),
+            org.mockito.ArgumentMatchers.anyLong()
+        )).thenAnswer(invocation -> {
+            long score = invocation.getArgument(1, Long.class);
+            if (score >= 70_000L) {
+                return goldTier;
+            }
+            return score >= 35_000L ? silverTier : bronzeTier;
+        });
+
+        gameService.sell(authenticatedUser(), 300L);
+
+        verify(gameNotificationService)
+            .createAndPush(
+                org.mockito.ArgumentMatchers.eq(appUser),
+                org.mockito.ArgumentMatchers.eq(season),
+                org.mockito.ArgumentMatchers.argThat(notifications ->
+                    notifications.stream().anyMatch(notification ->
+                        notification.notificationEventType() == GameNotificationEventType.TIER_PROMOTION
+                            && notification.videoTitle().endsWith("티어 달성")
+                            && notification.highlightScore() != null
                     )
                 )
             );

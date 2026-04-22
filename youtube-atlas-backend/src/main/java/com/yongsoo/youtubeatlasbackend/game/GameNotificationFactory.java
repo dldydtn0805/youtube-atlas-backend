@@ -79,7 +79,8 @@ final class GameNotificationFactory {
         }
 
         return List.of(new GameNotificationResponse(
-            resolveTierPromotionId(position.getSeason().getId(), tier.getTierCode()),
+            resolveTierPromotionId(position.getSeason().getId(), tier.getTierCode(), position.getId()),
+            GameNotificationEventType.TIER_PROMOTION,
             "TIER_PROMOTION",
             "티어 승급",
             tier.getDisplayName() + " 티어에 도달했습니다. 축하합니다!",
@@ -99,6 +100,7 @@ final class GameNotificationFactory {
     private static GameNotificationResponse fromHighlight(GameHighlightResponse highlight, GameStrategyType strategyType) {
         return new GameNotificationResponse(
             resolveId(highlight.positionId(), strategyType),
+            GameNotificationEventType.TIER_SCORE_GAIN,
             strategyType.name(),
             resolveTitle(strategyType),
             resolveMessage(highlight.buyRank(), highlight.highlightRank(), highlight.rankDiff(), highlight.profitRatePercent(), strategyType),
@@ -127,6 +129,7 @@ final class GameNotificationFactory {
     ) {
         return new GameNotificationResponse(
             resolveProjectedId(position.getId(), strategyType),
+            GameNotificationEventType.PROJECTED_HIGHLIGHT,
             strategyType.name(),
             resolveProjectedTitle(strategyType),
             resolveProjectedMessage(position.getBuyRank(), currentRank, rankDiff, profitRatePercent, strategyType),
@@ -147,8 +150,8 @@ final class GameNotificationFactory {
         return "game-" + positionId + "-" + strategyType.name();
     }
 
-    private static String resolveTierPromotionId(Long seasonId, String tierCode) {
-        return "tier-promotion-" + seasonId + "-" + tierCode;
+    private static String resolveTierPromotionId(Long seasonId, String tierCode, Long positionId) {
+        return "tier-promotion-" + seasonId + "-" + tierCode + "-" + positionId;
     }
 
     private static String resolveProjectedId(Long positionId, GameStrategyType strategyType) {

@@ -1931,7 +1931,7 @@ public class GameService {
         );
         long highlightScore = resolveSettledHighlightScore(settledPosition);
         publishHighScoreHighlightNotification(settledPosition);
-        publishTierPromotionIfNeeded(settledPosition, previousHighlightScore);
+        publishTierPromotionIfNeeded(settledPosition, wallet, previousHighlightScore);
 
         return new SellPositionResponse(
             settledPosition.getId(),
@@ -2167,23 +2167,29 @@ public class GameService {
         }
     }
 
-    private void publishTierPromotionIfNeeded(GamePosition settledPosition, long previousHighlightScore) {
+    private void publishTierPromotionIfNeeded(GamePosition settledPosition, GameWallet wallet, long previousHighlightScore) {
         GameHighlightResponse highlight = toSettledGameHighlightResponse(settledPosition);
         if (highlight == null) {
             return;
         }
 
-        long currentHighlightScore = calculateUserHighlightScore(
+        if (wallet == null) {
+            return;
+        }
+
+        long currentCalculatedHighlightScore = calculateUserHighlightScore(
             settledPosition.getSeason().getId(),
             settledPosition.getUser().getId()
         );
+        long adjustedPreviousHighlightScore = applyManualTierScoreAdjustment(wallet, previousHighlightScore);
+        long adjustedCurrentHighlightScore = applyManualTierScoreAdjustment(wallet, currentCalculatedHighlightScore);
         List<GameSeasonTier> tiers = gameTierService.getOrCreateTiers(settledPosition.getSeason());
         if (tiers == null || tiers.isEmpty()) {
             return;
         }
 
-        GameSeasonTier previousTier = gameTierService.resolveTier(tiers, previousHighlightScore);
-        GameSeasonTier currentTier = gameTierService.resolveTier(tiers, currentHighlightScore);
+        GameSeasonTier previousTier = gameTierService.resolveTier(tiers, adjustedPreviousHighlightScore);
+        GameSeasonTier currentTier = gameTierService.resolveTier(tiers, adjustedCurrentHighlightScore);
         if (previousTier == null || currentTier == null || currentTier.getSortOrder() <= previousTier.getSortOrder()) {
             return;
         }
@@ -2200,7 +2206,7 @@ public class GameService {
             GameNotificationFactory.fromTierPromotion(
                 settledPosition,
                 currentTier,
-                currentHighlightScore,
+                adjustedCurrentHighlightScore,
                 highlight.createdAt()
             )
         );

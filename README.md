@@ -376,6 +376,7 @@ values
 [
   {
     "id": "42",
+    "notificationEventType": "TIER_SCORE_GAIN",
     "notificationType": "MOONSHOT",
     "title": "문샷 적중",
     "message": "150위에서 잡은 영상이 10위까지 올라왔습니다.",
@@ -391,6 +392,11 @@ values
   }
 ]
 ```
+
+- `notificationEventType`
+  - `PROJECTED_HIGHLIGHT`: 아직 매도 전이라 예상 하이라이트만 계산된 알림
+  - `TIER_SCORE_GAIN`: 매도 후 티어 점수가 실제로 반영된 알림
+  - `TIER_PROMOTION`: 티어 승급 알림
 
 ### `PATCH /api/game/notifications/read`
 
