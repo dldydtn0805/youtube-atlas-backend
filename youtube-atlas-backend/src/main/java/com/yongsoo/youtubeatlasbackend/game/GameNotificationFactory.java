@@ -1,5 +1,6 @@
 package com.yongsoo.youtubeatlasbackend.game;
 
+import java.text.DecimalFormat;
 import java.time.Instant;
 import java.util.List;
 
@@ -7,6 +8,8 @@ import com.yongsoo.youtubeatlasbackend.game.api.GameHighlightResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.GameNotificationResponse;
 
 final class GameNotificationFactory {
+
+    private static final DecimalFormat PROFIT_RATE_FORMAT = new DecimalFormat("0.#");
 
     private GameNotificationFactory() {
     }
@@ -185,7 +188,7 @@ final class GameNotificationFactory {
     ) {
         return switch (strategyType) {
             case MOONSHOT -> buyRank + "위에서 잡은 영상이 " + highlightRank + "위까지 올라왔습니다.";
-            case BIG_CASHOUT, SMALL_CASHOUT -> "수익률 " + profitRatePercent + "% 플레이가 기록됐습니다.";
+            case BIG_CASHOUT, SMALL_CASHOUT -> "수익률 " + formatProfitRatePercent(profitRatePercent) + "% 플레이가 기록됐습니다.";
             case SNIPE -> buyRank + "위에서 진입해 " + rankDiff + "계단을 앞질렀습니다.";
         };
     }
@@ -199,5 +202,15 @@ final class GameNotificationFactory {
     ) {
         return resolveMessage(buyRank, highlightRank, rankDiff, profitRatePercent, strategyType)
             + " 매도 시 하이라이트 점수로 확정됩니다.";
+    }
+
+    private static String formatProfitRatePercent(Double profitRatePercent) {
+        if (profitRatePercent == null || !Double.isFinite(profitRatePercent)) {
+            return "0";
+        }
+
+        synchronized (PROFIT_RATE_FORMAT) {
+            return PROFIT_RATE_FORMAT.format(profitRatePercent);
+        }
     }
 }
