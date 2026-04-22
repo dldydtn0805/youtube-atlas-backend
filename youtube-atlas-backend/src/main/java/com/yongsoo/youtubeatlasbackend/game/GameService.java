@@ -70,7 +70,7 @@ public class GameService {
     private static final int MOONSHOT_TARGET_RANK_MAX = 20;
     private static final int SNIPE_BUY_RANK_MIN = 150;
     private static final int SNIPE_TARGET_RANK_MAX = 100;
-    private static final long MOONSHOT_HIGHLIGHT_BASE_SCORE = 5_000L;
+    private static final long MOONSHOT_HIGHLIGHT_BASE_SCORE = 15_000L;
     private static final long BIG_CASHOUT_HIGHLIGHT_BASE_SCORE = 5_000L;
     private static final long SMALL_CASHOUT_HIGHLIGHT_BASE_SCORE = 2_500L;
     private static final long SNIPE_HIGHLIGHT_BASE_SCORE = 2_500L;
@@ -79,7 +79,7 @@ public class GameService {
     private static final long MAX_PROFIT_RATE_HIGHLIGHT_BONUS = 5_000L;
     private static final long MIN_PROFIT_POINTS_HIGHLIGHT_BONUS = 5_000L;
     private static final double PROFIT_POINTS_HIGHLIGHT_SQRT_SCALE = 3D;
-    private static final long MAX_PROFIT_POINTS_HIGHLIGHT_BONUS = 30_000L;
+    private static final long MAX_PROFIT_POINTS_HIGHLIGHT_BONUS = 15_000L;
 
     private final GameSeasonRepository gameSeasonRepository;
     private final GameWalletRepository gameWalletRepository;

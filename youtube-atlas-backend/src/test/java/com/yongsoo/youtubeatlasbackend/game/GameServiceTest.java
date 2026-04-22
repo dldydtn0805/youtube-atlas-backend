@@ -1459,6 +1459,7 @@ class GameServiceTest {
         assertThat(GameService.calculateProfitPointsHighlightBonus(30_000L)).isEqualTo(474L);
         assertThat(GameService.calculateProfitPointsHighlightBonus(100_000L)).isEqualTo(925L);
         assertThat(GameService.calculateProfitPointsHighlightBonus(1_000_000L)).isEqualTo(2_992L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000_000L)).isEqualTo(15_000L);
     }
 
     @Test

@@ -35,10 +35,18 @@ class GameHighlightScoringTest {
     }
 
     @Test
-    void usesSqrtProfitBonusWithThirtyThousandPointCap() {
+    void appliesRaisedMoonshotBaseScore() {
+        GameHighlightResponse highlight = highlight(List.of(GameStrategyType.MOONSHOT));
+
+        assertThat(GameService.calculateStrategyHighlightScore(GameStrategyType.MOONSHOT, highlight))
+            .isEqualTo(23_568L);
+    }
+
+    @Test
+    void usesUnifiedProfitBonusCap() {
         assertThat(GameService.calculateProfitPointsHighlightBonus(5_000L)).isZero();
         assertThat(GameService.calculateProfitPointsHighlightBonus(1_000_000L)).isEqualTo(2_992L);
-        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000_000L)).isEqualTo(29_999L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000_000L)).isEqualTo(15_000L);
     }
 
     private GameHighlightResponse highlight(List<GameStrategyType> strategyTags) {
