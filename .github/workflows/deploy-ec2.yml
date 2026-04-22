@@ -61,6 +61,8 @@ jobs:
             exit 1
           fi
 
+          sudo docker builder prune -af || true
+          sudo docker system prune -af || true
           sudo docker build -t youtube-atlas-backend:latest .
           sudo docker rm -f youtube-atlas-backend || true
           sudo docker run -d \

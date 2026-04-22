@@ -1,10 +1,12 @@
 FROM gradle:8.14.4-jdk21-alpine AS build
 
 WORKDIR /workspace
+ENV GRADLE_USER_HOME=/tmp/gradle-cache
 
 COPY youtube-atlas-backend/ ./
 
-RUN gradle bootJar --no-daemon --no-build-cache -Dorg.gradle.caching=false
+RUN gradle bootJar --no-daemon --no-build-cache --max-workers=1 \
+    && rm -rf "$GRADLE_USER_HOME" .gradle
 
 FROM eclipse-temurin:21-jre-alpine
 
