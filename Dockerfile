@@ -4,7 +4,7 @@ WORKDIR /workspace
 
 COPY youtube-atlas-backend/ ./
 
-RUN gradle bootJar --no-daemon
+RUN gradle bootJar --no-daemon --no-build-cache -Dorg.gradle.caching=false
 
 FROM eclipse-temurin:21-jre-alpine
 
