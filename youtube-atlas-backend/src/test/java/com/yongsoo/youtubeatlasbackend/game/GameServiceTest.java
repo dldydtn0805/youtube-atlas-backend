@@ -1467,12 +1467,12 @@ class GameServiceTest {
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
         GameSeasonTier bronzeTier = tier(season, "BRONZE", "브론즈", 0L, 1);
-        GameSeasonTier silverTier = tier(season, "SILVER", "실버", 10_000L, 2);
-        GameSeasonTier goldTier = tier(season, "GOLD", "골드", 30_000L, 3);
-        GameSeasonTier platinumTier = tier(season, "PLATINUM", "플래티넘", 120_000L, 4);
-        GameSeasonTier diamondTier = tier(season, "DIAMOND", "다이아몬드", 600_000L, 5);
-        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 3_600_000L, 6);
-        GameSeasonTier legendTier = tier(season, "LEGEND", "레전드", 25_200_000L, 7);
+        GameSeasonTier silverTier = tier(season, "SILVER", "실버", 5_000L, 2);
+        GameSeasonTier goldTier = tier(season, "GOLD", "골드", 15_000L, 3);
+        GameSeasonTier platinumTier = tier(season, "PLATINUM", "플래티넘", 60_000L, 4);
+        GameSeasonTier diamondTier = tier(season, "DIAMOND", "다이아몬드", 300_000L, 5);
+        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 1_800_000L, 6);
+        GameSeasonTier legendTier = tier(season, "LEGEND", "레전드", 12_600_000L, 7);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
@@ -1512,7 +1512,7 @@ class GameServiceTest {
             Instant.parse("2026-04-01T05:40:00Z")
         );
         GameSeasonTier bronzeTier = tier(season, "BRONZE", "브론즈", 0L, 1);
-        GameSeasonTier silverTier = tier(season, "SILVER", "실버", 10_000L, 2);
+        GameSeasonTier silverTier = tier(season, "SILVER", "실버", 5_000L, 2);
         List<GameSeasonTier> tiers = List.of(bronzeTier, silverTier);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
@@ -1558,7 +1558,7 @@ class GameServiceTest {
         ));
         closedMoonshotPosition.setClosedAt(Instant.parse("2026-04-01T06:01:00Z"));
         GameSeasonTier bronzeTier = tier(season, "BRONZE", "브론즈", 0L, 1);
-        GameSeasonTier silverTier = tier(season, "SILVER", "실버", 10_000L, 2);
+        GameSeasonTier silverTier = tier(season, "SILVER", "실버", 5_000L, 2);
         List<GameSeasonTier> tiers = List.of(bronzeTier, silverTier);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
