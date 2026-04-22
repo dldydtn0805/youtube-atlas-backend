@@ -4,7 +4,7 @@ WORKDIR /workspace
 
 COPY youtube-atlas-backend/ ./
 
-RUN chmod +x ./gradlew && ./gradlew bootJar --no-daemon
+RUN gradle bootJar --no-daemon
 
 FROM eclipse-temurin:21-jre-alpine
 
