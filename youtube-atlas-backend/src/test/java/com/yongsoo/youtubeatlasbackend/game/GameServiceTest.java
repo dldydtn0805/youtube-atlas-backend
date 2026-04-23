@@ -50,6 +50,7 @@ class GameServiceTest {
     private GameLedgerRepository gameLedgerRepository;
     private GameTierService gameTierService;
     private GameNotificationService gameNotificationService;
+    private AchievementTitleService achievementTitleService;
     private AppUserRepository appUserRepository;
     private TrendSignalRepository trendSignalRepository;
     private TrendRunRepository trendRunRepository;
@@ -67,6 +68,7 @@ class GameServiceTest {
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
         gameTierService = org.mockito.Mockito.mock(GameTierService.class);
         gameNotificationService = org.mockito.Mockito.mock(GameNotificationService.class);
+        achievementTitleService = org.mockito.Mockito.mock(AchievementTitleService.class);
         appUserRepository = org.mockito.Mockito.mock(AppUserRepository.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
         trendRunRepository = org.mockito.Mockito.mock(TrendRunRepository.class);
@@ -85,6 +87,7 @@ class GameServiceTest {
             gameLedgerRepository,
             gameTierService,
             gameNotificationService,
+            achievementTitleService,
             appUserRepository,
             trendSignalRepository,
             trendRunRepository,

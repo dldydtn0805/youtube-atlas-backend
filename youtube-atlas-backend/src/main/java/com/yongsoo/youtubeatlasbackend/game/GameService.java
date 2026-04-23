@@ -85,6 +85,7 @@ public class GameService {
     private final GameLedgerRepository gameLedgerRepository;
     private final GameTierService gameTierService;
     private final GameNotificationService gameNotificationService;
+    private final AchievementTitleService achievementTitleService;
     private final AppUserRepository appUserRepository;
     private final TrendSignalRepository trendSignalRepository;
     private final TrendRunRepository trendRunRepository;
@@ -101,6 +102,7 @@ public class GameService {
         GameLedgerRepository gameLedgerRepository,
         GameTierService gameTierService,
         GameNotificationService gameNotificationService,
+        AchievementTitleService achievementTitleService,
         AppUserRepository appUserRepository,
         TrendSignalRepository trendSignalRepository,
         TrendRunRepository trendRunRepository,
@@ -116,6 +118,7 @@ public class GameService {
         this.gameLedgerRepository = gameLedgerRepository;
         this.gameTierService = gameTierService;
         this.gameNotificationService = gameNotificationService;
+        this.achievementTitleService = achievementTitleService;
         this.appUserRepository = appUserRepository;
         this.trendSignalRepository = trendSignalRepository;
         this.trendRunRepository = trendRunRepository;
@@ -515,13 +518,32 @@ public class GameService {
         ).stream().collect(Collectors.groupingBy(position -> position.getUser().getId()));
         List<GameWallet> wallets = gameWalletRepository.findBySeasonId(season.getId());
         wallets.forEach(wallet -> ensureHighlightStatesBackfilled(season, wallet.getUser().getId()));
-        Map<Long, List<GameHighlightResponse>> highlightsByUserId = gameHighlightStateRepository
+        List<GameHighlightState> settledHighlightStates = gameHighlightStateRepository
             .findBySeasonIdAndBestSettledHighlightScoreGreaterThan(season.getId(), 0L)
             .stream()
+            .toList();
+        Map<Long, List<GameHighlightState>> highlightStatesByUserId = settledHighlightStates.stream()
+            .collect(Collectors.groupingBy(state -> state.getUser().getId()));
+        wallets.forEach(wallet -> achievementTitleService.grantTitlesForHighlights(
+            wallet.getUser(),
+            season,
+            highlightStatesByUserId.getOrDefault(wallet.getUser().getId(), List.of()),
+            AchievementTitleSourceType.BACKFILL
+        ));
+        Map<Long, List<GameHighlightResponse>> highlightsByUserId = settledHighlightStates.stream()
             .collect(Collectors.groupingBy(
                 state -> state.getUser().getId(),
                 Collectors.mapping(this::toStoredHighlightResponse, Collectors.toList())
             ));
+        Map<Long, com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse> selectedTitleByUserId =
+            achievementTitleService.findSelectedTitlesByUserIds(
+                wallets.stream().map(wallet -> wallet.getUser().getId()).toList()
+            );
+        if (selectedTitleByUserId == null) {
+            selectedTitleByUserId = Map.of();
+        }
+        Map<Long, com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse> selectedTitles =
+            selectedTitleByUserId;
 
         List<LeaderboardSnapshot> snapshots = wallets.stream()
             .map(wallet -> toLeaderboardSnapshot(
@@ -529,7 +551,8 @@ public class GameService {
                 openPositionsByUserId.getOrDefault(wallet.getUser().getId(), List.of()),
                 highlightsByUserId.getOrDefault(wallet.getUser().getId(), List.of()),
                 signalByVideoId,
-                tiers
+                tiers,
+                selectedTitles.get(wallet.getUser().getId())
             ))
             .sorted(
                 Comparator.comparingLong(LeaderboardSnapshot::highlightScore).reversed()
@@ -1090,6 +1113,12 @@ public class GameService {
 
         if (!missingStates.isEmpty()) {
             gameHighlightStateRepository.saveAll(missingStates);
+            achievementTitleService.grantTitlesForHighlights(
+                user,
+                season,
+                missingStates,
+                AchievementTitleSourceType.BACKFILL
+            );
         }
     }
 
@@ -1627,7 +1656,8 @@ public class GameService {
         List<GamePosition> openPositions,
         List<GameHighlightResponse> highlights,
         Map<String, TrendSignal> signalByVideoId,
-        List<GameSeasonTier> tiers
+        List<GameSeasonTier> tiers,
+        com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse selectedAchievementTitle
     ) {
         long totalStakePoints = 0L;
         long markedOpenPositionPoints = 0L;
@@ -1667,6 +1697,7 @@ public class GameService {
             wallet.getUser().getDisplayName(),
             wallet.getUser().getPictureUrl(),
             toTierResponse(gameTierService.resolveTier(tiers, highlightScore)),
+            selectedAchievementTitle,
             highlightScore,
             highlights.size(),
             topHighlight != null ? topHighlight.highlightType() : null,
@@ -1692,6 +1723,7 @@ public class GameService {
                     snapshot.displayName(),
                     snapshot.pictureUrl(),
                     snapshot.currentTier(),
+                    snapshot.selectedAchievementTitle(),
                     snapshot.highlightScore(),
                     snapshot.highlightCount(),
                     snapshot.topHighlightType(),
@@ -2066,7 +2098,8 @@ public class GameService {
         }
 
         applyStoredHighlight(state, currentHighlight);
-        gameHighlightStateRepository.save(state);
+        GameHighlightState savedState = gameHighlightStateRepository.save(state);
+        achievementTitleService.grantTitlesForHighlight(savedState, AchievementTitleSourceType.HIGHLIGHT);
 
         gameNotificationService.createAndPush(
             settledPosition.getUser(),
@@ -2503,6 +2536,7 @@ public class GameService {
         String displayName,
         String pictureUrl,
         TierResponse currentTier,
+        com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse selectedAchievementTitle,
         Long highlightScore,
         Integer highlightCount,
         String topHighlightType,

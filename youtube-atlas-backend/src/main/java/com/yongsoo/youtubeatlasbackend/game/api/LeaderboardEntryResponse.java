@@ -6,6 +6,7 @@ public record LeaderboardEntryResponse(
     String displayName,
     String pictureUrl,
     TierResponse currentTier,
+    SelectedAchievementTitleResponse selectedAchievementTitle,
     Long highlightScore,
     Integer highlightCount,
     String topHighlightType,

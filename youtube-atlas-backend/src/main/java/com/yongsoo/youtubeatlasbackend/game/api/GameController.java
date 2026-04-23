@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.yongsoo.youtubeatlasbackend.auth.AuthService;
+import com.yongsoo.youtubeatlasbackend.game.AchievementTitleService;
 import com.yongsoo.youtubeatlasbackend.game.GameService;
 import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategorySectionResponse;
 
@@ -24,10 +25,16 @@ import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategorySectionResponse;
 public class GameController {
 
     private final GameService gameService;
+    private final AchievementTitleService achievementTitleService;
     private final AuthService authService;
 
-    public GameController(GameService gameService, AuthService authService) {
+    public GameController(
+        GameService gameService,
+        AchievementTitleService achievementTitleService,
+        AuthService authService
+    ) {
         this.gameService = gameService;
+        this.achievementTitleService = achievementTitleService;
         this.authService = authService;
     }
 
@@ -122,6 +129,24 @@ public class GameController {
         @RequestParam String regionCode
     ) {
         return gameService.getCurrentTier(authService.requireCurrentUser(authorizationHeader), regionCode);
+    }
+
+    @GetMapping("/achievement-titles/me")
+    public AchievementTitleCollectionResponse getMyAchievementTitles(
+        @RequestHeader("Authorization") String authorizationHeader
+    ) {
+        return achievementTitleService.getMyTitles(authService.requireCurrentUser(authorizationHeader));
+    }
+
+    @PatchMapping("/achievement-titles/me/selected")
+    public AchievementTitleCollectionResponse updateSelectedAchievementTitle(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestBody(required = false) UpdateSelectedAchievementTitleRequest request
+    ) {
+        return achievementTitleService.updateSelectedTitle(
+            authService.requireCurrentUser(authorizationHeader),
+            request != null ? request.titleCode() : null
+        );
     }
 
     @GetMapping("/leaderboard/{userId}/positions")
