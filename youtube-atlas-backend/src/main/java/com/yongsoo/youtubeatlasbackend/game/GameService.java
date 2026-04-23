@@ -78,7 +78,7 @@ public class GameService {
     private static final long PROFIT_RATE_HIGHLIGHT_SCORE_MULTIPLIER = 10L;
     private static final long MAX_PROFIT_RATE_HIGHLIGHT_BONUS = 5_000L;
     private static final long MIN_PROFIT_POINTS_HIGHLIGHT_BONUS = 5_000L;
-    private static final double PROFIT_POINTS_HIGHLIGHT_SQRT_SCALE = 3D;
+    private static final double PROFIT_POINTS_HIGHLIGHT_SQRT_SCALE = 0.75D;
     private static final long MAX_PROFIT_POINTS_HIGHLIGHT_BONUS = 15_000L;
 
     private final GameSeasonRepository gameSeasonRepository;

@@ -1607,10 +1607,11 @@ class GameServiceTest {
         assertThat(GameService.calculateProfitPointsHighlightBonus(null)).isZero();
         assertThat(GameService.calculateProfitPointsHighlightBonus(4_999L)).isZero();
         assertThat(GameService.calculateProfitPointsHighlightBonus(5_000L)).isZero();
-        assertThat(GameService.calculateProfitPointsHighlightBonus(30_000L)).isEqualTo(474L);
-        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000L)).isEqualTo(925L);
-        assertThat(GameService.calculateProfitPointsHighlightBonus(1_000_000L)).isEqualTo(2_992L);
-        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000_000L)).isEqualTo(15_000L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(30_000L)).isEqualTo(119L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000L)).isEqualTo(231L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(1_000_000L)).isEqualTo(748L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000_000L)).isEqualTo(7_500L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(400_005_000L)).isEqualTo(15_000L);
     }
 
     @Test
