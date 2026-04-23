@@ -19,8 +19,10 @@ import com.yongsoo.youtubeatlasbackend.auth.api.AuthUserResponse;
 import com.yongsoo.youtubeatlasbackend.comments.CommentRepository;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
+import com.yongsoo.youtubeatlasbackend.game.AchievementTitleService;
 import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
 import com.yongsoo.youtubeatlasbackend.game.LedgerType;
+import com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse;
 import com.yongsoo.youtubeatlasbackend.playback.PlaybackProgressService;
 import com.yongsoo.youtubeatlasbackend.playback.api.PlaybackProgressResponse;
 
@@ -37,6 +39,7 @@ public class AuthService {
     private final FavoriteStreamerRepository favoriteStreamerRepository;
     private final CommentRepository commentRepository;
     private final GameLedgerRepository gameLedgerRepository;
+    private final AchievementTitleService achievementTitleService;
     private final CommentService commentService;
     private final Clock clock;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -50,6 +53,7 @@ public class AuthService {
         FavoriteStreamerRepository favoriteStreamerRepository,
         CommentRepository commentRepository,
         GameLedgerRepository gameLedgerRepository,
+        AchievementTitleService achievementTitleService,
         CommentService commentService,
         Clock clock
     ) {
@@ -61,6 +65,7 @@ public class AuthService {
         this.favoriteStreamerRepository = favoriteStreamerRepository;
         this.commentRepository = commentRepository;
         this.gameLedgerRepository = gameLedgerRepository;
+        this.achievementTitleService = achievementTitleService;
         this.commentService = commentService;
         this.clock = clock;
     }
@@ -206,12 +211,16 @@ public class AuthService {
             user.getId(),
             List.of(LedgerType.BUY_LOCK, LedgerType.SELL_SETTLE)
         );
+        SelectedAchievementTitleResponse selectedTitle = achievementTitleService
+            .findSelectedTitlesByUserIds(List.of(user.getId()))
+            .get(user.getId());
 
         return new AuthUserResponse(
             user.getId(),
             user.getEmail(),
             user.getDisplayName(),
             user.getPictureUrl(),
+            selectedTitle,
             user.getCreatedAt(),
             user.getLastLoginAt(),
             favoriteCount,

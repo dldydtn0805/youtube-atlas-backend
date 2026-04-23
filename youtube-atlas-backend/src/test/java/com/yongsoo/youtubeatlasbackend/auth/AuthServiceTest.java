@@ -26,8 +26,11 @@ import com.yongsoo.youtubeatlasbackend.auth.api.AuthUserResponse;
 import com.yongsoo.youtubeatlasbackend.comments.CommentRepository;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.favorites.FavoriteStreamerRepository;
+import com.yongsoo.youtubeatlasbackend.game.AchievementTitleService;
 import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
 import com.yongsoo.youtubeatlasbackend.game.LedgerType;
+import com.yongsoo.youtubeatlasbackend.game.AchievementTitleGrade;
+import com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse;
 import com.yongsoo.youtubeatlasbackend.playback.PlaybackProgressService;
 import com.yongsoo.youtubeatlasbackend.playback.api.PlaybackProgressResponse;
 
@@ -41,6 +44,7 @@ class AuthServiceTest {
     private FavoriteStreamerRepository favoriteStreamerRepository;
     private CommentRepository commentRepository;
     private GameLedgerRepository gameLedgerRepository;
+    private AchievementTitleService achievementTitleService;
     private CommentService commentService;
     private AuthService authService;
     private final Map<String, AuthSession> sessionsByHash = new HashMap<>();
@@ -55,6 +59,7 @@ class AuthServiceTest {
         favoriteStreamerRepository = org.mockito.Mockito.mock(FavoriteStreamerRepository.class);
         commentRepository = org.mockito.Mockito.mock(CommentRepository.class);
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
+        achievementTitleService = org.mockito.Mockito.mock(AchievementTitleService.class);
         commentService = org.mockito.Mockito.mock(CommentService.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-01T06:00:00Z"), ZoneOffset.UTC);
         authService = new AuthService(
@@ -66,6 +71,7 @@ class AuthServiceTest {
             favoriteStreamerRepository,
             commentRepository,
             gameLedgerRepository,
+            achievementTitleService,
             commentService,
             fixedClock
         );
@@ -88,6 +94,7 @@ class AuthServiceTest {
         when(favoriteStreamerRepository.countByUserId(any())).thenReturn(0L);
         when(commentRepository.countByUserId(any())).thenReturn(0L);
         when(gameLedgerRepository.countByUserIdAndTypeIn(any(), any())).thenReturn(0L);
+        when(achievementTitleService.findSelectedTitlesByUserIds(any())).thenReturn(Map.of());
         when(playbackProgressService.getCurrentProgressForUserId(any())).thenReturn(Optional.empty());
         when(playbackProgressService.getRecentProgressesForUserId(any(), anyInt())).thenReturn(List.of());
     }
@@ -124,6 +131,31 @@ class AuthServiceTest {
         assertThat(me.favoriteCount()).isZero();
         assertThat(me.commentCount()).isZero();
         assertThat(me.tradeCount()).isZero();
+        assertThat(me.selectedTitle()).isNull();
+    }
+
+    @Test
+    void getCurrentUserIncludesSelectedTitleWhenPresent() {
+        when(googleTokenVerifier.verify("google-id-token")).thenReturn(
+            new GoogleIdentity("google-subject-1", "atlas@example.com", "Atlas User", null)
+        );
+        when(achievementTitleService.findSelectedTitlesByUserIds(java.util.List.of(7L))).thenReturn(Map.of(
+            7L,
+            new SelectedAchievementTitleResponse(
+                "ATLAS_FINDER",
+                "Atlas Finder",
+                "A. Finder",
+                AchievementTitleGrade.RARE,
+                "selected title"
+            )
+        ));
+
+        AuthSessionResponse sessionResponse = authService.loginWithGoogle("google-id-token", 30);
+        AuthUserResponse me = authService.getCurrentUser("Bearer " + sessionResponse.accessToken());
+
+        assertThat(me.selectedTitle()).isNotNull();
+        assertThat(me.selectedTitle().code()).isEqualTo("ATLAS_FINDER");
+        assertThat(me.selectedTitle().grade()).isEqualTo(AchievementTitleGrade.RARE);
     }
 
     @Test
