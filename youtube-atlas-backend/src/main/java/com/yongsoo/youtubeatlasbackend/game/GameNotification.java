@@ -6,6 +6,8 @@ import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -73,6 +75,16 @@ public class GameNotification {
 
     @Column(name = "highlight_score")
     private Long highlightScore;
+
+    @Column(name = "title_code", length = 80)
+    private String titleCode;
+
+    @Column(name = "title_display_name", length = 80)
+    private String titleDisplayName;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "title_grade", length = 20)
+    private AchievementTitleGrade titleGrade;
 
     @Column(name = "read_at")
     private Instant readAt;
@@ -189,6 +201,30 @@ public class GameNotification {
 
     public void setHighlightScore(Long highlightScore) {
         this.highlightScore = highlightScore;
+    }
+
+    public String getTitleCode() {
+        return titleCode;
+    }
+
+    public void setTitleCode(String titleCode) {
+        this.titleCode = titleCode;
+    }
+
+    public String getTitleDisplayName() {
+        return titleDisplayName;
+    }
+
+    public void setTitleDisplayName(String titleDisplayName) {
+        this.titleDisplayName = titleDisplayName;
+    }
+
+    public AchievementTitleGrade getTitleGrade() {
+        return titleGrade;
+    }
+
+    public void setTitleGrade(AchievementTitleGrade titleGrade) {
+        this.titleGrade = titleGrade;
     }
 
     public Instant getReadAt() {

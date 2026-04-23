@@ -69,6 +69,12 @@ jobs:
             postgres:18 \
             psql "$DB_PSQL_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 -f /sql/migrate_game_achievement_titles.sql
 
+          sudo docker run --rm \
+            -e PGPASSWORD="$DB_PASSWORD" \
+            -v "$PWD/sql:/sql:ro" \
+            postgres:18 \
+            psql "$DB_PSQL_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 -f /sql/migrate_game_notification_titles.sql
+
           sudo docker builder prune -af || true
           sudo docker system prune -af || true
           sudo docker build -t youtube-atlas-backend:latest .

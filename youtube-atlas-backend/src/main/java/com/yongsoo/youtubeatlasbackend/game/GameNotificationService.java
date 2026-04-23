@@ -183,6 +183,9 @@ public class GameNotificationService {
         notification.setThumbnailUrl(response.thumbnailUrl());
         notification.setStrategyTags(joinStrategyTags(response.strategyTags()));
         notification.setHighlightScore(nextScore);
+        notification.setTitleCode(response.titleCode());
+        notification.setTitleDisplayName(response.titleDisplayName());
+        notification.setTitleGrade(response.titleGrade());
         notification.setReadAt(null);
         notification.setDeletedAt(null);
         notification.setCreatedAt(response.createdAt() != null ? response.createdAt() : Instant.now(clock));
@@ -204,6 +207,9 @@ public class GameNotificationService {
         notification.setThumbnailUrl(response.thumbnailUrl());
         notification.setStrategyTags(joinStrategyTags(response.strategyTags()));
         notification.setHighlightScore(response.highlightScore());
+        notification.setTitleCode(response.titleCode());
+        notification.setTitleDisplayName(response.titleDisplayName());
+        notification.setTitleGrade(response.titleGrade());
         notification.setCreatedAt(response.createdAt() != null ? response.createdAt() : Instant.now(clock));
         return notification;
     }
@@ -222,6 +228,9 @@ public class GameNotificationService {
             notification.getThumbnailUrl(),
             parseStrategyTags(notification.getStrategyTags()),
             notification.getHighlightScore(),
+            notification.getTitleCode(),
+            notification.getTitleDisplayName(),
+            notification.getTitleGrade(),
             notification.getReadAt(),
             notification.getCreatedAt(),
             !isProjectedEventKey(notification.getEventKey())
@@ -231,6 +240,10 @@ public class GameNotificationService {
     private GameNotificationEventType resolveNotificationEventType(String notificationType, String eventKey) {
         if ("TIER_PROMOTION".equals(notificationType)) {
             return GameNotificationEventType.TIER_PROMOTION;
+        }
+
+        if ("TITLE_UNLOCK".equals(notificationType)) {
+            return GameNotificationEventType.TITLE_UNLOCK;
         }
 
         if (isProjectedEventKey(eventKey)) {

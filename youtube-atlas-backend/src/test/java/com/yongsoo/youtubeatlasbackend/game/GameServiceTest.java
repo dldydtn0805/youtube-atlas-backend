@@ -154,6 +154,8 @@ class GameServiceTest {
         });
         when(gameNotificationService.syncAndListSeasonNotifications(any(GameSeason.class), any(), any()))
             .thenAnswer(invocation -> invocation.getArgument(2));
+        when(achievementTitleService.grantTitlesForHighlight(any(), any())).thenReturn(List.of());
+        when(achievementTitleService.grantTitlesForHighlights(any(), any(), any(), any())).thenReturn(List.of());
     }
 
     @Test
@@ -520,6 +522,9 @@ class GameServiceTest {
             List.of(GameStrategyType.MOONSHOT),
             20_000L,
             null,
+            null,
+            null,
+            null,
             Instant.parse("2026-04-01T06:00:00Z"),
             true
         );
@@ -591,6 +596,54 @@ class GameServiceTest {
                     )
                 )
             );
+    }
+
+    @Test
+    void sellPublishesTitleUnlockNotificationsWithoutModal() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(150);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            150,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        TrendSignal latestSignal = signal("video-1", 10, 0);
+        AchievementTitle atlasTitle = achievementTitle("ATLAS_SEEKER", "Atlas Seeker", AchievementTitleGrade.NORMAL, 10);
+        AchievementTitle sniperTitle = achievementTitle("ATLAS_SNIPER", "Atlas Sniper", AchievementTitleGrade.SUPER, 40);
+
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
+        when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameWalletRepository.save(any(GameWallet.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(achievementTitleService.grantTitlesForHighlight(any(), any())).thenReturn(List.of(atlasTitle, sniperTitle));
+
+        var response = gameService.sell(authenticatedUser(), 300L);
+
+        assertThat(response.highlightScore()).isPositive();
+        verify(gameNotificationService).createAndPush(
+            org.mockito.ArgumentMatchers.eq(appUser),
+            org.mockito.ArgumentMatchers.eq(season),
+            org.mockito.ArgumentMatchers.argThat(notifications ->
+                notifications.size() == 2
+                    && notifications.stream().allMatch(notification ->
+                        notification.notificationEventType() == GameNotificationEventType.TITLE_UNLOCK
+                            && notification.notificationType().equals("TITLE_UNLOCK")
+                            && !notification.showModal()
+                            && notification.videoId() == null
+                            && notification.titleCode() != null
+                            && notification.titleGrade() != null
+                    )
+                    && notifications.stream().map(GameNotificationResponse::titleCode).collect(java.util.stream.Collectors.toSet())
+                        .equals(java.util.Set.of("ATLAS_SEEKER", "ATLAS_SNIPER"))
+            )
+        );
     }
 
     @Test
@@ -2102,6 +2155,26 @@ class GameServiceTest {
         signal.setCapturedAt(Instant.parse("2026-04-01T06:00:00Z"));
         signal.setUpdatedAt(Instant.parse("2026-04-01T06:00:00Z"));
         return signal;
+    }
+
+    private AchievementTitle achievementTitle(
+        String code,
+        String displayName,
+        AchievementTitleGrade grade,
+        int sortOrder
+    ) {
+        AchievementTitle title = new AchievementTitle();
+        ReflectionTestUtils.setField(title, "id", (long) sortOrder);
+        title.setCode(code);
+        title.setDisplayName(displayName);
+        title.setShortName(displayName);
+        title.setGrade(grade);
+        title.setDescription(displayName + " description");
+        title.setSortOrder(sortOrder);
+        title.setEnabled(true);
+        title.setCreatedAt(Instant.parse("2026-04-01T06:00:00Z"));
+        title.setUpdatedAt(Instant.parse("2026-04-01T06:00:00Z"));
+        return title;
     }
 
     private double roundPercent(long deltaPoints, long basePoints) {

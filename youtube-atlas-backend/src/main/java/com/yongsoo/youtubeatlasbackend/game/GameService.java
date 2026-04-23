@@ -2099,13 +2099,21 @@ public class GameService {
 
         applyStoredHighlight(state, currentHighlight);
         GameHighlightState savedState = gameHighlightStateRepository.save(state);
-        achievementTitleService.grantTitlesForHighlight(savedState, AchievementTitleSourceType.HIGHLIGHT);
+        List<AchievementTitle> unlockedTitles =
+            achievementTitleService.grantTitlesForHighlight(savedState, AchievementTitleSourceType.HIGHLIGHT);
 
         gameNotificationService.createAndPush(
             settledPosition.getUser(),
             settledPosition.getSeason(),
             GameNotificationFactory.fromHighlight(currentHighlight)
         );
+        if (!unlockedTitles.isEmpty()) {
+            gameNotificationService.createAndPush(
+                settledPosition.getUser(),
+                settledPosition.getSeason(),
+                GameNotificationFactory.fromUnlockedTitles(unlockedTitles, currentHighlight.createdAt())
+            );
+        }
     }
 
     @Transactional

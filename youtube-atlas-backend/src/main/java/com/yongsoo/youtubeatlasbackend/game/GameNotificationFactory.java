@@ -95,9 +95,42 @@ final class GameNotificationFactory {
             List.of(),
             highlightScore,
             null,
+            null,
+            null,
+            null,
             createdAt,
             true
         ));
+    }
+
+    static List<GameNotificationResponse> fromUnlockedTitles(List<AchievementTitle> titles, Instant createdAt) {
+        if (titles == null || titles.isEmpty()) {
+            return List.of();
+        }
+
+        Instant notificationTime = createdAt != null ? createdAt : Instant.now();
+        return titles.stream()
+            .map(title -> new GameNotificationResponse(
+                resolveTitleUnlockId(title.getCode()),
+                GameNotificationEventType.TITLE_UNLOCK,
+                "TITLE_UNLOCK",
+                "새 칭호 획득",
+                title.getDisplayName() + " 칭호를 획득했습니다.",
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                title.getCode(),
+                title.getDisplayName(),
+                title.getGrade(),
+                null,
+                notificationTime,
+                false
+            ))
+            .toList();
     }
 
     private static GameNotificationResponse fromHighlight(GameHighlightResponse highlight, GameStrategyType strategyType) {
@@ -114,6 +147,9 @@ final class GameNotificationFactory {
             highlight.thumbnailUrl(),
             highlight.strategyTags(),
             highlight.highlightScore(),
+            null,
+            null,
+            null,
             null,
             highlight.createdAt(),
             true
@@ -144,6 +180,9 @@ final class GameNotificationFactory {
             strategyTags,
             projectedHighlightScore,
             null,
+            null,
+            null,
+            null,
             createdAt,
             false
         );
@@ -159,6 +198,10 @@ final class GameNotificationFactory {
 
     private static String resolveProjectedId(Long positionId, GameStrategyType strategyType) {
         return "projected-game-" + positionId + "-" + strategyType.name();
+    }
+
+    private static String resolveTitleUnlockId(String titleCode) {
+        return "title-unlock-" + titleCode;
     }
 
     private static String resolveTitle(GameStrategyType strategyType) {

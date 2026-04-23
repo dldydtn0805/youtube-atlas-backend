@@ -149,12 +149,12 @@ public class AchievementTitleService {
     }
 
     @Transactional
-    public void grantTitlesForHighlight(GameHighlightState highlightState, AchievementTitleSourceType sourceType) {
+    public List<AchievementTitle> grantTitlesForHighlight(GameHighlightState highlightState, AchievementTitleSourceType sourceType) {
         if (highlightState == null || highlightState.getUser() == null || highlightState.getSeason() == null) {
-            return;
+            return List.of();
         }
 
-        grantTitles(
+        return grantTitles(
             highlightState.getUser(),
             highlightState.getSeason(),
             highlightState.getId(),
@@ -164,20 +164,20 @@ public class AchievementTitleService {
     }
 
     @Transactional
-    public void grantTitlesForHighlights(
+    public List<AchievementTitle> grantTitlesForHighlights(
         AppUser user,
         GameSeason season,
         List<GameHighlightState> highlightStates,
         AchievementTitleSourceType sourceType
     ) {
         if (user == null || season == null || highlightStates == null || highlightStates.isEmpty()) {
-            return;
+            return List.of();
         }
 
         Set<String> codes = highlightStates.stream()
             .flatMap(state -> resolveEarnedCodes(parseStrategyTags(state.getStrategyTags())).stream())
             .collect(Collectors.toSet());
-        grantTitles(user, season, null, codes, sourceType);
+        return grantTitles(user, season, null, codes, sourceType);
     }
 
     @Transactional(readOnly = true)
@@ -207,7 +207,7 @@ public class AchievementTitleService {
         return selectedByUserId;
     }
 
-    private void grantTitles(
+    private List<AchievementTitle> grantTitles(
         AppUser user,
         GameSeason season,
         Long sourceHighlightStateId,
@@ -215,7 +215,7 @@ public class AchievementTitleService {
         AchievementTitleSourceType sourceType
     ) {
         if (titleCodes == null || titleCodes.isEmpty()) {
-            return;
+            return List.of();
         }
 
         Map<String, AchievementTitle> titlesByCode = getOrCreateTitles().stream()
@@ -223,7 +223,7 @@ public class AchievementTitleService {
             .filter(title -> titleCodes.contains(title.getCode()))
             .collect(Collectors.toMap(AchievementTitle::getCode, Function.identity()));
         if (titlesByCode.isEmpty()) {
-            return;
+            return List.of();
         }
 
         Instant now = Instant.now(clock);
@@ -250,6 +250,15 @@ public class AchievementTitleService {
         if (!createdTitles.isEmpty()) {
             applyAutoSelection(user);
         }
+
+        return createdTitles.stream()
+            .map(UserAchievementTitle::getTitle)
+            .filter(Objects::nonNull)
+            .sorted(
+                Comparator.comparingInt((AchievementTitle title) -> title.getSortOrder() != null ? title.getSortOrder() : 0)
+                    .thenComparing(AchievementTitle::getCode, Comparator.nullsLast(String::compareTo))
+            )
+            .toList();
     }
 
     private void applyAutoSelection(AppUser user) {
