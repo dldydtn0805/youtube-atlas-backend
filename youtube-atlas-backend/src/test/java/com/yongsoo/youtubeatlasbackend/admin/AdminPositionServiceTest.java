@@ -174,16 +174,79 @@ class AdminPositionServiceTest {
         assertThatThrownBy(() -> adminPositionService.updateOpenPosition(
             7L,
             11L,
-            new AdminPositionUpdateRequest(300, 1500L, Instant.parse("2026-03-01T00:00:00Z"))
+            new AdminPositionUpdateRequest(300, 1500L, Instant.parse("2026-04-01T00:00:01Z"))
         ))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("스냅샷");
+    }
+
+    @Test
+    void updateOpenPositionRejectsFutureCreatedAt() {
+        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200);
+        GameWallet wallet = new GameWallet();
+        wallet.setBalancePoints(8800L);
+        wallet.setReservedPoints(1200L);
+
+        when(appUserRepository.existsById(7L)).thenReturn(true);
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(11L, 7L)).thenReturn(Optional.of(position));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(3L, 7L)).thenReturn(Optional.of(wallet));
+
+        assertThatThrownBy(() -> adminPositionService.updateOpenPosition(
+            7L,
+            11L,
+            new AdminPositionUpdateRequest(300, 1500L, Instant.parse("2026-04-16T00:00:00Z"))
+        ))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("현재 시각 이후");
+    }
+
+    @Test
+    void updateOpenPositionRejectsCreatedAtBeforeSeasonStart() {
+        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200);
+        GameWallet wallet = new GameWallet();
+        wallet.setBalancePoints(8800L);
+        wallet.setReservedPoints(1200L);
+
+        when(appUserRepository.existsById(7L)).thenReturn(true);
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(11L, 7L)).thenReturn(Optional.of(position));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(3L, 7L)).thenReturn(Optional.of(wallet));
+
+        assertThatThrownBy(() -> adminPositionService.updateOpenPosition(
+            7L,
+            11L,
+            new AdminPositionUpdateRequest(300, 1500L, Instant.parse("2026-03-31T23:59:59Z"))
+        ))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("시즌 시작");
+    }
+
+    @Test
+    void updateOpenPositionRejectsCreatedAtAfterSeasonEnd() {
+        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200);
+        position.getSeason().setEndAt(Instant.parse("2026-04-10T00:00:00Z"));
+        GameWallet wallet = new GameWallet();
+        wallet.setBalancePoints(8800L);
+        wallet.setReservedPoints(1200L);
+
+        when(appUserRepository.existsById(7L)).thenReturn(true);
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(11L, 7L)).thenReturn(Optional.of(position));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(3L, 7L)).thenReturn(Optional.of(wallet));
+
+        assertThatThrownBy(() -> adminPositionService.updateOpenPosition(
+            7L,
+            11L,
+            new AdminPositionUpdateRequest(300, 1500L, Instant.parse("2026-04-10T00:00:01Z"))
+        ))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("시즌 종료");
     }
 
     private GamePosition openPosition(Long id, Long seasonId, String seasonName, Long stakePoints, Integer quantity) {
         GameSeason season = new GameSeason();
         ReflectionTestUtils.setField(season, "id", seasonId);
         season.setName(seasonName);
+        season.setStartAt(Instant.parse("2026-04-01T00:00:00Z"));
+        season.setEndAt(Instant.parse("2026-04-20T00:00:00Z"));
 
         AppUser user = new AppUser();
         ReflectionTestUtils.setField(user, "id", 7L);

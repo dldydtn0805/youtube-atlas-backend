@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface UserAchievementTitleSettingRepository extends JpaRepository<UserAchievementTitleSetting, Long> {
 
+    void deleteByUserId(Long userId);
+
     Optional<UserAchievementTitleSetting> findByUserId(Long userId);
 
     List<UserAchievementTitleSetting> findByUserIdIn(Collection<Long> userIds);

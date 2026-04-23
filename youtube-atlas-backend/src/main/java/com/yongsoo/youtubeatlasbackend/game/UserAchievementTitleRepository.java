@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface UserAchievementTitleRepository extends JpaRepository<UserAchievementTitle, Long> {
 
+    void deleteByUserId(Long userId);
+
     @Query("""
         select count(userTitle) > 0
         from UserAchievementTitle userTitle

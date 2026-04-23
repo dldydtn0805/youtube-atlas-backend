@@ -114,6 +114,7 @@ public class AdminPositionService {
     }
 
     private void applyBuyTime(GamePosition position, Instant createdAt) {
+        validateCreatedAt(position, createdAt);
         TrendSnapshot snapshot = trendSnapshotRepository
             .findSnapshotsByRegionCodeAndCategoryIdAndVideoIdCapturedBeforeOrderByCapturedAtDesc(
                 position.getRegionCode(),
@@ -132,6 +133,23 @@ public class AdminPositionService {
         position.setTitle(snapshot.getTitle());
         position.setChannelTitle(snapshot.getChannelTitle());
         position.setThumbnailUrl(snapshot.getThumbnailUrl());
+    }
+
+    private void validateCreatedAt(GamePosition position, Instant createdAt) {
+        Instant now = Instant.now(clock);
+        if (createdAt.isAfter(now)) {
+            throw new IllegalArgumentException("createdAt은 현재 시각 이후로 설정할 수 없습니다.");
+        }
+
+        Instant seasonStartAt = position.getSeason().getStartAt();
+        if (seasonStartAt != null && createdAt.isBefore(seasonStartAt)) {
+            throw new IllegalArgumentException("createdAt은 시즌 시작 시각 이전으로 설정할 수 없습니다.");
+        }
+
+        Instant seasonEndAt = position.getSeason().getEndAt();
+        if (seasonEndAt != null && createdAt.isAfter(seasonEndAt)) {
+            throw new IllegalArgumentException("createdAt은 시즌 종료 시각 이후로 설정할 수 없습니다.");
+        }
     }
 
     private AdminUserPositionResponse toResponse(GamePosition position) {

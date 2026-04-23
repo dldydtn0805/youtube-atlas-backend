@@ -37,6 +37,8 @@ import com.yongsoo.youtubeatlasbackend.game.GameWallet;
 import com.yongsoo.youtubeatlasbackend.game.GameWalletRepository;
 import com.yongsoo.youtubeatlasbackend.game.PositionStatus;
 import com.yongsoo.youtubeatlasbackend.game.SeasonStatus;
+import com.yongsoo.youtubeatlasbackend.game.UserAchievementTitleRepository;
+import com.yongsoo.youtubeatlasbackend.game.UserAchievementTitleSettingRepository;
 import com.yongsoo.youtubeatlasbackend.game.api.GameHighlightResponse;
 import com.yongsoo.youtubeatlasbackend.playback.PlaybackProgressRepository;
 import com.yongsoo.youtubeatlasbackend.playback.PlaybackProgressService;
@@ -56,6 +58,8 @@ class AdminUserServiceTest {
     private GameDividendPayoutRepository gameDividendPayoutRepository;
     private GameHighlightStateRepository gameHighlightStateRepository;
     private GameNotificationRepository gameNotificationRepository;
+    private UserAchievementTitleRepository userAchievementTitleRepository;
+    private UserAchievementTitleSettingRepository userAchievementTitleSettingRepository;
     private GameService gameService;
     private AdminAccessService adminAccessService;
     private AdminUserService adminUserService;
@@ -75,6 +79,8 @@ class AdminUserServiceTest {
         gameDividendPayoutRepository = org.mockito.Mockito.mock(GameDividendPayoutRepository.class);
         gameHighlightStateRepository = org.mockito.Mockito.mock(GameHighlightStateRepository.class);
         gameNotificationRepository = org.mockito.Mockito.mock(GameNotificationRepository.class);
+        userAchievementTitleRepository = org.mockito.Mockito.mock(UserAchievementTitleRepository.class);
+        userAchievementTitleSettingRepository = org.mockito.Mockito.mock(UserAchievementTitleSettingRepository.class);
         gameService = org.mockito.Mockito.mock(GameService.class);
         adminAccessService = org.mockito.Mockito.mock(AdminAccessService.class);
         clock = Clock.fixed(Instant.parse("2026-04-08T03:00:00Z"), ZoneOffset.UTC);
@@ -93,6 +99,8 @@ class AdminUserServiceTest {
             gameDividendPayoutRepository,
             gameHighlightStateRepository,
             gameNotificationRepository,
+            userAchievementTitleRepository,
+            userAchievementTitleSettingRepository,
             gameTierService,
             gameService,
             adminAccessService,
@@ -296,6 +304,8 @@ class AdminUserServiceTest {
         org.mockito.Mockito.verify(gameDividendPayoutRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gameHighlightStateRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gameNotificationRepository).deleteByUserId(13L);
+        org.mockito.Mockito.verify(userAchievementTitleSettingRepository).deleteByUserId(13L);
+        org.mockito.Mockito.verify(userAchievementTitleRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gamePositionRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gameWalletRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(appUserRepository).delete(user);
@@ -311,6 +321,8 @@ class AdminUserServiceTest {
         org.mockito.Mockito.verify(gameDividendPayoutRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(gameHighlightStateRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(gameNotificationRepository).deleteByUserId(17L);
+        org.mockito.Mockito.verify(userAchievementTitleSettingRepository).deleteByUserId(17L);
+        org.mockito.Mockito.verify(userAchievementTitleRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(gamePositionRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(gameWalletRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(appUserRepository).delete(user);
