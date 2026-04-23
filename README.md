@@ -364,7 +364,7 @@ values
 
 현재 로그인 사용자의 활성 시즌 게임 알림 중 삭제되지 않은 항목을 반환합니다.
 
-- `MOONSHOT`, `BIG_CASHOUT`, `SMALL_CASHOUT`, `SNIPE` 조건을 만족하면 알림 항목으로 내려갑니다.
+- `ATLAS_SHOT`, `MOONSHOT`, `BIG_CASHOUT`, `SMALL_CASHOUT`, `SNIPE` 조건을 만족하면 알림 항목으로 내려갑니다.
 - 한 포지션에서 여러 조건이 동시에 성립하면 조건별로 각각 반환합니다.
 - 알림은 서버에 저장되며 `readAt`, `deletedAt` 상태로 읽음/삭제를 관리합니다.
 - 로그인 직후 `GET /api/game/seasons/current` 응답의 `notifications` 를 사용하거나 이 API를 따로 호출하면 됩니다.
@@ -377,15 +377,15 @@ values
   {
     "id": "42",
     "notificationEventType": "TIER_SCORE_GAIN",
-    "notificationType": "MOONSHOT",
-    "title": "문샷 적중",
+    "notificationType": "ATLAS_SHOT",
+    "title": "아틀라스 샷 기록",
     "message": "150위에서 잡은 영상이 10위까지 올라왔습니다.",
     "positionId": 300,
     "videoId": "video-1",
     "videoTitle": "Title video-1",
     "channelTitle": "Channel",
     "thumbnailUrl": "https://example.com/video-1.jpg",
-    "strategyTags": ["MOONSHOT", "BIG_CASHOUT", "SNIPE"],
+    "strategyTags": ["ATLAS_SHOT", "MOONSHOT", "BIG_CASHOUT", "SNIPE"],
     "highlightScore": 20000,
     "readAt": null,
     "createdAt": "2026-04-01T06:00:00Z"

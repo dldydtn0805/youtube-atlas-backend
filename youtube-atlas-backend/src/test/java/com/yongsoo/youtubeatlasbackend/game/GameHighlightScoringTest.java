@@ -43,6 +43,14 @@ class GameHighlightScoringTest {
     }
 
     @Test
+    void appliesAtlasShotBaseScore() {
+        GameHighlightResponse highlight = highlight(List.of(GameStrategyType.ATLAS_SHOT));
+
+        assertThat(GameService.calculateStrategyHighlightScore(GameStrategyType.ATLAS_SHOT, highlight))
+            .isEqualTo(53_367L);
+    }
+
+    @Test
     void usesUnifiedProfitBonusCap() {
         assertThat(GameService.calculateProfitPointsHighlightBonus(5_000L)).isZero();
         assertThat(GameService.calculateProfitPointsHighlightBonus(1_000_000L)).isEqualTo(748L);

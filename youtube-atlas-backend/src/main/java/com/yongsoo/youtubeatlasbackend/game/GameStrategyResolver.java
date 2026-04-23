@@ -9,8 +9,10 @@ final class GameStrategyResolver {
     private static final double BIG_CASHOUT_MIN_PROFIT_RATE_PERCENT = 1_000D;
     private static final double POSITION_CASHOUT_MIN_PROFIT_RATE_PERCENT = 18D;
     private static final int POSITION_CASHOUT_MIN_RANK_DIFF = 12;
+    private static final int ATLAS_SHOT_BUY_RANK_MIN = 50;
+    private static final int ATLAS_SHOT_TARGET_RANK_MAX = 10;
     private static final int MOONSHOT_BUY_RANK_MIN = 100;
-    private static final int MOONSHOT_TARGET_RANK_MAX = 20;
+    private static final int MOONSHOT_TARGET_RANK_MAX = 50;
     private static final int SNIPE_BUY_RANK_MIN = 150;
     private static final int SNIPE_TARGET_RANK_MAX = 100;
     private static final double HIGHLIGHT_CASHOUT_MIN_PROFIT_RATE_PERCENT = 300D;
@@ -26,6 +28,10 @@ final class GameStrategyResolver {
         Instant now
     ) {
         List<GameStrategyType> tags = new ArrayList<>();
+
+        if (matchesAtlasShot(position.getBuyRank(), currentRank)) {
+            tags.add(GameStrategyType.ATLAS_SHOT);
+        }
 
         if (matchesMoonshot(position.getBuyRank(), currentRank)) {
             tags.add(GameStrategyType.MOONSHOT);
@@ -49,6 +55,10 @@ final class GameStrategyResolver {
         Double profitRatePercent
     ) {
         List<GameStrategyType> tags = new ArrayList<>();
+
+        if (matchesAtlasShot(position.getBuyRank(), highlightRank)) {
+            tags.add(GameStrategyType.ATLAS_SHOT);
+        }
 
         if (matchesMoonshot(position.getBuyRank(), highlightRank)) {
             tags.add(GameStrategyType.MOONSHOT);
@@ -92,6 +102,13 @@ final class GameStrategyResolver {
         }
 
         return List.copyOf(targets);
+    }
+
+    private static boolean matchesAtlasShot(Integer buyRank, Integer currentRank) {
+        return buyRank != null
+            && currentRank != null
+            && buyRank >= ATLAS_SHOT_BUY_RANK_MIN
+            && currentRank <= ATLAS_SHOT_TARGET_RANK_MAX;
     }
 
     private static boolean matchesMoonshot(Integer buyRank, Integer currentRank) {

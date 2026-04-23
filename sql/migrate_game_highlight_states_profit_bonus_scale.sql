@@ -5,6 +5,7 @@ with recalculated_highlight_scores as (
             case
                 when tags.tag is null then 0
                 else case tags.tag
+                    when 'ATLAS_SHOT' then 45000
                     when 'MOONSHOT' then 15000
                     when 'BIG_CASHOUT' then 5000
                     when 'SMALL_CASHOUT' then 2500

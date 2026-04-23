@@ -66,10 +66,7 @@ public class GameService {
     private static final int BUYABLE_CHART_MAX_COUNT = 200;
     private static final int BUYABLE_CHART_PAGE_SIZE = 50;
     private static final int DEFAULT_FALLBACK_RANK = 201;
-    private static final int MOONSHOT_BUY_RANK_MIN = 100;
-    private static final int MOONSHOT_TARGET_RANK_MAX = 20;
-    private static final int SNIPE_BUY_RANK_MIN = 150;
-    private static final int SNIPE_TARGET_RANK_MAX = 100;
+    private static final long ATLAS_SHOT_HIGHLIGHT_BASE_SCORE = 45_000L;
     private static final long MOONSHOT_HIGHLIGHT_BASE_SCORE = 15_000L;
     private static final long BIG_CASHOUT_HIGHLIGHT_BASE_SCORE = 5_000L;
     private static final long SMALL_CASHOUT_HIGHLIGHT_BASE_SCORE = 2_500L;
@@ -1414,6 +1411,14 @@ public class GameService {
         Double profitRatePercent,
         List<GameStrategyType> strategyTags
     ) {
+        if (strategyTags.contains(GameStrategyType.ATLAS_SHOT)) {
+            return new HighlightDefinition(
+                "ATLAS_SHOT",
+                "아틀라스 샷 적중",
+                position.getBuyRank() + "위에서 잡은 영상이 " + snapshot.highlightRank() + "위까지 올라왔습니다."
+            );
+        }
+
         if (strategyTags.contains(GameStrategyType.MOONSHOT)) {
             return new HighlightDefinition(
                 "MOONSHOT",
@@ -1461,6 +1466,7 @@ public class GameService {
 
     static long calculateStrategyHighlightScore(GameStrategyType strategyType, GameHighlightResponse highlight) {
         long baseScore = switch (strategyType) {
+            case ATLAS_SHOT -> ATLAS_SHOT_HIGHLIGHT_BASE_SCORE;
             case MOONSHOT -> MOONSHOT_HIGHLIGHT_BASE_SCORE;
             case BIG_CASHOUT -> BIG_CASHOUT_HIGHLIGHT_BASE_SCORE;
             case SMALL_CASHOUT -> SMALL_CASHOUT_HIGHLIGHT_BASE_SCORE;

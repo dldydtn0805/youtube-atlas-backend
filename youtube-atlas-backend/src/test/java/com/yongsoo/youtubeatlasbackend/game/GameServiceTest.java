@@ -474,7 +474,7 @@ class GameServiceTest {
         var response = gameService.sell(authenticatedUser(), 300L);
 
         assertThat(response.highlightScore()).isPositive();
-        verify(commentService).publishTierSystemMessage("User 7님이 다이아몬드 티어로 상승했습니다.");
+        verify(commentService).publishTierSystemMessage("User 7님이 마스터 티어로 상승했습니다.");
         verify(gameNotificationService, org.mockito.Mockito.times(2))
             .createAndPush(
                 org.mockito.ArgumentMatchers.eq(appUser),
@@ -490,8 +490,8 @@ class GameServiceTest {
                         notification.notificationEventType() == GameNotificationEventType.TIER_PROMOTION
                             && notification.notificationType().equals("TIER_PROMOTION")
                             && notification.title().equals("티어 승급")
-                            && notification.videoTitle().equals("다이아몬드 티어 달성")
-                            && notification.message().contains("다이아몬드 티어")
+                            && notification.videoTitle().equals("마스터 티어 달성")
+                            && notification.message().contains("마스터 티어")
                             && notification.showModal()
                     )
                 )
