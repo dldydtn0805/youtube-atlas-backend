@@ -110,6 +110,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private boolean isTradePath(String path) {
         return "/api/game/positions".equals(path)
             || "/api/game/positions/sell".equals(path)
+            || "/api/game/scheduled-sell-orders".equals(path)
             || (path.startsWith("/api/game/positions/") && path.endsWith("/sell"));
     }
 

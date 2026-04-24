@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
+import com.yongsoo.youtubeatlasbackend.game.GameScheduledSellOrderService;
 import com.yongsoo.youtubeatlasbackend.game.GameService;
 import com.yongsoo.youtubeatlasbackend.trending.api.NewChartEntriesResponse;
 import com.yongsoo.youtubeatlasbackend.trending.api.RealtimeSurgingResponse;
@@ -65,6 +66,7 @@ public class TrendingService {
     private final TrendSnapshotRepository trendSnapshotRepository;
     private final TrendSignalRepository trendSignalRepository;
     private final GameService gameService;
+    private final GameScheduledSellOrderService gameScheduledSellOrderService;
 
     public TrendingService(
         AtlasProperties atlasProperties,
@@ -72,7 +74,8 @@ public class TrendingService {
         TrendRunRepository trendRunRepository,
         TrendSnapshotRepository trendSnapshotRepository,
         TrendSignalRepository trendSignalRepository,
-        GameService gameService
+        GameService gameService,
+        GameScheduledSellOrderService gameScheduledSellOrderService
     ) {
         this.atlasProperties = atlasProperties;
         this.youTubeCatalogService = youTubeCatalogService;
@@ -80,6 +83,7 @@ public class TrendingService {
         this.trendSnapshotRepository = trendSnapshotRepository;
         this.trendSignalRepository = trendSignalRepository;
         this.gameService = gameService;
+        this.gameScheduledSellOrderService = gameScheduledSellOrderService;
     }
 
     @Transactional(readOnly = true)
@@ -471,6 +475,7 @@ public class TrendingService {
             trendSignalRepository.save(signal);
         }
 
+        gameScheduledSellOrderService.executeTriggeredOrders(regionCode);
         gameService.publishProjectedHighlightNotifications(regionCode);
 
         purgeExpiredRuns(regionCode, categoryId, now);

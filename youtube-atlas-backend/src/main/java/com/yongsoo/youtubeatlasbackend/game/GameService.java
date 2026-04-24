@@ -81,6 +81,7 @@ public class GameService {
     private final GameSeasonRepository gameSeasonRepository;
     private final GameWalletRepository gameWalletRepository;
     private final GamePositionRepository gamePositionRepository;
+    private final GameScheduledSellOrderRepository gameScheduledSellOrderRepository;
     private final GameHighlightStateRepository gameHighlightStateRepository;
     private final GameLedgerRepository gameLedgerRepository;
     private final GameTierService gameTierService;
@@ -98,6 +99,7 @@ public class GameService {
         GameSeasonRepository gameSeasonRepository,
         GameWalletRepository gameWalletRepository,
         GamePositionRepository gamePositionRepository,
+        GameScheduledSellOrderRepository gameScheduledSellOrderRepository,
         GameHighlightStateRepository gameHighlightStateRepository,
         GameLedgerRepository gameLedgerRepository,
         GameTierService gameTierService,
@@ -114,6 +116,7 @@ public class GameService {
         this.gameSeasonRepository = gameSeasonRepository;
         this.gameWalletRepository = gameWalletRepository;
         this.gamePositionRepository = gamePositionRepository;
+        this.gameScheduledSellOrderRepository = gameScheduledSellOrderRepository;
         this.gameHighlightStateRepository = gameHighlightStateRepository;
         this.gameLedgerRepository = gameLedgerRepository;
         this.gameTierService = gameTierService;
@@ -742,8 +745,11 @@ public class GameService {
                 : gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(season.getId(), authenticatedUser.id());
         }
 
+        Map<Long, ScheduledSellOrderSummary> scheduledSellOrdersByPositionId =
+            loadPendingScheduledSellOrdersByPositionId(positions);
+
         return positions.stream()
-            .map(this::toPositionResponse)
+            .map(position -> toPositionResponse(position, scheduledSellOrdersByPositionId.get(position.getId())))
             .toList();
     }
 
@@ -934,6 +940,10 @@ public class GameService {
         Instant now = Instant.now(clock);
         ensurePositionOpen(position);
         ensurePositionSellable(position, now);
+        int availableQuantity = getManuallySellableQuantity(position);
+        if (availableQuantity < getPositionQuantity(position)) {
+            throw new IllegalArgumentException("예약 매도 수량이 남아 있습니다. 남은 수량만 수동 매도할 수 있습니다.");
+        }
         SellSnapshot sellSnapshot = resolveSellSnapshot(position);
         GameWallet wallet = requireWalletForUpdate(position.getSeason().getId(), authenticatedUser.id());
         return closePosition(position, getPositionQuantity(position), sellSnapshot, wallet, now);
@@ -958,12 +968,27 @@ public class GameService {
                 break;
             }
 
-            int sellQuantity = Math.min(remainingQuantity, getPositionQuantity(position));
+            int sellQuantity = Math.min(remainingQuantity, getManuallySellableQuantity(position));
             responses.add(closePosition(position, sellQuantity, sellSnapshot, wallet, now));
             remainingQuantity -= sellQuantity;
         }
 
         return responses;
+    }
+
+    @Transactional
+    public SellPositionResponse sellScheduledPosition(Long userId, Long positionId, int quantity) {
+        GamePosition position = gamePositionRepository.findByIdAndUserIdForUpdate(positionId, userId)
+            .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 포지션입니다."));
+
+        Instant now = Instant.now(clock);
+        ensurePositionOpen(position);
+        ensurePositionSellable(position, now);
+        int normalizedQuantity = normalizeQuantity(quantity);
+        ensureScheduledSellableQuantity(position, normalizedQuantity);
+        SellSnapshot sellSnapshot = resolveSellSnapshot(position);
+        GameWallet wallet = requireWalletForUpdate(position.getSeason().getId(), userId);
+        return closePosition(position, normalizedQuantity, sellSnapshot, wallet, now);
     }
 
     @Transactional
@@ -1173,6 +1198,51 @@ public class GameService {
         );
     }
 
+    private Map<Long, ScheduledSellOrderSummary> loadPendingScheduledSellOrdersByPositionId(List<GamePosition> positions) {
+        List<Long> positionIds = positions.stream()
+            .filter(position -> position.getStatus() == PositionStatus.OPEN)
+            .map(GamePosition::getId)
+            .filter(Objects::nonNull)
+            .toList();
+        if (positionIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return gameScheduledSellOrderRepository
+            .findByPositionIdsAndStatus(positionIds, ScheduledSellOrderStatus.PENDING)
+            .stream()
+            .collect(Collectors.toMap(
+                order -> order.getPosition().getId(),
+                order -> new ScheduledSellOrderSummary(order.getId(), order.getTargetRank(), order.getQuantity()),
+                (left, right) -> new ScheduledSellOrderSummary(
+                    left.id(),
+                    left.targetRank(),
+                    left.quantity() + right.quantity()
+                )
+            ));
+    }
+
+    private int getPendingScheduledSellQuantity(GamePosition position) {
+        if (position.getId() == null) {
+            return 0;
+        }
+
+        return gameScheduledSellOrderRepository.sumQuantityByPositionIdAndStatus(
+            position.getId(),
+            ScheduledSellOrderStatus.PENDING
+        );
+    }
+
+    private int getManuallySellableQuantity(GamePosition position) {
+        return Math.max(0, getPositionQuantity(position) - getPendingScheduledSellQuantity(position));
+    }
+
+    private void ensureScheduledSellableQuantity(GamePosition position, int quantity) {
+        if (getPositionQuantity(position) < quantity) {
+            throw new IllegalArgumentException("지금 매도 가능한 포지션 수가 부족합니다.");
+        }
+    }
+
     private TierResponse toTierResponse(GameSeasonTier tier) {
         return new TierResponse(
             tier.getTierCode(),
@@ -1185,13 +1255,18 @@ public class GameService {
     }
 
     private PositionResponse toPositionResponse(GamePosition position) {
+        return toPositionResponse(position, null);
+    }
+
+    private PositionResponse toPositionResponse(GamePosition position, ScheduledSellOrderSummary scheduledSellOrder) {
         if (position.getStatus() == PositionStatus.OPEN) {
             OpenPositionSnapshot snapshot = resolveOpenPositionSnapshot(position);
             if (snapshot != null) {
-                return toOpenPositionResponse(position, snapshot);
+                return toOpenPositionResponse(position, snapshot, scheduledSellOrder);
             }
         }
 
+        boolean reservedForSell = position.getStatus() == PositionStatus.OPEN && scheduledSellOrder != null;
         return new PositionResponse(
             position.getId(),
             position.getVideoId(),
@@ -1216,6 +1291,10 @@ public class GameService {
                 List.of(GameStrategyType.SMALL_CASHOUT)
             ),
             false,
+            reservedForSell,
+            reservedForSell ? scheduledSellOrder.id() : null,
+            reservedForSell ? scheduledSellOrder.targetRank() : null,
+            reservedForSell ? scheduledSellOrder.quantity() : null,
             position.getStatus().name(),
             position.getBuyCapturedAt(),
             position.getCreatedAt(),
@@ -1226,11 +1305,20 @@ public class GameService {
     private PositionResponse toOpenPositionResponse(GamePosition position, TrendSignal signal) {
         return toOpenPositionResponse(
             position,
-            new OpenPositionSnapshot(signal.getCurrentRank(), signal.getRankChange(), signal.getCapturedAt(), false)
+            new OpenPositionSnapshot(signal.getCurrentRank(), signal.getRankChange(), signal.getCapturedAt(), false),
+            null
         );
     }
 
     private PositionResponse toOpenPositionResponse(GamePosition position, OpenPositionSnapshot snapshot) {
+        return toOpenPositionResponse(position, snapshot, null);
+    }
+
+    private PositionResponse toOpenPositionResponse(
+        GamePosition position,
+        OpenPositionSnapshot snapshot,
+        ScheduledSellOrderSummary scheduledSellOrder
+    ) {
         int rankDiff = position.getBuyRank() - snapshot.currentRank();
         long currentPricePoints = GamePointCalculator.calculatePositionPoints(
             resolveOpenPositionUnitPricePoints(snapshot),
@@ -1279,6 +1367,10 @@ public class GameService {
             targetStrategyTags,
             projectedHighlightScore,
             snapshot.chartOut(),
+            scheduledSellOrder != null,
+            scheduledSellOrder != null ? scheduledSellOrder.id() : null,
+            scheduledSellOrder != null ? scheduledSellOrder.targetRank() : null,
+            scheduledSellOrder != null ? scheduledSellOrder.quantity() : null,
             position.getStatus().name(),
             position.getBuyCapturedAt(),
             position.getCreatedAt(),
@@ -2015,7 +2107,7 @@ public class GameService {
                 break;
             }
 
-            int sellQuantity = Math.min(remainingQuantity, getPositionQuantity(position));
+            int sellQuantity = Math.min(remainingQuantity, getManuallySellableQuantity(position));
             int rankDiff = position.getBuyRank() - sellSnapshot.rank();
             long unitStakePoints = resolveUnitStakePoints(position);
             long soldStakePoints = GamePointCalculator.calculatePositionPoints(unitStakePoints, sellQuantity);
@@ -2266,7 +2358,7 @@ public class GameService {
 
     private void ensureSellableQuantity(List<GamePosition> sellablePositions, int quantity) {
         int totalSellableQuantity = sellablePositions.stream()
-            .mapToInt(this::getPositionQuantity)
+            .mapToInt(this::getManuallySellableQuantity)
             .sum();
         if (totalSellableQuantity < quantity) {
             throw new IllegalArgumentException("지금 매도 가능한 포지션 수가 부족합니다.");
@@ -2567,6 +2659,9 @@ public class GameService {
     }
 
     private record HighlightSnapshot(Integer highlightRank, long currentPricePoints, long profitPoints, Instant createdAt) {
+    }
+
+    private record ScheduledSellOrderSummary(Long id, Integer targetRank, Integer quantity) {
     }
 
     private record HighlightDefinition(String highlightType, String title, String description) {

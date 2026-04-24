@@ -46,6 +46,7 @@ class GameServiceTest {
     private GameSeasonRepository gameSeasonRepository;
     private GameWalletRepository gameWalletRepository;
     private GamePositionRepository gamePositionRepository;
+    private GameScheduledSellOrderRepository gameScheduledSellOrderRepository;
     private GameHighlightStateRepository gameHighlightStateRepository;
     private GameLedgerRepository gameLedgerRepository;
     private GameTierService gameTierService;
@@ -64,6 +65,7 @@ class GameServiceTest {
         gameSeasonRepository = org.mockito.Mockito.mock(GameSeasonRepository.class);
         gameWalletRepository = org.mockito.Mockito.mock(GameWalletRepository.class);
         gamePositionRepository = org.mockito.Mockito.mock(GamePositionRepository.class);
+        gameScheduledSellOrderRepository = org.mockito.Mockito.mock(GameScheduledSellOrderRepository.class);
         gameHighlightStateRepository = org.mockito.Mockito.mock(GameHighlightStateRepository.class);
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
         gameTierService = org.mockito.Mockito.mock(GameTierService.class);
@@ -83,6 +85,7 @@ class GameServiceTest {
             gameSeasonRepository,
             gameWalletRepository,
             gamePositionRepository,
+            gameScheduledSellOrderRepository,
             gameHighlightStateRepository,
             gameLedgerRepository,
             gameTierService,
@@ -152,6 +155,7 @@ class GameServiceTest {
             });
             return states;
         });
+        when(gameScheduledSellOrderRepository.findByPositionIdsAndStatus(any(), any())).thenReturn(List.of());
         when(gameNotificationService.syncAndListSeasonNotifications(any(GameSeason.class), any(), any()))
             .thenAnswer(invocation -> invocation.getArgument(2));
         when(achievementTitleService.grantTitlesForHighlight(any(), any())).thenReturn(List.of());
@@ -1284,6 +1288,29 @@ class GameServiceTest {
         assertThatThrownBy(() -> gameService.sell(authenticatedUser(), 300L))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("현재 랭킹 동기화 상태를 확인할 수 없어 수동 매도할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+    }
+
+    @Test
+    void sellRejectsFullPositionSellWhenPositionHasPendingScheduledSellQuantity() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            170,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
+        when(gameScheduledSellOrderRepository.sumQuantityByPositionIdAndStatus(300L, ScheduledSellOrderStatus.PENDING))
+            .thenReturn(GamePointCalculator.QUANTITY_SCALE);
+
+        assertThatThrownBy(() -> gameService.sell(authenticatedUser(), 300L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("예약 매도 수량이 남아 있습니다. 남은 수량만 수동 매도할 수 있습니다.");
     }
 
     @Test

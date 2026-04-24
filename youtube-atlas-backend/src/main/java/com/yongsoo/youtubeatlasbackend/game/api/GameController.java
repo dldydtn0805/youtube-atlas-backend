@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.yongsoo.youtubeatlasbackend.auth.AuthService;
 import com.yongsoo.youtubeatlasbackend.game.AchievementTitleService;
+import com.yongsoo.youtubeatlasbackend.game.GameScheduledSellOrderService;
 import com.yongsoo.youtubeatlasbackend.game.GameService;
 import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategorySectionResponse;
 
@@ -25,15 +26,18 @@ import com.yongsoo.youtubeatlasbackend.youtube.api.VideoCategorySectionResponse;
 public class GameController {
 
     private final GameService gameService;
+    private final GameScheduledSellOrderService gameScheduledSellOrderService;
     private final AchievementTitleService achievementTitleService;
     private final AuthService authService;
 
     public GameController(
         GameService gameService,
+        GameScheduledSellOrderService gameScheduledSellOrderService,
         AchievementTitleService achievementTitleService,
         AuthService authService
     ) {
         this.gameService = gameService;
+        this.gameScheduledSellOrderService = gameScheduledSellOrderService;
         this.achievementTitleService = achievementTitleService;
         this.authService = authService;
     }
@@ -230,5 +234,29 @@ public class GameController {
         @PathVariable Long positionId
     ) {
         return gameService.sell(authService.requireCurrentUser(authorizationHeader), positionId);
+    }
+
+    @PostMapping("/scheduled-sell-orders")
+    public ScheduledSellOrderResponse createScheduledSellOrder(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @Valid @RequestBody CreateScheduledSellOrderRequest request
+    ) {
+        return gameScheduledSellOrderService.create(authService.requireCurrentUser(authorizationHeader), request);
+    }
+
+    @GetMapping("/scheduled-sell-orders")
+    public List<ScheduledSellOrderResponse> getScheduledSellOrders(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode
+    ) {
+        return gameScheduledSellOrderService.list(authService.requireCurrentUser(authorizationHeader), regionCode);
+    }
+
+    @DeleteMapping("/scheduled-sell-orders/{orderId}")
+    public ScheduledSellOrderResponse cancelScheduledSellOrder(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @PathVariable Long orderId
+    ) {
+        return gameScheduledSellOrderService.cancel(authService.requireCurrentUser(authorizationHeader), orderId);
     }
 }
