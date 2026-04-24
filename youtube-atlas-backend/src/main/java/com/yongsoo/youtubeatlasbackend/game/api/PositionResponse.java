@@ -26,6 +26,7 @@ public record PositionResponse(
     Boolean reservedForSell,
     Long scheduledSellOrderId,
     Integer scheduledSellTargetRank,
+    String scheduledSellTriggerDirection,
     Integer scheduledSellQuantity,
     String status,
     Instant buyCapturedAt,

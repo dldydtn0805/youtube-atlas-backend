@@ -42,6 +42,10 @@ public class GameScheduledSellOrder {
     @Column(name = "target_rank", nullable = false)
     private Integer targetRank;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "trigger_direction", nullable = false, length = 30)
+    private ScheduledSellTriggerDirection triggerDirection = ScheduledSellTriggerDirection.RANK_IMPROVES_TO;
+
     @Column(nullable = false)
     private Integer quantity;
 
@@ -121,6 +125,14 @@ public class GameScheduledSellOrder {
 
     public void setTargetRank(Integer targetRank) {
         this.targetRank = targetRank;
+    }
+
+    public ScheduledSellTriggerDirection getTriggerDirection() {
+        return triggerDirection;
+    }
+
+    public void setTriggerDirection(ScheduledSellTriggerDirection triggerDirection) {
+        this.triggerDirection = triggerDirection;
     }
 
     public Integer getQuantity() {

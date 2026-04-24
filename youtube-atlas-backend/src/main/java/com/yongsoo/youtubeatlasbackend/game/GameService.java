@@ -1213,13 +1213,25 @@ public class GameService {
             .stream()
             .collect(Collectors.toMap(
                 order -> order.getPosition().getId(),
-                order -> new ScheduledSellOrderSummary(order.getId(), order.getTargetRank(), order.getQuantity()),
+                order -> new ScheduledSellOrderSummary(
+                    order.getId(),
+                    order.getTargetRank(),
+                    resolveScheduledSellTriggerDirection(order),
+                    order.getQuantity()
+                ),
                 (left, right) -> new ScheduledSellOrderSummary(
                     left.id(),
                     left.targetRank(),
+                    left.triggerDirection(),
                     left.quantity() + right.quantity()
                 )
             ));
+    }
+
+    private ScheduledSellTriggerDirection resolveScheduledSellTriggerDirection(GameScheduledSellOrder order) {
+        return order.getTriggerDirection() != null
+            ? order.getTriggerDirection()
+            : ScheduledSellTriggerDirection.RANK_IMPROVES_TO;
     }
 
     private int getPendingScheduledSellQuantity(GamePosition position) {
@@ -1294,6 +1306,7 @@ public class GameService {
             reservedForSell,
             reservedForSell ? scheduledSellOrder.id() : null,
             reservedForSell ? scheduledSellOrder.targetRank() : null,
+            reservedForSell ? scheduledSellOrder.triggerDirection().name() : null,
             reservedForSell ? scheduledSellOrder.quantity() : null,
             position.getStatus().name(),
             position.getBuyCapturedAt(),
@@ -1370,6 +1383,7 @@ public class GameService {
             scheduledSellOrder != null,
             scheduledSellOrder != null ? scheduledSellOrder.id() : null,
             scheduledSellOrder != null ? scheduledSellOrder.targetRank() : null,
+            scheduledSellOrder != null ? scheduledSellOrder.triggerDirection().name() : null,
             scheduledSellOrder != null ? scheduledSellOrder.quantity() : null,
             position.getStatus().name(),
             position.getBuyCapturedAt(),
@@ -2661,7 +2675,12 @@ public class GameService {
     private record HighlightSnapshot(Integer highlightRank, long currentPricePoints, long profitPoints, Instant createdAt) {
     }
 
-    private record ScheduledSellOrderSummary(Long id, Integer targetRank, Integer quantity) {
+    private record ScheduledSellOrderSummary(
+        Long id,
+        Integer targetRank,
+        ScheduledSellTriggerDirection triggerDirection,
+        Integer quantity
+    ) {
     }
 
     private record HighlightDefinition(String highlightType, String title, String description) {

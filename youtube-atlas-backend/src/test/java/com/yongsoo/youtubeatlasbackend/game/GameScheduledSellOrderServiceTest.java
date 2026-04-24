@@ -64,7 +64,7 @@ class GameScheduledSellOrderServiceTest {
 
         assertThatThrownBy(() -> service.create(
             authenticatedUser(),
-            new CreateScheduledSellOrderRequest(300L, 10, ONE_SHARE)
+            new CreateScheduledSellOrderRequest(300L, 10, ONE_SHARE, ScheduledSellTriggerDirection.RANK_IMPROVES_TO)
         ))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("예약 매도 수량이 보유 수량을 초과했습니다.");
@@ -105,6 +105,55 @@ class GameScheduledSellOrderServiceTest {
         assertThat(order.getPnlPoints()).isEqualTo(994L);
         assertThat(order.getTriggeredAt()).isEqualTo(Instant.parse("2026-04-01T06:00:00Z"));
         assertThat(order.getExecutedAt()).isEqualTo(Instant.parse("2026-04-01T06:00:00Z"));
+    }
+
+    @Test
+    void executeTriggeredOrdersWaitsForDropTriggerUntilRankFallsToTarget() {
+        GameScheduledSellOrder order = pendingOrder(openPosition(), 180);
+        order.setTriggerDirection(ScheduledSellTriggerDirection.RANK_DROPS_TO);
+
+        when(gameScheduledSellOrderRepository.findByRegionCodeAndStatusOrderByCreatedAtAsc("KR", ScheduledSellOrderStatus.PENDING))
+            .thenReturn(List.of(order));
+        when(gameScheduledSellOrderRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(order));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal("video-1", 110)));
+
+        service.executeTriggeredOrders("KR");
+
+        org.mockito.Mockito.verifyNoInteractions(gameService);
+        assertThat(order.getStatus()).isEqualTo(ScheduledSellOrderStatus.PENDING);
+    }
+
+    @Test
+    void executeTriggeredOrdersSellsWhenDropTriggerRankFallsToTarget() {
+        GameScheduledSellOrder order = pendingOrder(openPosition(), 180);
+        order.setTriggerDirection(ScheduledSellTriggerDirection.RANK_DROPS_TO);
+
+        when(gameScheduledSellOrderRepository.findByRegionCodeAndStatusOrderByCreatedAtAsc("KR", ScheduledSellOrderStatus.PENDING))
+            .thenReturn(List.of(order));
+        when(gameScheduledSellOrderRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(order));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal("video-1", 180)));
+        when(gameService.sellScheduledPosition(7L, 300L, ONE_SHARE))
+            .thenReturn(new SellPositionResponse(
+                300L,
+                "video-1",
+                120,
+                180,
+                -60,
+                ONE_SHARE,
+                1_000L,
+                700L,
+                -303L,
+                697L,
+                0L,
+                10_697L,
+                Instant.parse("2026-04-01T06:00:00Z")
+            ));
+
+        service.executeTriggeredOrders("KR");
+
+        verify(gameService).sellScheduledPosition(7L, 300L, ONE_SHARE);
+        assertThat(order.getStatus()).isEqualTo(ScheduledSellOrderStatus.EXECUTED);
+        assertThat(order.getSettledPoints()).isEqualTo(697L);
     }
 
     private AuthenticatedUser authenticatedUser() {

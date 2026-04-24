@@ -48,6 +48,9 @@ public class GameScheduledSellOrderService {
     ) {
         int quantity = normalizeQuantity(request.quantity());
         int targetRank = normalizeTargetRank(request.targetRank());
+        ScheduledSellTriggerDirection triggerDirection = request.triggerDirection() != null
+            ? request.triggerDirection()
+            : ScheduledSellTriggerDirection.RANK_IMPROVES_TO;
         GamePosition position = gamePositionRepository.findByIdAndUserIdForUpdate(
             request.positionId(),
             authenticatedUser.id()
@@ -68,6 +71,7 @@ public class GameScheduledSellOrderService {
         order.setPosition(position);
         order.setRegionCode(position.getRegionCode());
         order.setTargetRank(targetRank);
+        order.setTriggerDirection(triggerDirection);
         order.setQuantity(quantity);
         order.setStatus(ScheduledSellOrderStatus.PENDING);
         order.setCreatedAt(now);
@@ -126,7 +130,7 @@ public class GameScheduledSellOrderService {
         TrendSignal signal = trendSignalRepository.findById(
             new TrendSignalId(position.getRegionCode(), position.getCategoryId(), position.getVideoId())
         ).orElse(null);
-        if (signal == null || signal.getCurrentRank() == null || signal.getCurrentRank() > order.getTargetRank()) {
+        if (signal == null || signal.getCurrentRank() == null || !isTriggered(order, signal.getCurrentRank())) {
             return;
         }
 
@@ -180,6 +184,7 @@ public class GameScheduledSellOrderService {
             order.getPosition().getBuyRank(),
             signal != null ? signal.getCurrentRank() : null,
             order.getTargetRank(),
+            resolveTriggerDirection(order).name(),
             order.getQuantity(),
             order.getSellPricePoints(),
             order.getSettledPoints(),
@@ -201,6 +206,22 @@ public class GameScheduledSellOrderService {
             SeasonStatus.ACTIVE,
             normalizedRegionCode
         ).orElseThrow(() -> new IllegalArgumentException("진행 중인 시즌이 없습니다."));
+    }
+
+    private boolean isTriggered(GameScheduledSellOrder order, int currentRank) {
+        ScheduledSellTriggerDirection triggerDirection = resolveTriggerDirection(order);
+
+        if (triggerDirection == ScheduledSellTriggerDirection.RANK_DROPS_TO) {
+            return currentRank >= order.getTargetRank();
+        }
+
+        return currentRank <= order.getTargetRank();
+    }
+
+    private ScheduledSellTriggerDirection resolveTriggerDirection(GameScheduledSellOrder order) {
+        return order.getTriggerDirection() != null
+            ? order.getTriggerDirection()
+            : ScheduledSellTriggerDirection.RANK_IMPROVES_TO;
     }
 
     private void ensureOpenActivePosition(GamePosition position) {
