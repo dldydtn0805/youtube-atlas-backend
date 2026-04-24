@@ -71,6 +71,36 @@ class GameScheduledSellOrderServiceTest {
     }
 
     @Test
+    void createRejectsImproveTriggerWhenCurrentRankAlreadyMeetsTarget() {
+        GamePosition position = openPosition();
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1")))
+            .thenReturn(Optional.of(signal("video-1", 110)));
+
+        assertThatThrownBy(() -> service.create(
+            authenticatedUser(),
+            new CreateScheduledSellOrderRequest(300L, 110, ONE_SHARE, ScheduledSellTriggerDirection.RANK_IMPROVES_TO)
+        ))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("현재 순위가 이미 예약 매도 조건을 만족합니다. 바로 매도하거나 조건 순위를 조정해 주세요.");
+    }
+
+    @Test
+    void createRejectsDropTriggerWhenCurrentRankAlreadyMeetsTarget() {
+        GamePosition position = openPosition();
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1")))
+            .thenReturn(Optional.of(signal("video-1", 110)));
+
+        assertThatThrownBy(() -> service.create(
+            authenticatedUser(),
+            new CreateScheduledSellOrderRequest(300L, 110, ONE_SHARE, ScheduledSellTriggerDirection.RANK_DROPS_TO)
+        ))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("현재 순위가 이미 예약 매도 조건을 만족합니다. 바로 매도하거나 조건 순위를 조정해 주세요.");
+    }
+
+    @Test
     void executeTriggeredOrdersSellsAndMarksOrderExecutedWhenRankReachesTarget() {
         GameScheduledSellOrder order = pendingOrder(openPosition(), 10);
         TrendSignal signal = signal("video-1", 10);

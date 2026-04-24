@@ -56,6 +56,7 @@ public class GameScheduledSellOrderService {
             authenticatedUser.id()
         ).orElseThrow(() -> new IllegalArgumentException("존재하지 않는 포지션입니다."));
         ensureOpenActivePosition(position);
+        ensureConditionNotAlreadyMet(position, targetRank, triggerDirection);
         int pendingQuantity = gameScheduledSellOrderRepository.sumQuantityByPositionIdAndStatus(
             position.getId(),
             ScheduledSellOrderStatus.PENDING
@@ -216,6 +217,28 @@ public class GameScheduledSellOrderService {
         }
 
         return currentRank <= order.getTargetRank();
+    }
+
+    private void ensureConditionNotAlreadyMet(
+        GamePosition position,
+        int targetRank,
+        ScheduledSellTriggerDirection triggerDirection
+    ) {
+        TrendSignal signal = trendSignalRepository.findById(
+            new TrendSignalId(position.getRegionCode(), position.getCategoryId(), position.getVideoId())
+        ).orElse(null);
+        if (signal == null || signal.getCurrentRank() == null) {
+            return;
+        }
+
+        int currentRank = signal.getCurrentRank();
+        boolean alreadyMet = triggerDirection == ScheduledSellTriggerDirection.RANK_DROPS_TO
+            ? currentRank >= targetRank
+            : currentRank <= targetRank;
+
+        if (alreadyMet) {
+            throw new IllegalArgumentException("현재 순위가 이미 예약 매도 조건을 만족합니다. 바로 매도하거나 조건 순위를 조정해 주세요.");
+        }
     }
 
     private ScheduledSellTriggerDirection resolveTriggerDirection(GameScheduledSellOrder order) {
