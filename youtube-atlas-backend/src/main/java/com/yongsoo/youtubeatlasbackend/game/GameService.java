@@ -66,11 +66,11 @@ public class GameService {
     private static final int BUYABLE_CHART_MAX_COUNT = 200;
     private static final int BUYABLE_CHART_PAGE_SIZE = 50;
     private static final int DEFAULT_FALLBACK_RANK = 201;
-    private static final long ATLAS_SHOT_HIGHLIGHT_BASE_SCORE = 45_000L;
-    private static final long MOONSHOT_HIGHLIGHT_BASE_SCORE = 15_000L;
+    private static final long ATLAS_SHOT_HIGHLIGHT_BASE_SCORE = 50_000L;
+    private static final long MOONSHOT_HIGHLIGHT_BASE_SCORE = 20_000L;
     private static final long BIG_CASHOUT_HIGHLIGHT_BASE_SCORE = 5_000L;
     private static final long SMALL_CASHOUT_HIGHLIGHT_BASE_SCORE = 2_500L;
-    private static final long SNIPE_HIGHLIGHT_BASE_SCORE = 2_500L;
+    private static final long SNIPE_HIGHLIGHT_BASE_SCORE = 5_000L;
     private static final long RANK_DIFF_HIGHLIGHT_SCORE_MULTIPLIER = 20L;
     private static final long PROFIT_RATE_HIGHLIGHT_SCORE_MULTIPLIER = 10L;
     private static final long MAX_PROFIT_RATE_HIGHLIGHT_BONUS = 5_000L;

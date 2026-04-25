@@ -923,6 +923,55 @@ class GameServiceTest {
     }
 
     @Test
+    void partialSellReturnsHighlightScoreForClosedSplitPosition() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long unitBuyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        long totalBuyPricePoints = GamePointCalculator.calculatePositionPoints(unitBuyPricePoints, TWO_SHARES);
+        GameWallet wallet = wallet(season, appUser, 20_000L - totalBuyPricePoints, totalBuyPricePoints, 0L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            170,
+            totalBuyPricePoints,
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+        position.setQuantity(TWO_SHARES);
+        ReflectionTestUtils.setField(position, "id", 301L);
+
+        java.util.concurrent.atomic.AtomicReference<GamePosition> closedSplitRef = new java.util.concurrent.atomic.AtomicReference<>();
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(301L, 7L)).thenReturn(Optional.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1")))
+            .thenReturn(Optional.of(signal("video-1", 120, 0)));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of(position));
+        when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> {
+            GamePosition savedPosition = invocation.getArgument(0, GamePosition.class);
+            if (savedPosition != position && savedPosition.getId() == null) {
+                ReflectionTestUtils.setField(savedPosition, "id", 302L);
+                closedSplitRef.set(savedPosition);
+            }
+            return savedPosition;
+        });
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = gameService.sell(
+            authenticatedUser(),
+            new SellPositionsRequest("KR", 301L, null, ONE_SHARE)
+        );
+
+        GamePosition closedSplit = closedSplitRef.get();
+        assertThat(closedSplit).isNotNull();
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).highlightScore()).isEqualTo(highlightScore(closedSplit));
+    }
+
+    @Test
     void splitSellPushesHighlightNotificationWhenSellSetsNewRecordedHighScore() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);

@@ -39,7 +39,7 @@ class GameHighlightScoringTest {
         GameHighlightResponse highlight = highlight(List.of(GameStrategyType.MOONSHOT));
 
         assertThat(GameService.calculateStrategyHighlightScore(GameStrategyType.MOONSHOT, highlight))
-            .isEqualTo(23_367L);
+            .isEqualTo(28_367L);
     }
 
     @Test
@@ -47,7 +47,15 @@ class GameHighlightScoringTest {
         GameHighlightResponse highlight = highlight(List.of(GameStrategyType.ATLAS_SHOT));
 
         assertThat(GameService.calculateStrategyHighlightScore(GameStrategyType.ATLAS_SHOT, highlight))
-            .isEqualTo(53_367L);
+            .isEqualTo(58_367L);
+    }
+
+    @Test
+    void appliesRaisedSnipeBaseScore() {
+        GameHighlightResponse highlight = highlight(List.of(GameStrategyType.SNIPE));
+
+        assertThat(GameService.calculateStrategyHighlightScore(GameStrategyType.SNIPE, highlight))
+            .isEqualTo(13_367L);
     }
 
     @Test
