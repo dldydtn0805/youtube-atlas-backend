@@ -51,6 +51,14 @@ class GameHighlightScoringTest {
     }
 
     @Test
+    void appliesSolarShotBaseScore() {
+        GameHighlightResponse highlight = highlight(List.of(GameStrategyType.SOLAR_SHOT));
+
+        assertThat(GameService.calculateStrategyHighlightScore(GameStrategyType.SOLAR_SHOT, highlight))
+            .isEqualTo(43_367L);
+    }
+
+    @Test
     void appliesRaisedSnipeBaseScore() {
         GameHighlightResponse highlight = highlight(List.of(GameStrategyType.SNIPE));
 

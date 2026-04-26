@@ -9,8 +9,10 @@ final class GameStrategyResolver {
     private static final double BIG_CASHOUT_MIN_PROFIT_RATE_PERCENT = 1_000D;
     private static final double POSITION_CASHOUT_MIN_PROFIT_RATE_PERCENT = 18D;
     private static final int POSITION_CASHOUT_MIN_RANK_DIFF = 12;
-    private static final int ATLAS_SHOT_BUY_RANK_MIN = 50;
-    private static final int ATLAS_SHOT_TARGET_RANK_MAX = 10;
+    private static final int ATLAS_SHOT_BUY_RANK_MIN = 20;
+    private static final int ATLAS_SHOT_TARGET_RANK_MAX = 1;
+    private static final int SOLAR_SHOT_BUY_RANK_MIN = 50;
+    private static final int SOLAR_SHOT_TARGET_RANK_MAX = 20;
     private static final int MOONSHOT_BUY_RANK_MIN = 100;
     private static final int MOONSHOT_TARGET_RANK_MAX = 50;
     private static final int SNIPE_BUY_RANK_MIN = 150;
@@ -31,6 +33,10 @@ final class GameStrategyResolver {
 
         if (matchesAtlasShot(position.getBuyRank(), currentRank)) {
             tags.add(GameStrategyType.ATLAS_SHOT);
+        }
+
+        if (matchesSolarShot(position.getBuyRank(), currentRank)) {
+            tags.add(GameStrategyType.SOLAR_SHOT);
         }
 
         if (matchesMoonshot(position.getBuyRank(), currentRank)) {
@@ -58,6 +64,10 @@ final class GameStrategyResolver {
 
         if (matchesAtlasShot(position.getBuyRank(), highlightRank)) {
             tags.add(GameStrategyType.ATLAS_SHOT);
+        }
+
+        if (matchesSolarShot(position.getBuyRank(), highlightRank)) {
+            tags.add(GameStrategyType.SOLAR_SHOT);
         }
 
         if (matchesMoonshot(position.getBuyRank(), highlightRank)) {
@@ -109,6 +119,13 @@ final class GameStrategyResolver {
             && currentRank != null
             && buyRank >= ATLAS_SHOT_BUY_RANK_MIN
             && currentRank <= ATLAS_SHOT_TARGET_RANK_MAX;
+    }
+
+    private static boolean matchesSolarShot(Integer buyRank, Integer currentRank) {
+        return buyRank != null
+            && currentRank != null
+            && buyRank >= SOLAR_SHOT_BUY_RANK_MIN
+            && currentRank <= SOLAR_SHOT_TARGET_RANK_MAX;
     }
 
     private static boolean matchesMoonshot(Integer buyRank, Integer currentRank) {

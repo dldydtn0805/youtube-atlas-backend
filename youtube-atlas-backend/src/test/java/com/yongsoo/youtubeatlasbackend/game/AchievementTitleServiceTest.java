@@ -94,50 +94,65 @@ class AchievementTitleServiceTest {
 
     @Test
     void grantTitlesForHighlightAwardsAllTitlesForAtlasSniper() {
-        GameHighlightState highlight = highlightState("ATLAS_SHOT,MOONSHOT,SNIPE");
+        GameHighlightState highlight = highlightState("ATLAS_SHOT,SOLAR_SHOT,MOONSHOT,SNIPE");
 
         List<AchievementTitle> unlockedTitles =
             achievementTitleService.grantTitlesForHighlight(highlight, AchievementTitleSourceType.HIGHLIGHT);
 
         assertThat(earnedCodes()).containsExactlyInAnyOrder(
-            "ATLAS_SEEKER",
-            "MOON_SEEKER",
             "SNIPE_SEEKER",
-            "ATLAS_FINDER",
+            "MOON_SEEKER",
             "MOON_FINDER",
+            "SOLAR_SEEKER",
+            "SOLAR_FINDER",
+            "SOLAR_WALKER",
+            "ATLAS_SEEKER",
+            "ATLAS_FINDER",
+            "ATLAS_WALKER",
             "ATLAS_SNIPER"
         );
         assertThat(unlockedTitles)
             .extracting(AchievementTitle::getCode)
-            .containsExactly("ATLAS_SEEKER", "MOON_SEEKER", "SNIPE_SEEKER", "ATLAS_FINDER", "MOON_FINDER", "ATLAS_SNIPER");
+            .containsExactly(
+                "SNIPE_SEEKER",
+                "MOON_SEEKER",
+                "SOLAR_SEEKER",
+                "ATLAS_SEEKER",
+                "MOON_FINDER",
+                "SOLAR_FINDER",
+                "ATLAS_FINDER",
+                "SOLAR_WALKER",
+                "ATLAS_WALKER",
+                "ATLAS_SNIPER"
+            );
         assertThat(setting.getSelectedTitle().getCode()).isEqualTo("ATLAS_SNIPER");
         assertThat(setting.getSelectionMode()).isEqualTo(AchievementTitleSelectionMode.AUTO);
     }
 
     @Test
-    void grantTitlesForHighlightAwardsAtlasFinderForAtlasShotMoonshotCombo() {
-        GameHighlightState highlight = highlightState("ATLAS_SHOT,MOONSHOT");
+    void grantTitlesForHighlightAwardsAtlasFinderForAtlasShotSolarShotCombo() {
+        GameHighlightState highlight = highlightState("ATLAS_SHOT,SOLAR_SHOT");
 
         List<AchievementTitle> unlockedTitles =
             achievementTitleService.grantTitlesForHighlight(highlight, AchievementTitleSourceType.HIGHLIGHT);
 
-        assertThat(earnedCodes()).containsExactlyInAnyOrder("ATLAS_SEEKER", "MOON_SEEKER", "ATLAS_FINDER");
+        assertThat(earnedCodes()).containsExactlyInAnyOrder("SOLAR_SEEKER", "ATLAS_SEEKER", "ATLAS_FINDER");
         assertThat(unlockedTitles).extracting(AchievementTitle::getCode)
-            .containsExactly("ATLAS_SEEKER", "MOON_SEEKER", "ATLAS_FINDER");
+            .containsExactly("SOLAR_SEEKER", "ATLAS_SEEKER", "ATLAS_FINDER");
         assertThat(setting.getSelectedTitle().getCode()).isEqualTo("ATLAS_FINDER");
     }
 
     @Test
-    void grantTitlesForHighlightAwardsMoonFinderForMoonshotSnipeCombo() {
-        GameHighlightState highlight = highlightState("MOONSHOT,SNIPE");
+    void grantTitlesForHighlightAwardsSolarFinderForMoonshotSolarShotCombo() {
+        GameHighlightState highlight = highlightState("MOONSHOT,SOLAR_SHOT");
 
         List<AchievementTitle> unlockedTitles =
             achievementTitleService.grantTitlesForHighlight(highlight, AchievementTitleSourceType.HIGHLIGHT);
 
-        assertThat(earnedCodes()).containsExactlyInAnyOrder("MOON_SEEKER", "SNIPE_SEEKER", "MOON_FINDER");
+        assertThat(earnedCodes()).containsExactlyInAnyOrder("MOON_SEEKER", "SOLAR_SEEKER", "SOLAR_FINDER");
         assertThat(unlockedTitles).extracting(AchievementTitle::getCode)
-            .containsExactly("MOON_SEEKER", "SNIPE_SEEKER", "MOON_FINDER");
-        assertThat(setting.getSelectedTitle().getCode()).isEqualTo("MOON_FINDER");
+            .containsExactly("MOON_SEEKER", "SOLAR_SEEKER", "SOLAR_FINDER");
+        assertThat(setting.getSelectedTitle().getCode()).isEqualTo("SOLAR_FINDER");
     }
 
     private List<String> earnedCodes() {

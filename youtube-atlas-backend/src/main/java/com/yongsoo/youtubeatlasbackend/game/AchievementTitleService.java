@@ -30,11 +30,11 @@ public class AchievementTitleService {
 
     private static final List<DefaultAchievementTitle> DEFAULT_TITLES = List.of(
         new DefaultAchievementTitle(
-            "ATLAS_SEEKER",
-            "Atlas Seeker",
-            "A. Seeker",
+            "SNIPE_SEEKER",
+            "Snipe Seeker",
+            "Sn. Seeker",
             AchievementTitleGrade.NORMAL,
-            "50위 밖에서 잡은 영상이 10위 안까지 올라온 아틀라스 샷 달성자입니다.",
+            "150위 밖에서 진입해 100위 안까지 끌어올린 스나이프 달성자입니다.",
             10
         ),
         new DefaultAchievementTitle(
@@ -46,20 +46,20 @@ public class AchievementTitleService {
             20
         ),
         new DefaultAchievementTitle(
-            "SNIPE_SEEKER",
-            "Snipe Seeker",
-            "S. Seeker",
+            "SOLAR_SEEKER",
+            "Solar Seeker",
+            "So. Seeker",
             AchievementTitleGrade.NORMAL,
-            "150위 밖에서 진입해 100위 안까지 끌어올린 스나이프 달성자입니다.",
+            "50위 밖에서 잡은 영상이 20위 안까지 올라온 솔라 샷 달성자입니다.",
             30
         ),
         new DefaultAchievementTitle(
-            "ATLAS_FINDER",
-            "Atlas Finder",
-            "A. Finder",
-            AchievementTitleGrade.RARE,
-            "100위 밖에서 발견한 영상이 10위 안까지 올라온 아틀라스 샷 + 문샷 복합 달성자입니다.",
-            35
+            "ATLAS_SEEKER",
+            "Atlas Seeker",
+            "A. Seeker",
+            AchievementTitleGrade.NORMAL,
+            "20위 밖에서 잡은 영상이 1위까지 올라온 아틀라스 샷 달성자입니다.",
+            40
         ),
         new DefaultAchievementTitle(
             "MOON_FINDER",
@@ -67,15 +67,47 @@ public class AchievementTitleService {
             "M. Finder",
             AchievementTitleGrade.RARE,
             "150위 밖에서 진입해 50위 안까지 끌어올린 문샷 + 스나이프 복합 달성자입니다.",
-            36
+            50
+        ),
+        new DefaultAchievementTitle(
+            "SOLAR_FINDER",
+            "Solar Finder",
+            "S. Finder",
+            AchievementTitleGrade.RARE,
+            "100위 밖에서 발견한 영상이 20위 안까지 올라온 문샷 + 솔라 샷 복합 달성자입니다.",
+            60
+        ),
+        new DefaultAchievementTitle(
+            "ATLAS_FINDER",
+            "Atlas Finder",
+            "A. Finder",
+            AchievementTitleGrade.RARE,
+            "50위 밖에서 잡은 영상이 1위까지 올라온 솔라 샷 + 아틀라스 샷 복합 달성자입니다.",
+            70
+        ),
+        new DefaultAchievementTitle(
+            "SOLAR_WALKER",
+            "Solar Walker",
+            "S. Walker",
+            AchievementTitleGrade.SUPER,
+            "150위 밖에서 진입한 영상이 20위 안까지 올라온 스나이프 + 문샷 + 솔라 샷 연속 달성자입니다.",
+            80
+        ),
+        new DefaultAchievementTitle(
+            "ATLAS_WALKER",
+            "Atlas Walker",
+            "A. Walker",
+            AchievementTitleGrade.SUPER,
+            "100위 밖에서 발견한 영상이 1위까지 올라온 문샷 + 솔라 샷 + 아틀라스 샷 연속 달성자입니다.",
+            90
         ),
         new DefaultAchievementTitle(
             "ATLAS_SNIPER",
             "Atlas Sniper",
             "A. Sniper",
-            AchievementTitleGrade.SUPER,
-            "150위 밖에서 잡은 영상이 10위 안까지 올라온 복합 하이라이트 달성자입니다.",
-            40
+            AchievementTitleGrade.ULTIMATE,
+            "150위 밖에서 잡은 영상이 1위까지 올라온 전 구간 복합 하이라이트 달성자입니다.",
+            100
         )
     );
 
@@ -387,20 +419,24 @@ public class AchievementTitleService {
         }
 
         Set<String> codes = new java.util.HashSet<>();
-        if (strategyTags.contains(GameStrategyType.ATLAS_SHOT)) {
-            codes.add("ATLAS_SEEKER");
+        if (strategyTags.contains(GameStrategyType.SNIPE)) {
+            codes.add("SNIPE_SEEKER");
         }
 
         if (strategyTags.contains(GameStrategyType.MOONSHOT)) {
             codes.add("MOON_SEEKER");
         }
 
-        if (strategyTags.contains(GameStrategyType.SNIPE)) {
-            codes.add("SNIPE_SEEKER");
+        if (strategyTags.contains(GameStrategyType.SOLAR_SHOT)) {
+            codes.add("SOLAR_SEEKER");
+        }
+
+        if (strategyTags.contains(GameStrategyType.ATLAS_SHOT)) {
+            codes.add("ATLAS_SEEKER");
         }
 
         if (strategyTags.contains(GameStrategyType.ATLAS_SHOT)
-            && strategyTags.contains(GameStrategyType.MOONSHOT)) {
+            && strategyTags.contains(GameStrategyType.SOLAR_SHOT)) {
             codes.add("ATLAS_FINDER");
         }
 
@@ -409,9 +445,27 @@ public class AchievementTitleService {
             codes.add("MOON_FINDER");
         }
 
+        if (strategyTags.contains(GameStrategyType.MOONSHOT)
+            && strategyTags.contains(GameStrategyType.SOLAR_SHOT)) {
+            codes.add("SOLAR_FINDER");
+        }
+
+        if (strategyTags.contains(GameStrategyType.SNIPE)
+            && strategyTags.contains(GameStrategyType.MOONSHOT)
+            && strategyTags.contains(GameStrategyType.SOLAR_SHOT)) {
+            codes.add("SOLAR_WALKER");
+        }
+
+        if (strategyTags.contains(GameStrategyType.MOONSHOT)
+            && strategyTags.contains(GameStrategyType.SOLAR_SHOT)
+            && strategyTags.contains(GameStrategyType.ATLAS_SHOT)) {
+            codes.add("ATLAS_WALKER");
+        }
+
         if (strategyTags.contains(GameStrategyType.ATLAS_SHOT)
             && strategyTags.contains(GameStrategyType.MOONSHOT)
-            && strategyTags.contains(GameStrategyType.SNIPE)) {
+            && strategyTags.contains(GameStrategyType.SNIPE)
+            && strategyTags.contains(GameStrategyType.SOLAR_SHOT)) {
             codes.add("ATLAS_SNIPER");
         }
 

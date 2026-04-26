@@ -45,7 +45,7 @@ class GameNotificationFactoryTest {
     }
 
     @Test
-    void projectedAtlasShotUsesAtlasShotTitleAndMessage() {
+    void projectedSolarShotUsesSolarShotTitleAndMessage() {
         GameSeason season = new GameSeason();
         ReflectionTestUtils.setField(season, "id", 1L);
 
@@ -65,16 +65,16 @@ class GameNotificationFactoryTest {
 
         List<GameNotificationResponse> notifications = GameNotificationFactory.fromPositionSnapshot(
             position,
-            10,
+            20,
             130L,
             Instant.parse("2026-04-22T12:00:00Z")
         );
 
         assertThat(notifications)
             .anySatisfy(notification -> {
-                assertThat(notification.notificationType()).isEqualTo("ATLAS_SHOT");
-                assertThat(notification.title()).isEqualTo("아틀라스 샷 예상");
-                assertThat(notification.message()).contains("50위에서 잡은 영상이 10위까지 올라왔습니다.");
+                assertThat(notification.notificationType()).isEqualTo("SOLAR_SHOT");
+                assertThat(notification.title()).isEqualTo("솔라 샷 예상");
+                assertThat(notification.message()).contains("50위에서 잡은 영상이 20위까지 올라왔습니다.");
             });
     }
 }

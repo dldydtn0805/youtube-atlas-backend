@@ -207,6 +207,7 @@ final class GameNotificationFactory {
     private static String resolveTitle(GameStrategyType strategyType) {
         return switch (strategyType) {
             case ATLAS_SHOT -> "아틀라스 샷 기록";
+            case SOLAR_SHOT -> "솔라 샷 기록";
             case MOONSHOT -> "문샷 기록";
             case BIG_CASHOUT -> "빅 캐시아웃 기록";
             case SMALL_CASHOUT -> "스몰 캐시아웃 기록";
@@ -217,6 +218,7 @@ final class GameNotificationFactory {
     private static String resolveProjectedTitle(GameStrategyType strategyType) {
         return switch (strategyType) {
             case ATLAS_SHOT -> "아틀라스 샷 예상";
+            case SOLAR_SHOT -> "솔라 샷 예상";
             case MOONSHOT -> "문샷 예상";
             case BIG_CASHOUT -> "빅 캐시아웃 예상";
             case SMALL_CASHOUT -> "스몰 캐시아웃 예상";
@@ -233,6 +235,7 @@ final class GameNotificationFactory {
     ) {
         return switch (strategyType) {
             case ATLAS_SHOT -> buyRank + "위에서 잡은 영상이 " + highlightRank + "위까지 올라왔습니다.";
+            case SOLAR_SHOT -> buyRank + "위에서 잡은 영상이 " + highlightRank + "위까지 올라왔습니다.";
             case MOONSHOT -> buyRank + "위에서 잡은 영상이 " + highlightRank + "위까지 올라왔습니다.";
             case BIG_CASHOUT, SMALL_CASHOUT -> "수익률 " + formatProfitRatePercent(profitRatePercent) + "% 플레이가 기록됐습니다.";
             case SNIPE -> buyRank + "위에서 진입해 " + rankDiff + "계단을 앞질렀습니다.";

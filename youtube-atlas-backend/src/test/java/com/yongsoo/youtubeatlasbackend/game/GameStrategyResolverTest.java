@@ -22,6 +22,7 @@ class GameStrategyResolverTest {
             false,
             Instant.parse("2026-04-01T06:00:00Z")
         )).containsExactly(
+            GameStrategyType.SOLAR_SHOT,
             GameStrategyType.MOONSHOT,
             GameStrategyType.SNIPE,
             GameStrategyType.SMALL_CASHOUT
@@ -39,6 +40,7 @@ class GameStrategyResolverTest {
             false,
             Instant.parse("2026-04-01T06:00:00Z")
         )).containsExactly(
+            GameStrategyType.SOLAR_SHOT,
             GameStrategyType.MOONSHOT,
             GameStrategyType.SNIPE
         );
@@ -49,6 +51,7 @@ class GameStrategyResolverTest {
         GamePosition position = openPosition(180, Instant.parse("2026-04-01T05:30:00Z"), 100L);
 
         assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 15, 320D)).containsExactly(
+            GameStrategyType.SOLAR_SHOT,
             GameStrategyType.MOONSHOT,
             GameStrategyType.SMALL_CASHOUT,
             GameStrategyType.SNIPE
@@ -56,26 +59,42 @@ class GameStrategyResolverTest {
     }
 
     @Test
-    void treatsTopTenFromRankFiftyAsAtlasShotBoundary() {
-        GamePosition position = openPosition(50, Instant.parse("2026-04-01T05:30:00Z"), 100L);
+    void treatsTopOneFromRankTwentyAsAtlasShotBoundary() {
+        GamePosition position = openPosition(20, Instant.parse("2026-04-01T05:30:00Z"), 100L);
 
-        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 10, 40D)).containsExactly(
+        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 1, 40D)).containsExactly(
             GameStrategyType.ATLAS_SHOT
         );
-        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 11, 40D)).isEqualTo(List.of());
+        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 2, 40D)).isEqualTo(List.of());
         assertThat(GameStrategyResolver.resolveHighlightStrategyTags(
-            openPosition(49, Instant.parse("2026-04-01T05:30:00Z"), 100L),
-            10,
+            openPosition(19, Instant.parse("2026-04-01T05:30:00Z"), 100L),
+            1,
             40D
         )).isEqualTo(List.of());
     }
 
     @Test
-    void ordersAtlasShotBeforeOverlappingMoonshotAndSnipeTags() {
+    void treatsTopTwentyFromRankFiftyAsSolarShotBoundary() {
+        GamePosition position = openPosition(50, Instant.parse("2026-04-01T05:30:00Z"), 100L);
+
+        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 20, 40D)).containsExactly(
+            GameStrategyType.SOLAR_SHOT
+        );
+        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 21, 40D)).isEqualTo(List.of());
+        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(
+            openPosition(49, Instant.parse("2026-04-01T05:30:00Z"), 100L),
+            20,
+            40D
+        )).isEqualTo(List.of());
+    }
+
+    @Test
+    void ordersAtlasShotBeforeOverlappingSolarMoonshotAndSnipeTags() {
         GamePosition position = openPosition(180, Instant.parse("2026-04-01T05:30:00Z"), 100L);
 
-        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 10, 320D)).containsExactly(
+        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 1, 320D)).containsExactly(
             GameStrategyType.ATLAS_SHOT,
+            GameStrategyType.SOLAR_SHOT,
             GameStrategyType.MOONSHOT,
             GameStrategyType.SMALL_CASHOUT,
             GameStrategyType.SNIPE
@@ -125,6 +144,7 @@ class GameStrategyResolverTest {
         List<GameStrategyType> achievedTags = GameStrategyResolver.resolveAchievedPositionStrategyTags(position, 15, 420L);
 
         assertThat(achievedTags).containsExactly(
+            GameStrategyType.SOLAR_SHOT,
             GameStrategyType.MOONSHOT,
             GameStrategyType.SMALL_CASHOUT,
             GameStrategyType.SNIPE

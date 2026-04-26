@@ -67,6 +67,7 @@ public class GameService {
     private static final int BUYABLE_CHART_PAGE_SIZE = 50;
     private static final int DEFAULT_FALLBACK_RANK = 201;
     private static final long ATLAS_SHOT_HIGHLIGHT_BASE_SCORE = 50_000L;
+    private static final long SOLAR_SHOT_HIGHLIGHT_BASE_SCORE = 35_000L;
     private static final long MOONSHOT_HIGHLIGHT_BASE_SCORE = 20_000L;
     private static final long BIG_CASHOUT_HIGHLIGHT_BASE_SCORE = 5_000L;
     private static final long SMALL_CASHOUT_HIGHLIGHT_BASE_SCORE = 2_500L;
@@ -1554,6 +1555,14 @@ public class GameService {
             );
         }
 
+        if (strategyTags.contains(GameStrategyType.SOLAR_SHOT)) {
+            return new HighlightDefinition(
+                "SOLAR_SHOT",
+                "솔라 샷 적중",
+                position.getBuyRank() + "위에서 잡은 영상이 " + snapshot.highlightRank() + "위까지 올라왔습니다."
+            );
+        }
+
         if (strategyTags.contains(GameStrategyType.MOONSHOT)) {
             return new HighlightDefinition(
                 "MOONSHOT",
@@ -1602,6 +1611,7 @@ public class GameService {
     static long calculateStrategyHighlightScore(GameStrategyType strategyType, GameHighlightResponse highlight) {
         long baseScore = switch (strategyType) {
             case ATLAS_SHOT -> ATLAS_SHOT_HIGHLIGHT_BASE_SCORE;
+            case SOLAR_SHOT -> SOLAR_SHOT_HIGHLIGHT_BASE_SCORE;
             case MOONSHOT -> MOONSHOT_HIGHLIGHT_BASE_SCORE;
             case BIG_CASHOUT -> BIG_CASHOUT_HIGHLIGHT_BASE_SCORE;
             case SMALL_CASHOUT -> SMALL_CASHOUT_HIGHLIGHT_BASE_SCORE;
