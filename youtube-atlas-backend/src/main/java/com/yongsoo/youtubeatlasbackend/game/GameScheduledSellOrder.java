@@ -47,7 +47,7 @@ public class GameScheduledSellOrder {
     private ScheduledSellTriggerDirection triggerDirection = ScheduledSellTriggerDirection.RANK_IMPROVES_TO;
 
     @Column(nullable = false)
-    private Integer quantity;
+    private Long quantity;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -135,11 +135,11 @@ public class GameScheduledSellOrder {
         this.triggerDirection = triggerDirection;
     }
 
-    public Integer getQuantity() {
+    public Long getQuantity() {
         return quantity;
     }
 
-    public void setQuantity(Integer quantity) {
+    public void setQuantity(Long quantity) {
         this.quantity = quantity;
     }
 

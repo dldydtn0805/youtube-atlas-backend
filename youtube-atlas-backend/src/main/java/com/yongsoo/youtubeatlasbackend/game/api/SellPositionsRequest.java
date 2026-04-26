@@ -11,7 +11,7 @@ public record SellPositionsRequest(
     @NotBlank String regionCode,
     Long positionId,
     String videoId,
-    @NotNull @Min(1) Integer quantity
+    @NotNull @Min(1) Long quantity
 ) {
     @AssertTrue(message = "positionId 또는 videoId 중 하나는 필수입니다.")
     public boolean hasSellTarget() {

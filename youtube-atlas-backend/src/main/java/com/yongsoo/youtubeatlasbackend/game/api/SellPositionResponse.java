@@ -8,7 +8,7 @@ public record SellPositionResponse(
     Integer buyRank,
     Integer sellRank,
     Integer rankDiff,
-    Integer quantity,
+    Long quantity,
     Long stakePoints,
     Long sellPricePoints,
     Long pnlPoints,

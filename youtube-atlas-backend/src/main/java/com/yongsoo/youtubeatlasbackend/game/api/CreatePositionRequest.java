@@ -9,6 +9,6 @@ public record CreatePositionRequest(
     @NotBlank String categoryId,
     @NotBlank String videoId,
     @NotNull @Min(0) Long stakePoints,
-    @NotNull @Min(1) Integer quantity
+    @NotNull @Min(1) Long quantity
 ) {
 }

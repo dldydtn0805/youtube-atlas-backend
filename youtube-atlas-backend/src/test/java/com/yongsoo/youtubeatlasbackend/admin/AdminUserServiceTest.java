@@ -262,7 +262,7 @@ class AdminUserServiceTest {
             20,
             22,
             100,
-            100,
+            100L,
             5_000L,
             20_000L,
             15_000L,

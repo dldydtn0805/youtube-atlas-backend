@@ -14,7 +14,7 @@ public record ScheduledSellOrderResponse(
     Integer currentRank,
     Integer targetRank,
     String triggerDirection,
-    Integer quantity,
+    Long quantity,
     Long sellPricePoints,
     Long settledPoints,
     Long pnlPoints,

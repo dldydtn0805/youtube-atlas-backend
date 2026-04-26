@@ -46,7 +46,7 @@ public class GameScheduledSellOrderService {
         AuthenticatedUser authenticatedUser,
         CreateScheduledSellOrderRequest request
     ) {
-        int quantity = normalizeQuantity(request.quantity());
+        long quantity = normalizeQuantity(request.quantity());
         int targetRank = normalizeTargetRank(request.targetRank());
         ScheduledSellTriggerDirection triggerDirection = request.triggerDirection() != null
             ? request.triggerDirection()
@@ -57,7 +57,7 @@ public class GameScheduledSellOrderService {
         ).orElseThrow(() -> new IllegalArgumentException("존재하지 않는 포지션입니다."));
         ensureOpenActivePosition(position);
         ensureConditionNotAlreadyMet(position, targetRank, triggerDirection);
-        int pendingQuantity = gameScheduledSellOrderRepository.sumQuantityByPositionIdAndStatus(
+        long pendingQuantity = gameScheduledSellOrderRepository.sumQuantityByPositionIdAndStatus(
             position.getId(),
             ScheduledSellOrderStatus.PENDING
         );
@@ -256,7 +256,7 @@ public class GameScheduledSellOrderService {
         }
     }
 
-    private int normalizeQuantity(Integer quantity) {
+    private long normalizeQuantity(Long quantity) {
         if (quantity == null || quantity < GamePointCalculator.ORDER_QUANTITY_STEP) {
             throw new IllegalArgumentException("quantity는 1개 이상이어야 합니다.");
         }
@@ -273,7 +273,7 @@ public class GameScheduledSellOrderService {
         return targetRank;
     }
 
-    private int getPositionQuantity(GamePosition position) {
+    private long getPositionQuantity(GamePosition position) {
         return position.getQuantity() == null || position.getQuantity() < GamePointCalculator.MIN_QUANTITY
             ? GamePointCalculator.QUANTITY_SCALE
             : position.getQuantity();

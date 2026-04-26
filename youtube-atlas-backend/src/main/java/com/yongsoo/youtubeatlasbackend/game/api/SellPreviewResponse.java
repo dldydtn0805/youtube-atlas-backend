@@ -3,7 +3,7 @@ package com.yongsoo.youtubeatlasbackend.game.api;
 import java.util.List;
 
 public record SellPreviewResponse(
-    Integer quantity,
+    Long quantity,
     Integer sellRank,
     Long stakePoints,
     Long sellPricePoints,

@@ -25,7 +25,7 @@ import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
 
 class GameScheduledSellOrderServiceTest {
 
-    private static final int ONE_SHARE = GamePointCalculator.QUANTITY_SCALE;
+    private static final long ONE_SHARE = GamePointCalculator.QUANTITY_SCALE;
 
     private GameScheduledSellOrderRepository gameScheduledSellOrderRepository;
     private GameSeasonRepository gameSeasonRepository;

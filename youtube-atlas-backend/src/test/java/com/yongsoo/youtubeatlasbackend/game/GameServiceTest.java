@@ -39,9 +39,9 @@ import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshotRepository;
 
 class GameServiceTest {
 
-    private static final int ONE_SHARE = GamePointCalculator.QUANTITY_SCALE;
-    private static final int TWO_SHARES = ONE_SHARE * 2;
-    private static final int THREE_SHARES = ONE_SHARE * 3;
+    private static final long ONE_SHARE = GamePointCalculator.QUANTITY_SCALE;
+    private static final long TWO_SHARES = ONE_SHARE * 2;
+    private static final long THREE_SHARES = ONE_SHARE * 3;
 
     private GameSeasonRepository gameSeasonRepository;
     private GameWalletRepository gameWalletRepository;
@@ -400,6 +400,44 @@ class GameServiceTest {
         assertThat(response.get(0).stakePoints()).isEqualTo(buyPricePoints * 3);
         assertThat(wallet.getBalancePoints()).isEqualTo(30_000L - (buyPricePoints * 3));
         assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints * 3);
+    }
+
+    @Test
+    void buyAcceptsQuantityLargerThanIntegerMaxValue() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(200);
+        long largeQuantity = 3_000_000_000L;
+        long expectedStakePoints = GamePointCalculator.calculatePositionPoints(buyPricePoints, largeQuantity);
+        GameWallet wallet = wallet(season, appUser, expectedStakePoints + 5_000L, 0L, 0L);
+        TrendSignal signal = signal("video-1", 200, 0);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(1L, 7L, "video-1", PositionStatus.OPEN))
+            .thenReturn(List.of());
+        when(gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN)).thenReturn(0L);
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal));
+        when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
+        when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> {
+            GamePosition position = invocation.getArgument(0, GamePosition.class);
+            ReflectionTestUtils.setField(position, "id", 999L);
+            return position;
+        });
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = gameService.buy(
+            authenticatedUser(),
+            new CreatePositionRequest("KR", "0", "video-1", buyPricePoints, largeQuantity)
+        );
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).quantity()).isEqualTo(largeQuantity);
+        assertThat(response.get(0).stakePoints()).isEqualTo(expectedStakePoints);
+        assertThat(wallet.getBalancePoints()).isEqualTo(5_000L);
+        assertThat(wallet.getReservedPoints()).isEqualTo(expectedStakePoints);
     }
 
     @Test

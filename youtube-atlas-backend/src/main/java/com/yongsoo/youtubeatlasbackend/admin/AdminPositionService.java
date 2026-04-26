@@ -22,7 +22,7 @@ import com.yongsoo.youtubeatlasbackend.youtube.ResourceNotFoundException;
 @Service
 public class AdminPositionService {
 
-    private static final int ORDER_QUANTITY_STEP = 100;
+    private static final long ORDER_QUANTITY_STEP = 100L;
 
     private final AppUserRepository appUserRepository;
     private final GamePositionRepository gamePositionRepository;
@@ -71,7 +71,7 @@ public class AdminPositionService {
             .orElseThrow(() -> new ResourceNotFoundException("지갑 정보를 찾을 수 없습니다."));
 
         long newStakePoints = request.stakePoints();
-        int newQuantity = request.quantity();
+        long newQuantity = request.quantity();
         long previousStakePoints = position.getStakePoints();
         long stakeDelta = newStakePoints - previousStakePoints;
 

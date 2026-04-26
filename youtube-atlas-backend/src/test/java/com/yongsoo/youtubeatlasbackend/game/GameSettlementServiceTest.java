@@ -23,7 +23,7 @@ import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
 
 class GameSettlementServiceTest {
 
-    private static final int ONE_SHARE = GamePointCalculator.QUANTITY_SCALE;
+    private static final long ONE_SHARE = GamePointCalculator.QUANTITY_SCALE;
 
     private AtlasProperties atlasProperties;
     private GameSeasonRepository gameSeasonRepository;

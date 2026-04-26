@@ -81,7 +81,7 @@ public class GameHighlightState {
     private Integer rankDiff;
 
     @Column(name = "quantity")
-    private Integer quantity;
+    private Long quantity;
 
     @Column(name = "stake_points")
     private Long stakePoints;
@@ -237,11 +237,11 @@ public class GameHighlightState {
         this.rankDiff = rankDiff;
     }
 
-    public Integer getQuantity() {
+    public Long getQuantity() {
         return quantity;
     }
 
-    public void setQuantity(Integer quantity) {
+    public void setQuantity(Long quantity) {
         this.quantity = quantity;
     }
 

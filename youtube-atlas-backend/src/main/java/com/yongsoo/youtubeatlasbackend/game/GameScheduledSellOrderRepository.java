@@ -26,7 +26,7 @@ public interface GameScheduledSellOrderRepository extends JpaRepository<GameSche
         where scheduledOrder.position.id = :positionId
           and scheduledOrder.status = :status
     """)
-    int sumQuantityByPositionIdAndStatus(Long positionId, ScheduledSellOrderStatus status);
+    Long sumQuantityByPositionIdAndStatus(Long positionId, ScheduledSellOrderStatus status);
 
     @Query("""
         select scheduledOrder

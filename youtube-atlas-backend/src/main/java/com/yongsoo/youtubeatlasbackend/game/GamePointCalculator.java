@@ -2,9 +2,9 @@ package com.yongsoo.youtubeatlasbackend.game;
 
 final class GamePointCalculator {
 
-    static final int QUANTITY_SCALE = 100;
-    static final int MIN_QUANTITY = 1;
-    static final int ORDER_QUANTITY_STEP = QUANTITY_SCALE;
+    static final long QUANTITY_SCALE = 100L;
+    static final long MIN_QUANTITY = 1L;
+    static final long ORDER_QUANTITY_STEP = QUANTITY_SCALE;
     static final int MAX_TRACKED_RANK = 200;
     private static final long CHART_OUT_DELISTING_PENALTY_POINTS = 100L;
     private static final long SELL_FEE_NUMERATOR = 3L;
@@ -95,7 +95,7 @@ final class GamePointCalculator {
         return currentPricePoints - buyPricePoints;
     }
 
-    static long calculatePositionPoints(long unitPricePoints, int quantity) {
+    static long calculatePositionPoints(long unitPricePoints, long quantity) {
         if (unitPricePoints <= 0L || quantity <= 0) {
             return 0L;
         }
@@ -104,7 +104,7 @@ final class GamePointCalculator {
         return Math.floorDiv(scaledPoints + (QUANTITY_SCALE / 2L), QUANTITY_SCALE);
     }
 
-    static long estimateUnitPricePoints(long totalPricePoints, int quantity) {
+    static long estimateUnitPricePoints(long totalPricePoints, long quantity) {
         if (totalPricePoints <= 0L || quantity <= 0) {
             return 0L;
         }

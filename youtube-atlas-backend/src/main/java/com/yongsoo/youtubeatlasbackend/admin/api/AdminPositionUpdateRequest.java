@@ -8,7 +8,7 @@ import jakarta.validation.constraints.NotNull;
 public record AdminPositionUpdateRequest(
     @NotNull(message = "quantity는 필수입니다.")
     @Min(value = 100, message = "quantity는 100 이상이어야 합니다.")
-    Integer quantity,
+    Long quantity,
     @NotNull(message = "stakePoints는 필수입니다.")
     @Min(value = 0, message = "stakePoints는 0 이상이어야 합니다.")
     Long stakePoints,

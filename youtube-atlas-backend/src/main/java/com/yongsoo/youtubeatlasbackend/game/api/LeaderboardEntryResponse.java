@@ -18,7 +18,7 @@ public record LeaderboardEntryResponse(
     Double profitRatePercent,
     Long realizedPnlPoints,
     Long unrealizedPnlPoints,
-    Integer openPositionCount,
+    Long openPositionCount,
     Boolean me
 ) {
 }

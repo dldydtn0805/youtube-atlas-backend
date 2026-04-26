@@ -57,20 +57,20 @@ class AdminPositionServiceTest {
     void getOpenPositionsReturnsSeasonScopedOpenPositions() {
         when(appUserRepository.existsById(7L)).thenReturn(true);
         when(gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(3L, 7L, PositionStatus.OPEN))
-            .thenReturn(List.of(openPosition(11L, 3L, "Season 3", 1200L, 200)));
+            .thenReturn(List.of(openPosition(11L, 3L, "Season 3", 1200L, 200L)));
 
         var response = adminPositionService.getOpenPositions(7L, 3L);
 
         assertThat(response).hasSize(1);
         assertThat(response.get(0).id()).isEqualTo(11L);
         assertThat(response.get(0).seasonId()).isEqualTo(3L);
-        assertThat(response.get(0).quantity()).isEqualTo(200);
+        assertThat(response.get(0).quantity()).isEqualTo(200L);
         assertThat(response.get(0).stakePoints()).isEqualTo(1200L);
     }
 
     @Test
     void updateOpenPositionAdjustsWalletBalanceAndReservedPoints() {
-        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200);
+        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200L);
         GameWallet wallet = new GameWallet();
         wallet.setBalancePoints(8800L);
         wallet.setReservedPoints(1200L);
@@ -81,11 +81,11 @@ class AdminPositionServiceTest {
         when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(3L, 7L)).thenReturn(Optional.of(wallet));
         when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = adminPositionService.updateOpenPosition(7L, 11L, new AdminPositionUpdateRequest(300, 1500L, null));
+        var response = adminPositionService.updateOpenPosition(7L, 11L, new AdminPositionUpdateRequest(300L, 1500L, null));
 
-        assertThat(response.quantity()).isEqualTo(300);
+        assertThat(response.quantity()).isEqualTo(300L);
         assertThat(response.stakePoints()).isEqualTo(1500L);
-        assertThat(position.getQuantity()).isEqualTo(300);
+        assertThat(position.getQuantity()).isEqualTo(300L);
         assertThat(position.getStakePoints()).isEqualTo(1500L);
         assertThat(wallet.getBalancePoints()).isEqualTo(8500L);
         assertThat(wallet.getReservedPoints()).isEqualTo(1500L);
@@ -95,7 +95,7 @@ class AdminPositionServiceTest {
 
     @Test
     void updateOpenPositionRecalculatesBuySnapshotFromCreatedAt() {
-        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200);
+        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200L);
         GameWallet wallet = new GameWallet();
         wallet.setBalancePoints(8800L);
         wallet.setReservedPoints(1200L);
@@ -117,7 +117,7 @@ class AdminPositionServiceTest {
         var response = adminPositionService.updateOpenPosition(
             7L,
             11L,
-            new AdminPositionUpdateRequest(300, 1500L, requestedCreatedAt)
+            new AdminPositionUpdateRequest(300L, 1500L, requestedCreatedAt)
         );
 
         assertThat(response.buyRank()).isEqualTo(42);
@@ -134,13 +134,13 @@ class AdminPositionServiceTest {
 
     @Test
     void updateOpenPositionRejectsNonOpenPosition() {
-        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200);
+        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200L);
         position.setStatus(PositionStatus.CLOSED);
 
         when(appUserRepository.existsById(7L)).thenReturn(true);
         when(gamePositionRepository.findByIdAndUserIdForUpdate(11L, 7L)).thenReturn(Optional.of(position));
 
-        assertThatThrownBy(() -> adminPositionService.updateOpenPosition(7L, 11L, new AdminPositionUpdateRequest(300, 1500L, null)))
+        assertThatThrownBy(() -> adminPositionService.updateOpenPosition(7L, 11L, new AdminPositionUpdateRequest(300L, 1500L, null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("OPEN");
     }
@@ -149,14 +149,14 @@ class AdminPositionServiceTest {
     void updateOpenPositionRejectsNonStepQuantity() {
         when(appUserRepository.existsById(7L)).thenReturn(true);
 
-        assertThatThrownBy(() -> adminPositionService.updateOpenPosition(7L, 11L, new AdminPositionUpdateRequest(250, 1500L, null)))
+        assertThatThrownBy(() -> adminPositionService.updateOpenPosition(7L, 11L, new AdminPositionUpdateRequest(250L, 1500L, null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("100");
     }
 
     @Test
     void updateOpenPositionRejectsCreatedAtWithoutEarlierSnapshot() {
-        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200);
+        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200L);
         GameWallet wallet = new GameWallet();
         wallet.setBalancePoints(8800L);
         wallet.setReservedPoints(1200L);
@@ -174,7 +174,7 @@ class AdminPositionServiceTest {
         assertThatThrownBy(() -> adminPositionService.updateOpenPosition(
             7L,
             11L,
-            new AdminPositionUpdateRequest(300, 1500L, Instant.parse("2026-04-01T00:00:01Z"))
+            new AdminPositionUpdateRequest(300L, 1500L, Instant.parse("2026-04-01T00:00:01Z"))
         ))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("스냅샷");
@@ -182,7 +182,7 @@ class AdminPositionServiceTest {
 
     @Test
     void updateOpenPositionRejectsFutureCreatedAt() {
-        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200);
+        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200L);
         GameWallet wallet = new GameWallet();
         wallet.setBalancePoints(8800L);
         wallet.setReservedPoints(1200L);
@@ -194,7 +194,7 @@ class AdminPositionServiceTest {
         assertThatThrownBy(() -> adminPositionService.updateOpenPosition(
             7L,
             11L,
-            new AdminPositionUpdateRequest(300, 1500L, Instant.parse("2026-04-16T00:00:00Z"))
+            new AdminPositionUpdateRequest(300L, 1500L, Instant.parse("2026-04-16T00:00:00Z"))
         ))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("현재 시각 이후");
@@ -202,7 +202,7 @@ class AdminPositionServiceTest {
 
     @Test
     void updateOpenPositionRejectsCreatedAtBeforeSeasonStart() {
-        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200);
+        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200L);
         GameWallet wallet = new GameWallet();
         wallet.setBalancePoints(8800L);
         wallet.setReservedPoints(1200L);
@@ -214,7 +214,7 @@ class AdminPositionServiceTest {
         assertThatThrownBy(() -> adminPositionService.updateOpenPosition(
             7L,
             11L,
-            new AdminPositionUpdateRequest(300, 1500L, Instant.parse("2026-03-31T23:59:59Z"))
+            new AdminPositionUpdateRequest(300L, 1500L, Instant.parse("2026-03-31T23:59:59Z"))
         ))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("시즌 시작");
@@ -222,7 +222,7 @@ class AdminPositionServiceTest {
 
     @Test
     void updateOpenPositionRejectsCreatedAtAfterSeasonEnd() {
-        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200);
+        GamePosition position = openPosition(11L, 3L, "Season 3", 1200L, 200L);
         position.getSeason().setEndAt(Instant.parse("2026-04-10T00:00:00Z"));
         GameWallet wallet = new GameWallet();
         wallet.setBalancePoints(8800L);
@@ -235,13 +235,13 @@ class AdminPositionServiceTest {
         assertThatThrownBy(() -> adminPositionService.updateOpenPosition(
             7L,
             11L,
-            new AdminPositionUpdateRequest(300, 1500L, Instant.parse("2026-04-10T00:00:01Z"))
+            new AdminPositionUpdateRequest(300L, 1500L, Instant.parse("2026-04-10T00:00:01Z"))
         ))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("시즌 종료");
     }
 
-    private GamePosition openPosition(Long id, Long seasonId, String seasonName, Long stakePoints, Integer quantity) {
+    private GamePosition openPosition(Long id, Long seasonId, String seasonName, Long stakePoints, Long quantity) {
         GameSeason season = new GameSeason();
         ReflectionTestUtils.setField(season, "id", seasonId);
         season.setName(seasonName);

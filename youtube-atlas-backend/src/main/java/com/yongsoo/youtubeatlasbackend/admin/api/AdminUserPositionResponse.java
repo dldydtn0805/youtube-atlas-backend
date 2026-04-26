@@ -13,7 +13,7 @@ public record AdminUserPositionResponse(
     String channelTitle,
     String thumbnailUrl,
     Integer buyRank,
-    Integer quantity,
+    Long quantity,
     Long stakePoints,
     String status,
     Instant buyCapturedAt,

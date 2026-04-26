@@ -19,7 +19,7 @@ public record GameHighlightResponse(
     Integer highlightRank,
     Integer sellRank,
     Integer rankDiff,
-    Integer quantity,
+    Long quantity,
     Long stakePoints,
     Long currentPricePoints,
     Long profitPoints,

@@ -652,7 +652,7 @@ public class GameService {
         String categoryId = normalizeRequired(request.categoryId(), "categoryId는 필수입니다.");
         String videoId = normalizeRequired(request.videoId(), "videoId는 필수입니다.");
         long quotedPricePoints = normalizeStakePoints(request.stakePoints());
-        int quantity = normalizeQuantity(request.quantity());
+        long quantity = normalizeQuantity(request.quantity());
         Instant now = Instant.now(clock);
 
         List<GamePosition> openPositionsForVideo = gamePositionRepository.findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(
@@ -941,7 +941,7 @@ public class GameService {
         Instant now = Instant.now(clock);
         ensurePositionOpen(position);
         ensurePositionSellable(position, now);
-        int availableQuantity = getManuallySellableQuantity(position);
+        long availableQuantity = getManuallySellableQuantity(position);
         if (availableQuantity < getPositionQuantity(position)) {
             throw new IllegalArgumentException("예약 매도 수량이 남아 있습니다. 남은 수량만 수동 매도할 수 있습니다.");
         }
@@ -953,7 +953,7 @@ public class GameService {
     @Transactional
     public List<SellPositionResponse> sell(AuthenticatedUser authenticatedUser, SellPositionsRequest request) {
         GameSeason season = requireActiveSeason(request.regionCode());
-        int quantity = normalizeQuantity(request.quantity());
+        long quantity = normalizeQuantity(request.quantity());
         Instant now = Instant.now(clock);
         List<GamePosition> sellablePositions = resolveSellablePositionsForUpdate(authenticatedUser, request, season, now);
         ensureSellableQuantity(sellablePositions, quantity);
@@ -962,14 +962,14 @@ public class GameService {
         GameWallet wallet = requireWalletForUpdate(season.getId(), authenticatedUser.id());
 
         List<SellPositionResponse> responses = new ArrayList<>();
-        int remainingQuantity = quantity;
+        long remainingQuantity = quantity;
 
         for (GamePosition position : sellablePositions) {
             if (remainingQuantity <= 0) {
                 break;
             }
 
-            int sellQuantity = Math.min(remainingQuantity, getManuallySellableQuantity(position));
+            long sellQuantity = Math.min(remainingQuantity, getManuallySellableQuantity(position));
             responses.add(closePosition(position, sellQuantity, sellSnapshot, wallet, now));
             remainingQuantity -= sellQuantity;
         }
@@ -978,14 +978,14 @@ public class GameService {
     }
 
     @Transactional
-    public SellPositionResponse sellScheduledPosition(Long userId, Long positionId, int quantity) {
+    public SellPositionResponse sellScheduledPosition(Long userId, Long positionId, long quantity) {
         GamePosition position = gamePositionRepository.findByIdAndUserIdForUpdate(positionId, userId)
             .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 포지션입니다."));
 
         Instant now = Instant.now(clock);
         ensurePositionOpen(position);
         ensurePositionSellable(position, now);
-        int normalizedQuantity = normalizeQuantity(quantity);
+        long normalizedQuantity = normalizeQuantity(quantity);
         ensureScheduledSellableQuantity(position, normalizedQuantity);
         SellSnapshot sellSnapshot = resolveSellSnapshot(position);
         GameWallet wallet = requireWalletForUpdate(position.getSeason().getId(), userId);
@@ -995,7 +995,7 @@ public class GameService {
     @Transactional
     public SellPreviewResponse previewSell(AuthenticatedUser authenticatedUser, SellPositionsRequest request) {
         GameSeason season = requireActiveSeason(request.regionCode());
-        int quantity = normalizeQuantity(request.quantity());
+        long quantity = normalizeQuantity(request.quantity());
         Instant now = Instant.now(clock);
         List<GamePosition> sellablePositions = resolveSellablePositions(authenticatedUser, request, season, now);
         ensureSellableQuantity(sellablePositions, quantity);
@@ -1235,9 +1235,9 @@ public class GameService {
             : ScheduledSellTriggerDirection.RANK_IMPROVES_TO;
     }
 
-    private int getPendingScheduledSellQuantity(GamePosition position) {
+    private long getPendingScheduledSellQuantity(GamePosition position) {
         if (position.getId() == null) {
-            return 0;
+            return 0L;
         }
 
         return gameScheduledSellOrderRepository.sumQuantityByPositionIdAndStatus(
@@ -1246,11 +1246,11 @@ public class GameService {
         );
     }
 
-    private int getManuallySellableQuantity(GamePosition position) {
-        return Math.max(0, getPositionQuantity(position) - getPendingScheduledSellQuantity(position));
+    private long getManuallySellableQuantity(GamePosition position) {
+        return Math.max(0L, getPositionQuantity(position) - getPendingScheduledSellQuantity(position));
     }
 
-    private void ensureScheduledSellableQuantity(GamePosition position, int quantity) {
+    private void ensureScheduledSellableQuantity(GamePosition position, long quantity) {
         if (getPositionQuantity(position) < quantity) {
             throw new IllegalArgumentException("지금 매도 가능한 포지션 수가 부족합니다.");
         }
@@ -1825,7 +1825,7 @@ public class GameService {
             calculateProfitRatePercent(unrealizedPnlPoints, totalStakePoints),
             wallet.getRealizedPnlPoints(),
             unrealizedPnlPoints,
-            openPositions.stream().mapToInt(this::getPositionQuantity).sum()
+            openPositions.stream().mapToLong(this::getPositionQuantity).sum()
         );
     }
 
@@ -1898,7 +1898,7 @@ public class GameService {
         String categoryId,
         String videoId,
         TrendSignal signal,
-        int quantity,
+        long quantity,
         long totalStakePoints,
         Instant now
     ) {
@@ -2031,7 +2031,7 @@ public class GameService {
 
     private SellPositionResponse closePosition(
         GamePosition position,
-        int sellQuantity,
+        long sellQuantity,
         SellSnapshot sellSnapshot,
         GameWallet wallet,
         Instant now
@@ -2111,7 +2111,7 @@ public class GameService {
 
     private SellPreviewResponse buildSellPreviewResponse(
         List<GamePosition> sellablePositions,
-        int quantity,
+        long quantity,
         SellSnapshot sellSnapshot,
         Map<Long, Long> bestScoreByRootPositionId,
         Instant now
@@ -2124,14 +2124,14 @@ public class GameService {
         long totalProjectedHighlightScore = 0L;
         long totalAppliedHighlightScoreDelta = 0L;
         int recordEligibleCount = 0;
-        int remainingQuantity = quantity;
+        long remainingQuantity = quantity;
 
         for (GamePosition position : sellablePositions) {
             if (remainingQuantity <= 0) {
                 break;
             }
 
-            int sellQuantity = Math.min(remainingQuantity, getManuallySellableQuantity(position));
+            long sellQuantity = Math.min(remainingQuantity, getManuallySellableQuantity(position));
             int rankDiff = position.getBuyRank() - sellSnapshot.rank();
             long unitStakePoints = resolveUnitStakePoints(position);
             long soldStakePoints = GamePointCalculator.calculatePositionPoints(unitStakePoints, sellQuantity);
@@ -2375,14 +2375,14 @@ public class GameService {
         );
     }
 
-    private String formatQuantity(int quantity) {
-        int wholeQuantity = quantity / GamePointCalculator.QUANTITY_SCALE;
-        return Integer.toString(wholeQuantity);
+    private String formatQuantity(long quantity) {
+        long wholeQuantity = quantity / GamePointCalculator.QUANTITY_SCALE;
+        return Long.toString(wholeQuantity);
     }
 
-    private void ensureSellableQuantity(List<GamePosition> sellablePositions, int quantity) {
-        int totalSellableQuantity = sellablePositions.stream()
-            .mapToInt(this::getManuallySellableQuantity)
+    private void ensureSellableQuantity(List<GamePosition> sellablePositions, long quantity) {
+        long totalSellableQuantity = sellablePositions.stream()
+            .mapToLong(this::getManuallySellableQuantity)
             .sum();
         if (totalSellableQuantity < quantity) {
             throw new IllegalArgumentException("지금 매도 가능한 포지션 수가 부족합니다.");
@@ -2501,7 +2501,7 @@ public class GameService {
         return stakePoints;
     }
 
-    private int normalizeQuantity(Integer quantity) {
+    private long normalizeQuantity(Long quantity) {
         if (quantity == null) {
             throw new IllegalArgumentException("quantity는 필수입니다.");
         }
@@ -2529,7 +2529,7 @@ public class GameService {
         return Math.min(limit, 30);
     }
 
-    private int getPositionQuantity(GamePosition position) {
+    private long getPositionQuantity(GamePosition position) {
         return position.getQuantity() == null || position.getQuantity() < GamePointCalculator.MIN_QUANTITY
             ? GamePointCalculator.QUANTITY_SCALE
             : position.getQuantity();
@@ -2561,7 +2561,7 @@ public class GameService {
 
     private GamePosition createClosedPosition(
         GamePosition source,
-        int quantity,
+        long quantity,
         long stakePoints,
         SellSnapshot sellSnapshot,
         int rankDiff,
@@ -2672,7 +2672,7 @@ public class GameService {
         Double profitRatePercent,
         Long realizedPnlPoints,
         Long unrealizedPnlPoints,
-        Integer openPositionCount
+        Long openPositionCount
     ) {
     }
 
@@ -2689,7 +2689,7 @@ public class GameService {
         Long id,
         Integer targetRank,
         ScheduledSellTriggerDirection triggerDirection,
-        Integer quantity
+        Long quantity
     ) {
     }
 
