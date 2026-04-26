@@ -155,6 +155,34 @@ class AchievementTitleServiceTest {
         assertThat(setting.getSelectedTitle().getCode()).isEqualTo("SOLAR_FINDER");
     }
 
+    @Test
+    void grantTitlesForHighlightsDoesNotCombineSeparateHighlightsIntoSolarWalker() {
+        List<AchievementTitle> unlockedTitles = achievementTitleService.grantTitlesForHighlights(
+            user(),
+            season(),
+            List.of(
+                highlightState("SNIPE"),
+                highlightState("MOONSHOT,SOLAR_SHOT")
+            ),
+            AchievementTitleSourceType.HIGHLIGHT
+        );
+
+        assertThat(earnedCodes()).containsExactlyInAnyOrder(
+            "SNIPE_SEEKER",
+            "MOON_SEEKER",
+            "SOLAR_SEEKER",
+            "SOLAR_FINDER"
+        );
+        assertThat(unlockedTitles).extracting(AchievementTitle::getCode)
+            .containsExactly(
+                "SNIPE_SEEKER",
+                "MOON_SEEKER",
+                "SOLAR_SEEKER",
+                "SOLAR_FINDER"
+            );
+        assertThat(setting.getSelectedTitle().getCode()).isEqualTo("SOLAR_FINDER");
+    }
+
     private List<String> earnedCodes() {
         return userTitles.stream()
             .map(userTitle -> userTitle.getTitle().getCode())
