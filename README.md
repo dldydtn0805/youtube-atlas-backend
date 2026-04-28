@@ -1,25 +1,23 @@
 # youtube-atlas-backend
 
-`World-Best-YouTube`의 YouTube 조회, Google 로그인, 실시간 댓글, 급상승 스냅샷, 랭킹 기반 포인트 게임을 Spring Boot로 제공하는 백엔드입니다.
+`World-Best-YouTube`의 YouTube 조회, Google 로그인, 실시간 댓글, 급상승 스냅샷, 랭킹 기반 포인트 게임, 관리자 운영 기능을 Spring Boot로 제공하는 백엔드입니다.
 
-## 현재 구현 범위
+## 현재 프로젝트 상태
 
-- 국가별 카테고리 조회
-- 국가/카테고리별 인기 영상 조회
-- Google OAuth authorization code 기반 로그인
-- 사용자별 스트리머 즐겨찾기
-- 영상별 댓글 조회/생성
-- STOMP WebSocket 기반 실시간 댓글 브로드캐스트
-- 급상승 스냅샷 동기화
-- 급상승 시그널 조회
-- 랭킹 기반 포인트 게임 시즌/지갑/매수/매도/리더보드
-- 하이라이트 점수 기반 티어 조회
-- 시즌 종료 시 오픈 포지션 자동 청산
-- H2 로컬 실행 + PostgreSQL 전환 가능한 기본 설정
+현재 저장소 기준으로 아래 기능이 구현되어 있습니다.
+
+- YouTube 카탈로그: 국가별 카테고리, 카테고리별 인기 영상, 단일 영상 상세 조회
+- 인증: Google OAuth authorization code 로그인, idToken fallback 로그인, 프론트 초기화용 Google 설정 조회, 세션 조회/로그아웃
+- 사용자 기능: 최근 재생 위치 저장, 스트리머 즐겨찾기, 즐겨찾기 영상 모아보기
+- 댓글: 영상별 댓글 조회/생성, 댓글 실시간 접속자 수 조회, STOMP WebSocket 기반 실시간 브로드캐스트
+- 급상승: 스냅샷 동기화 및 히스토리 조회, 시그널 조회, 실시간 급상승, 신규 진입, 급등 영상 조회, 음악 급상승 및 영상별 랭킹 히스토리 조회
+- 게임: 시즌, 지갑, 마켓, 리더보드, 매수/매도/매도 미리보기, 하이라이트, 티어, 업적 칭호, 예약 매도 주문, 시즌 종료 자동 청산
+- 관리자: 대시보드, 시즌 일정/시작 포인트 수정, 시즌 강제 종료, 유저/지갑/포지션 관리, 댓글/거래내역/하이라이트 정리, 급상승 스냅샷 기간 조회
+- 실행/배포: H2 로컬 실행, PostgreSQL 연결 실행, Docker 시작 시 SQL 마이그레이션 자동 적용, 요청 단위 rate limit
 
 ## 실행
 
-프로젝트 루트에서:
+가장 단순한 실행 방법:
 
 ```bash
 cd youtube-atlas-backend
@@ -53,7 +51,12 @@ cd youtube-atlas-backend
 ./gradlew test
 ```
 
-기본 포트는 `8080`입니다.
+기본 포트는 `8080`입니다. 루트에는 운영 보조 스크립트가 함께 있습니다.
+
+- `./scripts/boot-local.sh`: `.env.local`을 읽어 로컬 실행
+- `./scripts/run-db-migrations.sh`: PostgreSQL 대상 SQL 마이그레이션 실행
+- `./scripts/restore-aws-db.sh`: 원격 DB 백업 복원 보조
+- `./scripts/sync-local-db.sh`: 로컬 DB 동기화 보조
 
 ## 환경 변수
 
@@ -80,9 +83,23 @@ ADMIN_ALLOWED_EMAILS=admin@example.com,owner@example.com
 GAME_SCHEDULER_ENABLED=false
 GAME_SETTLEMENT_CRON=0 */5 * * * *
 GAME_PAYOUT_SLOT_MINUTES=5
-TRENDING_SCHEDULER_ENABLED=false
+GAME_SEASON_DURATION_DAYS=7
+GAME_STARTING_BALANCE_POINTS=10000
+GAME_MIN_HOLD_SECONDS=600
+GAME_MAX_OPEN_POSITIONS=5
+GAME_RANK_POINT_MULTIPLIER=100
+TRENDING_SCHEDULER_ENABLED=true
 TRENDING_SYNC_CRON=0 0 * * * *
+TRENDING_CAPTURE_SLOT_MINUTES=60
 TRENDING_SYNC_MAX_PAGES_PER_SOURCE=4
+TRENDING_RETENTION_DAYS=30
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_GENERAL_PER_MINUTE=120
+RATE_LIMIT_LOGIN_PER_MINUTE=10
+RATE_LIMIT_COMMENT_PER_MINUTE=20
+RATE_LIMIT_TRADE_PER_MINUTE=60
+RATE_LIMIT_PREVIEW_PER_MINUTE=180
+RATE_LIMIT_SENSITIVE_PER_MINUTE=5
 SKIP_DB_MIGRATIONS=false
 ```
 
@@ -97,6 +114,8 @@ SKIP_DB_MIGRATIONS=false
 - 로컬에서 빠르게 확인하려면 `GAME_SETTLEMENT_CRON=0 */1 * * * *` 로 두면 1분마다 시즌 정리를 테스트할 수 있습니다.
 - `ADMIN_ALLOWED_EMAILS` 에 관리자 이메일을 쉼표로 구분해서 넣으면 `/api/admin/*` 엔드포인트 접근을 허용합니다.
 - `TRENDING_SYNC_MAX_PAGES_PER_SOURCE` 는 급상승 동기화 시 소스 카테고리별로 몇 페이지까지 수집할지 결정합니다.
+- `TRENDING_SCHEDULER_ENABLED` 기본값은 `true` 이므로, 로컬에서 자동 수집을 원하지 않으면 명시적으로 `false` 로 꺼 두는 편이 안전합니다.
+- `RATE_LIMIT_*` 값으로 일반 요청, 로그인, 댓글, 거래, 민감 API별 제한을 따로 조절할 수 있습니다.
 
 ## 배포 + SQL 마이그레이션
 
@@ -118,41 +137,77 @@ SKIP_DB_MIGRATIONS=false
 
 ## API 요약
 
+아래는 현재 컨트롤러 기준 빠른 참조 목록입니다. 자세한 요청/응답 예시는 아래 세부 API 명세 섹션을 참고하면 됩니다.
+
 - `GET /api/catalog/regions/{regionCode}/categories`
 - `GET /api/catalog/regions/{regionCode}/categories/{categoryId}/videos?pageToken=...`
+- `GET /api/catalog/videos/{videoId}`
 - `POST /api/auth/google`
+- `GET /api/auth/google/config`
 - `GET /api/auth/me`
 - `DELETE /api/auth/session`
 - `GET /api/me/playback-progress`
 - `POST /api/me/playback-progress`
 - `GET /api/me/favorite-streamers`
+- `GET /api/me/favorite-streamers/videos?regionCode=KR&pageToken=...`
 - `POST /api/me/favorite-streamers`
 - `DELETE /api/me/favorite-streamers/{channelId}`
+- `GET /api/comments/presence?videoId=...`
 - `GET /api/comments`
 - `POST /api/comments`
+- `GET /api/videos/{videoId}/comments`
+- `POST /api/videos/{videoId}/comments`
 - `GET /api/trending/signals?regionCode=KR&categoryId=0&videoIds=abc&videoIds=def`
+- `GET /api/trending/top-rank-risers?regionCode=KR`
+- `GET /api/trending/new-entries?regionCode=KR`
 - `GET /api/trending/top-videos?regionCode=KR&pageToken=50`
+- `GET /api/trending/music-top-videos?regionCode=KR&pageToken=50`
 - `GET /api/trending/realtime-surging?regionCode=KR`
+- `GET /api/trending/videos/{videoId}/history?regionCode=KR`
 - `GET /api/admin/dashboard`
+- `GET /api/admin/trend-snapshots?startAt=...&endAt=...&regionCode=KR`
+- `POST /api/admin/comments/purge`
+- `POST /api/admin/trade-history/purge`
+- `POST /api/admin/highlights/purge`
 - `PATCH /api/admin/seasons/{seasonId}`
+- `PATCH /api/admin/seasons/{seasonId}/starting-balance`
 - `POST /api/admin/seasons/{seasonId}/close`
 - `GET /api/admin/users?q=atlas&limit=20`
 - `GET /api/admin/users/{userId}`
+- `GET /api/admin/users/{userId}/highlights?seasonId=1`
+- `GET /api/admin/users/{userId}/positions?seasonId=1`
 - `PATCH /api/admin/users/{userId}/wallet`
+- `PATCH /api/admin/users/{userId}/positions/{positionId}`
 - `DELETE /api/admin/users/{userId}`
-- `GET /api/game/seasons/current`
-- `GET /api/game/wallet`
-- `GET /api/game/market`
-- `GET /api/game/leaderboard`
-- `GET /api/game/tiers/current`
-- `GET /api/game/notifications`
-- `GET /api/game/positions/me?status=OPEN`
+- `GET /api/game/seasons/current?regionCode=KR`
+- `GET /api/game/wallet?regionCode=KR`
+- `GET /api/game/market?regionCode=KR`
+- `GET /api/game/market/buyable-chart?regionCode=KR&pageToken=...`
+- `GET /api/game/leaderboard?regionCode=KR`
+- `GET /api/game/highlights?regionCode=KR`
+- `GET /api/game/notifications?regionCode=KR`
+- `PATCH /api/game/notifications/read?regionCode=KR`
+- `DELETE /api/game/notifications?regionCode=KR`
+- `DELETE /api/game/notifications/{notificationId}`
+- `GET /api/game/tiers/current?regionCode=KR`
+- `GET /api/game/achievement-titles/me`
+- `PATCH /api/game/achievement-titles/me/selected`
+- `GET /api/game/leaderboard/{userId}/positions?regionCode=KR`
+- `GET /api/game/leaderboard/{userId}/highlights?regionCode=KR`
+- `GET /api/game/leaderboard/{userId}/positions/{positionId}/rank-history?regionCode=KR`
+- `GET /api/game/positions/me?regionCode=KR&status=OPEN&limit=20`
+- `GET /api/game/positions/{positionId}/rank-history`
 - `POST /api/game/positions`
+- `POST /api/game/positions/sell`
+- `POST /api/game/positions/sell-preview`
 - `POST /api/game/positions/{positionId}/sell`
+- `POST /api/game/scheduled-sell-orders`
+- `GET /api/game/scheduled-sell-orders?regionCode=KR`
+- `DELETE /api/game/scheduled-sell-orders/{orderId}`
 
-## 게임 기능 변경점
+## 게임 핵심 규칙
 
-이번 변경으로 아래 기능이 추가되었습니다.
+현재 게임 도메인에는 아래 기능이 포함되어 있습니다.
 
 - 시즌 기반 포인트 게임 도메인 추가
 - 유저별 게임 지갑 자동 생성
@@ -210,15 +265,18 @@ profitPoints = settledPoints - buyPricePoints
 
 ## 프론트 연동 순서
 
-게임 화면 MVP는 아래 순서로 붙이면 됩니다.
+게임 화면 MVP는 아래 순서로 붙이면 됩니다. `GET /api/game/*` 조회 API 대부분은 `regionCode` 쿼리 파라미터가 필요합니다.
 
-1. 로그인 후 `GET /api/game/seasons/current` 호출
-2. `GET /api/game/market` 으로 거래 가능 영상 목록 조회
-3. `GET /api/game/tiers/current` 로 내 하이라이트 티어 현황 조회
-4. `GET /api/game/positions/me?status=OPEN` 으로 내 보유 포지션 조회
-5. `GET /api/game/leaderboard` 로 랭킹 조회
-6. 매수 시 `POST /api/game/positions`
-7. 매도 시 `POST /api/game/positions/{positionId}/sell`
+1. 로그인 후 `GET /api/game/seasons/current?regionCode=KR` 호출
+2. `GET /api/game/wallet?regionCode=KR` 로 지갑 조회
+3. `GET /api/game/market?regionCode=KR` 으로 거래 가능 영상 목록 조회
+4. `GET /api/game/tiers/current?regionCode=KR` 로 내 하이라이트 티어 현황 조회
+5. `GET /api/game/positions/me?regionCode=KR&status=OPEN` 으로 내 보유 포지션 조회
+6. `GET /api/game/leaderboard?regionCode=KR` 로 랭킹 조회
+7. 매수 시 `POST /api/game/positions`
+8. 다건 매도 미리보기 시 `POST /api/game/positions/sell-preview`
+9. 매도 시 `POST /api/game/positions/sell` 또는 `POST /api/game/positions/{positionId}/sell`
+10. 예약 매도 주문이 필요하면 `POST /api/game/scheduled-sell-orders`
 
 모든 게임 API는 아래 헤더가 필요합니다.
 
