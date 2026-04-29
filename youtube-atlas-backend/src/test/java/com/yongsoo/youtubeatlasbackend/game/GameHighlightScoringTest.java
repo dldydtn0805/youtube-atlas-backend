@@ -47,7 +47,15 @@ class GameHighlightScoringTest {
         GameHighlightResponse highlight = highlight(List.of(GameStrategyType.ATLAS_SHOT));
 
         assertThat(GameService.calculateStrategyHighlightScore(GameStrategyType.ATLAS_SHOT, highlight))
-            .isEqualTo(58_367L);
+            .isEqualTo(68_367L);
+    }
+
+    @Test
+    void appliesGalaxyShotBaseScore() {
+        GameHighlightResponse highlight = highlight(List.of(GameStrategyType.GALAXY_SHOT));
+
+        assertThat(GameService.calculateStrategyHighlightScore(GameStrategyType.GALAXY_SHOT, highlight))
+            .isEqualTo(53_367L);
     }
 
     @Test

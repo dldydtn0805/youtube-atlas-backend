@@ -59,15 +59,48 @@ class GameStrategyResolverTest {
     }
 
     @Test
-    void treatsTopOneFromRankTwentyAsAtlasShotBoundary() {
+    void treatsTopOneFromRankTwentyAsGalaxyAndAtlasShotBoundary() {
         GamePosition position = openPosition(20, Instant.parse("2026-04-01T05:30:00Z"), 100L);
+
+        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 1, 40D)).containsExactly(
+            GameStrategyType.ATLAS_SHOT,
+            GameStrategyType.GALAXY_SHOT
+        );
+        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 2, 40D)).containsExactly(
+            GameStrategyType.GALAXY_SHOT
+        );
+        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(
+            openPosition(19, Instant.parse("2026-04-01T05:30:00Z"), 100L),
+            1,
+            40D
+        )).containsExactly(GameStrategyType.ATLAS_SHOT);
+    }
+
+    @Test
+    void treatsTopFiveFromRankTwentyAsGalaxyShotBoundary() {
+        GamePosition position = openPosition(20, Instant.parse("2026-04-01T05:30:00Z"), 100L);
+
+        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 5, 40D)).containsExactly(
+            GameStrategyType.GALAXY_SHOT
+        );
+        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 6, 40D)).isEqualTo(List.of());
+        assertThat(GameStrategyResolver.resolveHighlightStrategyTags(
+            openPosition(19, Instant.parse("2026-04-01T05:30:00Z"), 100L),
+            5,
+            40D
+        )).isEqualTo(List.of());
+    }
+
+    @Test
+    void treatsTopOneFromRankFiveAsAtlasShotBoundary() {
+        GamePosition position = openPosition(5, Instant.parse("2026-04-01T05:30:00Z"), 100L);
 
         assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 1, 40D)).containsExactly(
             GameStrategyType.ATLAS_SHOT
         );
         assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 2, 40D)).isEqualTo(List.of());
         assertThat(GameStrategyResolver.resolveHighlightStrategyTags(
-            openPosition(19, Instant.parse("2026-04-01T05:30:00Z"), 100L),
+            openPosition(4, Instant.parse("2026-04-01T05:30:00Z"), 100L),
             1,
             40D
         )).isEqualTo(List.of());
@@ -89,11 +122,12 @@ class GameStrategyResolverTest {
     }
 
     @Test
-    void ordersAtlasShotBeforeOverlappingSolarMoonshotAndSnipeTags() {
+    void ordersAtlasShotBeforeOverlappingGalaxySolarMoonshotAndSnipeTags() {
         GamePosition position = openPosition(180, Instant.parse("2026-04-01T05:30:00Z"), 100L);
 
         assertThat(GameStrategyResolver.resolveHighlightStrategyTags(position, 1, 320D)).containsExactly(
             GameStrategyType.ATLAS_SHOT,
+            GameStrategyType.GALAXY_SHOT,
             GameStrategyType.SOLAR_SHOT,
             GameStrategyType.MOONSHOT,
             GameStrategyType.SMALL_CASHOUT,

@@ -9,8 +9,10 @@ final class GameStrategyResolver {
     private static final double BIG_CASHOUT_MIN_PROFIT_RATE_PERCENT = 1_000D;
     private static final double POSITION_CASHOUT_MIN_PROFIT_RATE_PERCENT = 18D;
     private static final int POSITION_CASHOUT_MIN_RANK_DIFF = 12;
-    private static final int ATLAS_SHOT_BUY_RANK_MIN = 20;
+    private static final int ATLAS_SHOT_BUY_RANK_MIN = 5;
     private static final int ATLAS_SHOT_TARGET_RANK_MAX = 1;
+    private static final int GALAXY_SHOT_BUY_RANK_MIN = 20;
+    private static final int GALAXY_SHOT_TARGET_RANK_MAX = 5;
     private static final int SOLAR_SHOT_BUY_RANK_MIN = 50;
     private static final int SOLAR_SHOT_TARGET_RANK_MAX = 20;
     private static final int MOONSHOT_BUY_RANK_MIN = 100;
@@ -33,6 +35,10 @@ final class GameStrategyResolver {
 
         if (matchesAtlasShot(position.getBuyRank(), currentRank)) {
             tags.add(GameStrategyType.ATLAS_SHOT);
+        }
+
+        if (matchesGalaxyShot(position.getBuyRank(), currentRank)) {
+            tags.add(GameStrategyType.GALAXY_SHOT);
         }
 
         if (matchesSolarShot(position.getBuyRank(), currentRank)) {
@@ -64,6 +70,10 @@ final class GameStrategyResolver {
 
         if (matchesAtlasShot(position.getBuyRank(), highlightRank)) {
             tags.add(GameStrategyType.ATLAS_SHOT);
+        }
+
+        if (matchesGalaxyShot(position.getBuyRank(), highlightRank)) {
+            tags.add(GameStrategyType.GALAXY_SHOT);
         }
 
         if (matchesSolarShot(position.getBuyRank(), highlightRank)) {
@@ -119,6 +129,13 @@ final class GameStrategyResolver {
             && currentRank != null
             && buyRank >= ATLAS_SHOT_BUY_RANK_MIN
             && currentRank <= ATLAS_SHOT_TARGET_RANK_MAX;
+    }
+
+    private static boolean matchesGalaxyShot(Integer buyRank, Integer currentRank) {
+        return buyRank != null
+            && currentRank != null
+            && buyRank >= GALAXY_SHOT_BUY_RANK_MIN
+            && currentRank <= GALAXY_SHOT_TARGET_RANK_MAX;
     }
 
     private static boolean matchesSolarShot(Integer buyRank, Integer currentRank) {

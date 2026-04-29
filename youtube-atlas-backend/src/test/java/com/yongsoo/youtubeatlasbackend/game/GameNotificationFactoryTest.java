@@ -77,4 +77,38 @@ class GameNotificationFactoryTest {
                 assertThat(notification.message()).contains("50위에서 잡은 영상이 20위까지 올라왔습니다.");
             });
     }
+
+    @Test
+    void projectedGalaxyShotUsesGalaxyShotTitleAndMessage() {
+        GameSeason season = new GameSeason();
+        ReflectionTestUtils.setField(season, "id", 1L);
+
+        AppUser user = new AppUser();
+        ReflectionTestUtils.setField(user, "id", 7L);
+
+        GamePosition position = new GamePosition();
+        ReflectionTestUtils.setField(position, "id", 300L);
+        position.setSeason(season);
+        position.setUser(user);
+        position.setVideoId("video-1");
+        position.setTitle("테스트 영상");
+        position.setChannelTitle("테스트 채널");
+        position.setThumbnailUrl("https://example.com/thumb.jpg");
+        position.setBuyRank(20);
+        position.setStakePoints(100L);
+
+        List<GameNotificationResponse> notifications = GameNotificationFactory.fromPositionSnapshot(
+            position,
+            5,
+            130L,
+            Instant.parse("2026-04-22T12:00:00Z")
+        );
+
+        assertThat(notifications)
+            .anySatisfy(notification -> {
+                assertThat(notification.notificationType()).isEqualTo("GALAXY_SHOT");
+                assertThat(notification.title()).isEqualTo("갤럭시 샷 예상");
+                assertThat(notification.message()).contains("20위에서 잡은 영상이 5위까지 올라왔습니다.");
+            });
+    }
 }

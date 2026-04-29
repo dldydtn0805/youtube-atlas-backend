@@ -2,6 +2,7 @@ package com.yongsoo.youtubeatlasbackend.game;
 
 public enum GameStrategyType {
     ATLAS_SHOT,
+    GALAXY_SHOT,
     SOLAR_SHOT,
     MOONSHOT,
     SMALL_CASHOUT,

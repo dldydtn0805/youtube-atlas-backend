@@ -94,7 +94,7 @@ class AchievementTitleServiceTest {
 
     @Test
     void grantTitlesForHighlightAwardsAllTitlesForAtlasSniper() {
-        GameHighlightState highlight = highlightState("ATLAS_SHOT,SOLAR_SHOT,MOONSHOT,SNIPE");
+        GameHighlightState highlight = highlightState("ATLAS_SHOT,GALAXY_SHOT,SOLAR_SHOT,MOONSHOT,SNIPE");
 
         List<AchievementTitle> unlockedTitles =
             achievementTitleService.grantTitlesForHighlight(highlight, AchievementTitleSourceType.HIGHLIGHT);
@@ -106,6 +106,9 @@ class AchievementTitleServiceTest {
             "SOLAR_SEEKER",
             "SOLAR_FINDER",
             "SOLAR_WALKER",
+            "GALAXY_SEEKER",
+            "GALAXY_FINDER",
+            "GALAXY_WALKER",
             "ATLAS_SEEKER",
             "ATLAS_FINDER",
             "ATLAS_WALKER",
@@ -117,11 +120,14 @@ class AchievementTitleServiceTest {
                 "SNIPE_SEEKER",
                 "MOON_SEEKER",
                 "SOLAR_SEEKER",
+                "GALAXY_SEEKER",
                 "ATLAS_SEEKER",
                 "MOON_FINDER",
                 "SOLAR_FINDER",
+                "GALAXY_FINDER",
                 "ATLAS_FINDER",
                 "SOLAR_WALKER",
+                "GALAXY_WALKER",
                 "ATLAS_WALKER",
                 "ATLAS_SNIPER"
             );
@@ -130,16 +136,29 @@ class AchievementTitleServiceTest {
     }
 
     @Test
-    void grantTitlesForHighlightAwardsAtlasFinderForAtlasShotSolarShotCombo() {
-        GameHighlightState highlight = highlightState("ATLAS_SHOT,SOLAR_SHOT");
+    void grantTitlesForHighlightAwardsAtlasFinderForAtlasShotGalaxyShotCombo() {
+        GameHighlightState highlight = highlightState("ATLAS_SHOT,GALAXY_SHOT");
 
         List<AchievementTitle> unlockedTitles =
             achievementTitleService.grantTitlesForHighlight(highlight, AchievementTitleSourceType.HIGHLIGHT);
 
-        assertThat(earnedCodes()).containsExactlyInAnyOrder("SOLAR_SEEKER", "ATLAS_SEEKER", "ATLAS_FINDER");
+        assertThat(earnedCodes()).containsExactlyInAnyOrder("GALAXY_SEEKER", "ATLAS_SEEKER", "ATLAS_FINDER");
         assertThat(unlockedTitles).extracting(AchievementTitle::getCode)
-            .containsExactly("SOLAR_SEEKER", "ATLAS_SEEKER", "ATLAS_FINDER");
+            .containsExactly("GALAXY_SEEKER", "ATLAS_SEEKER", "ATLAS_FINDER");
         assertThat(setting.getSelectedTitle().getCode()).isEqualTo("ATLAS_FINDER");
+    }
+
+    @Test
+    void grantTitlesForHighlightAwardsGalaxyFinderForSolarShotGalaxyShotCombo() {
+        GameHighlightState highlight = highlightState("SOLAR_SHOT,GALAXY_SHOT");
+
+        List<AchievementTitle> unlockedTitles =
+            achievementTitleService.grantTitlesForHighlight(highlight, AchievementTitleSourceType.HIGHLIGHT);
+
+        assertThat(earnedCodes()).containsExactlyInAnyOrder("SOLAR_SEEKER", "GALAXY_SEEKER", "GALAXY_FINDER");
+        assertThat(unlockedTitles).extracting(AchievementTitle::getCode)
+            .containsExactly("SOLAR_SEEKER", "GALAXY_SEEKER", "GALAXY_FINDER");
+        assertThat(setting.getSelectedTitle().getCode()).isEqualTo("GALAXY_FINDER");
     }
 
     @Test
