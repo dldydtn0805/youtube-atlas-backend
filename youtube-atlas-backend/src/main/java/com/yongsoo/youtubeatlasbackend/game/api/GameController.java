@@ -58,6 +58,14 @@ public class GameController {
         return gameService.getWallet(authService.requireCurrentUser(authorizationHeader), regionCode);
     }
 
+    @GetMapping("/inventory-slots")
+    public InventorySlotResponse getInventorySlots(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode
+    ) {
+        return gameService.getInventorySlots(authService.requireCurrentUser(authorizationHeader), regionCode);
+    }
+
     @GetMapping("/market")
     public List<MarketVideoResponse> getMarket(
         @RequestHeader("Authorization") String authorizationHeader,

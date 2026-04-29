@@ -183,8 +183,43 @@ class GameServiceTest {
         assertThat(response.seasonId()).isEqualTo(1L);
         assertThat(response.wallet().balancePoints()).isEqualTo(10_000L);
         assertThat(response.wallet().reservedPoints()).isZero();
+        assertThat(response.maxOpenPositions()).isEqualTo(5);
+        assertThat(response.inventorySlots().baseSlots()).isEqualTo(5);
+        assertThat(response.inventorySlots().totalSlots()).isEqualTo(5);
+        assertThat(response.inventorySlots().maxSlots()).isEqualTo(5);
+        assertThat(response.inventorySlots().currentTier()).isNull();
+        assertThat(response.inventorySlots().tiers()).isEmpty();
         assertThat(response.notifications()).isEmpty();
         verify(gameLedgerRepository).save(any(GameLedger.class));
+    }
+
+    @Test
+    void getInventorySlotsUsesCurrentTierReward() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
+        wallet.setManualTierScoreAdjustment(15_000L);
+        GameSeasonTier bronzeTier = tier(season, "BRONZE", "브론즈", 0L, 1);
+        GameSeasonTier silverTier = tier(season, "SILVER", "실버", 5_000L, 2);
+        GameSeasonTier goldTier = tier(season, "GOLD", "골드", 15_000L, 3);
+        List<GameSeasonTier> tiers = List.of(bronzeTier, silverTier, goldTier);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gameTierService.getOrCreateTiers(season)).thenReturn(tiers);
+        when(gameTierService.resolveTier(tiers, 15_000L)).thenReturn(goldTier);
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of());
+
+        var response = gameService.getInventorySlots(authenticatedUser(), "KR");
+
+        assertThat(response.baseSlots()).isEqualTo(5);
+        assertThat(response.totalSlots()).isEqualTo(10);
+        assertThat(response.maxSlots()).isEqualTo(10);
+        assertThat(response.currentTier().tierCode()).isEqualTo("GOLD");
+        assertThat(response.currentTier().inventorySlots()).isEqualTo(10);
+        assertThat(response.nextTier()).isNull();
+        assertThat(response.tiers()).extracting("inventorySlots").containsExactly(5, 7, 10);
     }
 
     @Test
@@ -1712,6 +1747,48 @@ class GameServiceTest {
     }
 
     @Test
+    void buyUsesExpandedInventorySlotsForDistinctVideoLimit() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
+        GameWallet wallet = wallet(season, appUser, buyPricePoints, 0L, 0L);
+        wallet.setManualTierScoreAdjustment(5_000L);
+        TrendSignal signal = signal("video-6", 170, 0);
+        GameSeasonTier bronzeTier = tier(season, "BRONZE", "브론즈", 0L, 1);
+        GameSeasonTier silverTier = tier(season, "SILVER", "실버", 5_000L, 2);
+        List<GameSeasonTier> tiers = List.of(bronzeTier, silverTier);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAscForUpdate(1L, 7L, "video-6", PositionStatus.OPEN))
+            .thenReturn(List.of());
+        when(gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(1L, 7L, PositionStatus.OPEN))
+            .thenReturn((long) season.getMaxOpenPositions());
+        when(gameTierService.getOrCreateTiers(season)).thenReturn(tiers);
+        when(gameTierService.resolveTier(tiers, 5_000L)).thenReturn(silverTier);
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of());
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-6"))).thenReturn(Optional.of(signal));
+        when(appUserRepository.findById(7L)).thenReturn(Optional.of(appUser));
+        when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> {
+            GamePosition position = invocation.getArgument(0, GamePosition.class);
+            ReflectionTestUtils.setField(position, "id", 306L);
+            return position;
+        });
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = gameService.buy(
+            authenticatedUser(),
+            new CreatePositionRequest("KR", "0", "video-6", buyPricePoints, ONE_SHARE)
+        );
+
+        assertThat(response).hasSize(1);
+        assertThat(response.getFirst().videoId()).isEqualTo("video-6");
+        assertThat(wallet.getBalancePoints()).isZero();
+    }
+
+    @Test
     void buyUsesLockedWalletLookupForBalanceValidation() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
@@ -2186,9 +2263,22 @@ class GameServiceTest {
         tier.setBadgeCode("badge-" + tierCode.toLowerCase());
         tier.setTitleCode("title-" + tierCode.toLowerCase());
         tier.setProfileThemeCode(tierCode.toLowerCase());
+        tier.setInventorySlots(inventorySlotsForTier(tierCode));
         tier.setSortOrder(sortOrder);
         tier.setCreatedAt(Instant.parse("2026-04-01T00:00:00Z"));
         return tier;
+    }
+
+    private int inventorySlotsForTier(String tierCode) {
+        return switch (tierCode) {
+            case "SILVER" -> 7;
+            case "GOLD" -> 10;
+            case "PLATINUM" -> 12;
+            case "DIAMOND" -> 15;
+            case "MASTER" -> 17;
+            case "LEGEND" -> 20;
+            default -> 5;
+        };
     }
 
     private GamePosition openPosition(

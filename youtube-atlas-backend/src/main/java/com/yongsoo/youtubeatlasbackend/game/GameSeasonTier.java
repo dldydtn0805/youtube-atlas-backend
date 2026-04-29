@@ -49,6 +49,9 @@ public class GameSeasonTier {
     @Column(name = "profile_theme_code", nullable = false, length = 100)
     private String profileThemeCode;
 
+    @Column(name = "inventory_slots", nullable = false)
+    private Integer inventorySlots = 5;
+
     @Column(name = "sort_order", nullable = false)
     private Integer sortOrder;
 
@@ -113,6 +116,14 @@ public class GameSeasonTier {
 
     public void setProfileThemeCode(String profileThemeCode) {
         this.profileThemeCode = profileThemeCode;
+    }
+
+    public Integer getInventorySlots() {
+        return inventorySlots;
+    }
+
+    public void setInventorySlots(Integer inventorySlots) {
+        this.inventorySlots = inventorySlots;
     }
 
     public Integer getSortOrder() {

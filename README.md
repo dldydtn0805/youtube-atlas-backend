@@ -112,6 +112,7 @@ SKIP_DB_MIGRATIONS=false
 - `GOOGLE_CLIENT_SECRET` 는 같은 Google OAuth Web Client의 secret 이어야 합니다.
 - `GAME_SCHEDULER_ENABLED=true` 로 두면 종료 시즌 자동 정리와 다음 시즌 생성이 주기적으로 실행됩니다.
 - 로컬에서 빠르게 확인하려면 `GAME_SETTLEMENT_CRON=0 */1 * * * *` 로 두면 1분마다 시즌 정리를 테스트할 수 있습니다.
+- 인벤토리 슬롯은 현재 티어 보상으로 결정됩니다. 기본 브론즈는 5칸이고 레전드는 20칸입니다.
 - `ADMIN_ALLOWED_EMAILS` 에 관리자 이메일을 쉼표로 구분해서 넣으면 `/api/admin/*` 엔드포인트 접근을 허용합니다.
 - `TRENDING_SYNC_MAX_PAGES_PER_SOURCE` 는 급상승 동기화 시 소스 카테고리별로 몇 페이지까지 수집할지 결정합니다.
 - `TRENDING_SCHEDULER_ENABLED` 기본값은 `true` 이므로, 로컬에서 자동 수집을 원하지 않으면 명시적으로 `false` 로 꺼 두는 편이 안전합니다.
@@ -181,6 +182,7 @@ SKIP_DB_MIGRATIONS=false
 - `DELETE /api/admin/users/{userId}`
 - `GET /api/game/seasons/current?regionCode=KR`
 - `GET /api/game/wallet?regionCode=KR`
+- `GET /api/game/inventory-slots?regionCode=KR`
 - `GET /api/game/market?regionCode=KR`
 - `GET /api/game/market/buyable-chart?regionCode=KR&pageToken=...`
 - `GET /api/game/leaderboard?regionCode=KR`
@@ -324,6 +326,30 @@ values
   "minHoldSeconds": 600,
   "maxOpenPositions": 5,
   "rankPointMultiplier": 100,
+  "inventorySlots": {
+    "baseSlots": 5,
+    "totalSlots": 5,
+    "maxSlots": 20,
+    "currentTier": {
+      "tierCode": "BRONZE",
+      "displayName": "브론즈",
+      "minScore": 0,
+      "badgeCode": "season-bronze",
+      "titleCode": "bronze-investor",
+      "profileThemeCode": "bronze",
+      "inventorySlots": 5
+    },
+    "nextTier": {
+      "tierCode": "SILVER",
+      "displayName": "실버",
+      "minScore": 5000,
+      "badgeCode": "season-silver",
+      "titleCode": "silver-investor",
+      "profileThemeCode": "silver",
+      "inventorySlots": 7
+    },
+    "tiers": []
+  },
   "wallet": {
     "seasonId": 1,
     "balancePoints": 10000,
@@ -338,6 +364,47 @@ values
 ### `GET /api/game/wallet`
 
 현재 시즌 기준 내 게임 지갑 정보를 반환합니다.
+
+### `GET /api/game/inventory-slots`
+
+현재 시즌의 내 인벤토리 슬롯 정책과 티어 보상 상태를 반환합니다.
+
+```json
+{
+  "baseSlots": 5,
+  "totalSlots": 10,
+  "maxSlots": 20,
+  "currentTier": {
+    "tierCode": "GOLD",
+    "displayName": "골드",
+    "minScore": 15000,
+    "badgeCode": "season-gold",
+    "titleCode": "gold-investor",
+    "profileThemeCode": "gold",
+    "inventorySlots": 10
+  },
+  "nextTier": {
+    "tierCode": "PLATINUM",
+    "displayName": "플래티넘",
+    "minScore": 60000,
+    "badgeCode": "season-platinum",
+    "titleCode": "platinum-investor",
+    "profileThemeCode": "platinum",
+    "inventorySlots": 12
+  },
+  "tiers": []
+}
+```
+
+기본 티어별 슬롯 보상:
+
+- 브론즈: 5칸
+- 실버: 7칸
+- 골드: 10칸
+- 플래티넘: 12칸
+- 다이아몬드: 15칸
+- 마스터: 17칸
+- 레전드: 20칸
 
 ### `GET /api/game/market`
 
@@ -526,7 +593,7 @@ Query:
 - `quantity` 는 고정 소수점 수량입니다. `100 = 1.00개`
 - 주문은 `1개` 단위로만 가능하므로 `quantity` 는 `100`, `200`, `300` 처럼 `100`의 배수여야 함
 - 같은 시즌에 동일 영상 중복 보유 불가
-- 시즌의 `maxOpenPositions` 초과 불가
+- 내 인벤토리 슬롯 수 초과 불가. 슬롯 수는 현재 티어 보상으로 결정되며 브론즈 5칸부터 레전드 20칸까지 증가
 - 시즌 `regionCode` 와 다른 값으로는 매수 불가
 
 응답은 `PositionResponse` 형식입니다.

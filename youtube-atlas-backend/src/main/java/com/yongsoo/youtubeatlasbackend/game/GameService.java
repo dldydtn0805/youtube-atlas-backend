@@ -30,6 +30,7 @@ import com.yongsoo.youtubeatlasbackend.game.api.CreatePositionRequest;
 import com.yongsoo.youtubeatlasbackend.game.api.CurrentSeasonResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.GameHighlightResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.GameNotificationResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.InventorySlotResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.LeaderboardEntryResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.MarketVideoResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionRankHistoryPointResponse;
@@ -148,6 +149,13 @@ public class GameService {
     }
 
     @Transactional
+    public InventorySlotResponse getInventorySlots(AuthenticatedUser authenticatedUser, String regionCode) {
+        GameSeason season = requireActiveSeason(regionCode);
+        GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
+        return resolveInventorySlotContext(season, wallet).toResponse();
+    }
+
+    @Transactional
     public List<MarketVideoResponse> getMarket(AuthenticatedUser authenticatedUser, String regionCode) {
         GameSeason season = requireActiveSeason(regionCode);
         GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
@@ -176,7 +184,7 @@ public class GameService {
         java.util.Set<String> ownedVideoIds = openPositions.stream()
             .map(GamePosition::getVideoId)
             .collect(Collectors.toSet());
-        boolean maxOpenReached = openDistinctVideoCount >= season.getMaxOpenPositions();
+        boolean maxOpenReached = openDistinctVideoCount >= resolveInventorySlotContext(season, wallet).totalSlots();
         Map<String, TrendSignal> signalsByVideoId = trendSignalRepository.findByIdRegionCodeAndIdCategoryId(
             season.getRegionCode(),
             TRENDING_CATEGORY_ID
@@ -251,7 +259,7 @@ public class GameService {
         java.util.Set<String> ownedVideoIds = openPositions.stream()
             .map(GamePosition::getVideoId)
             .collect(Collectors.toSet());
-        boolean maxOpenReached = openDistinctVideoCount >= season.getMaxOpenPositions();
+        boolean maxOpenReached = openDistinctVideoCount >= resolveInventorySlotContext(season, wallet).totalSlots();
         List<TrendSignal> rankedSignals = trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
             season.getRegionCode(),
             TRENDING_CATEGORY_ID
@@ -668,8 +676,8 @@ public class GameService {
             PositionStatus.OPEN
         );
         boolean alreadyOwned = !openPositionsForVideo.isEmpty();
-        if (!alreadyOwned && openDistinctVideoCount >= season.getMaxOpenPositions()) {
-            throw new IllegalArgumentException("동시 보유 가능 포지션 수를 초과했습니다.");
+        if (!alreadyOwned && openDistinctVideoCount >= resolveInventorySlotContext(season, wallet).totalSlots()) {
+            throw new IllegalArgumentException("인벤토리 슬롯이 가득 찼습니다.");
         }
 
         TrendSignal signal = requireTrendSignal(regionCode, categoryId, videoId);
@@ -1016,6 +1024,7 @@ public class GameService {
         GameWallet wallet,
         List<GameNotificationResponse> notifications
     ) {
+        InventorySlotContext inventorySlotContext = resolveInventorySlotContext(season, wallet);
         return new CurrentSeasonResponse(
             season.getId(),
             season.getName(),
@@ -1025,8 +1034,9 @@ public class GameService {
             season.getEndAt(),
             season.getStartingBalancePoints(),
             season.getMinHoldSeconds(),
-            season.getMaxOpenPositions(),
+            inventorySlotContext.totalSlots(),
             season.getRankPointMultiplier(),
+            inventorySlotContext.toResponse(),
             toWalletResponse(wallet),
             notifications
         );
@@ -1200,6 +1210,48 @@ public class GameService {
         );
     }
 
+    private InventorySlotContext resolveInventorySlotContext(GameSeason season, GameWallet wallet) {
+        int baseSlots = normalizePositive(season.getMaxOpenPositions());
+        List<GameSeasonTier> tiers = gameTierService.getOrCreateTiers(season);
+        if (tiers == null || tiers.isEmpty()) {
+            return new InventorySlotContext(baseSlots, baseSlots, baseSlots, null, null, List.of());
+        }
+
+        long calculatedHighlightScore = calculateUserHighlightScore(season.getId(), wallet.getUser().getId());
+        long highlightScore = applyManualTierScoreAdjustment(wallet, calculatedHighlightScore);
+        GameSeasonTier currentTier = gameTierService.resolveTier(tiers, highlightScore);
+        GameSeasonTier nextTier = resolveNextTier(tiers, highlightScore);
+        int maxSlots = tiers.stream()
+            .mapToInt(tier -> Math.max(baseSlots, normalizePositive(tier.getInventorySlots())))
+            .max()
+            .orElse(baseSlots);
+        int totalSlots = currentTier != null
+            ? Math.max(baseSlots, normalizePositive(currentTier.getInventorySlots()))
+            : baseSlots;
+        return new InventorySlotContext(
+            baseSlots,
+            totalSlots,
+            maxSlots,
+            currentTier != null ? toTierResponse(currentTier) : null,
+            nextTier != null ? toTierResponse(nextTier) : null,
+            tiers.stream().map(this::toTierResponse).toList()
+        );
+    }
+
+    private GameSeasonTier resolveNextTier(List<GameSeasonTier> tiers, long highlightScore) {
+        return tiers.stream()
+            .filter(tier -> tier.getMinScore() > highlightScore)
+            .min(
+                Comparator.comparingLong(GameSeasonTier::getMinScore)
+                    .thenComparingInt(GameSeasonTier::getSortOrder)
+            )
+            .orElse(null);
+    }
+
+    private int normalizePositive(Integer value) {
+        return value == null ? 0 : Math.max(0, value);
+    }
+
     private Map<Long, ScheduledSellOrderSummary> loadPendingScheduledSellOrdersByPositionId(List<GamePosition> positions) {
         List<Long> positionIds = positions.stream()
             .filter(position -> position.getStatus() == PositionStatus.OPEN)
@@ -1264,7 +1316,8 @@ public class GameService {
             tier.getMinScore(),
             tier.getBadgeCode(),
             tier.getTitleCode(),
-            tier.getProfileThemeCode()
+            tier.getProfileThemeCode(),
+            normalizePositive(tier.getInventorySlots())
         );
     }
 
@@ -1675,6 +1728,9 @@ public class GameService {
 
     private long calculateUserHighlightScore(Long seasonId, Long userId) {
         List<GamePosition> positions = gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(seasonId, userId);
+        if (positions == null) {
+            positions = List.of();
+        }
         if (!positions.isEmpty()) {
             ensureHighlightStatesBackfilled(positions.get(0).getSeason(), userId, positions);
         }
@@ -1755,7 +1811,7 @@ public class GameService {
         boolean alreadyOwned
     ) {
         if (maxOpenReached && !alreadyOwned) {
-            return "동시 보유 가능 포지션 수를 초과했습니다.";
+            return "인벤토리 슬롯이 가득 찼습니다.";
         }
         long minimumBuyPoints = GamePointCalculator.calculatePositionPoints(
             unitPricePoints,
@@ -2684,6 +2740,26 @@ public class GameService {
         Long unrealizedPnlPoints,
         Long openPositionCount
     ) {
+    }
+
+    private record InventorySlotContext(
+        Integer baseSlots,
+        Integer totalSlots,
+        Integer maxSlots,
+        TierResponse currentTier,
+        TierResponse nextTier,
+        List<TierResponse> tiers
+    ) {
+        InventorySlotResponse toResponse() {
+            return new InventorySlotResponse(
+                baseSlots,
+                totalSlots,
+                maxSlots,
+                currentTier,
+                nextTier,
+                tiers
+            );
+        }
     }
 
     private record SellSnapshot(Long runId, int rank, Integer rankChange, Instant capturedAt, boolean chartOut) {

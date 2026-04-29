@@ -6,6 +6,7 @@ public record TierResponse(
     Long minScore,
     String badgeCode,
     String titleCode,
-    String profileThemeCode
+    String profileThemeCode,
+    Integer inventorySlots
 ) {
 }

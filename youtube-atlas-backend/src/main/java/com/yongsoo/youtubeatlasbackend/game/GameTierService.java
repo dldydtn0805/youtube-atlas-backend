@@ -13,13 +13,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class GameTierService {
 
     private static final List<DefaultTierDefinition> DEFAULT_TIER_DEFINITIONS = List.of(
-        new DefaultTierDefinition("BRONZE", "브론즈", 0L, "season-bronze", "bronze-investor", "bronze", 1),
-        new DefaultTierDefinition("SILVER", "실버", 5_000L, "season-silver", "silver-investor", "silver", 2),
-        new DefaultTierDefinition("GOLD", "골드", 15_000L, "season-gold", "gold-investor", "gold", 3),
-        new DefaultTierDefinition("PLATINUM", "플래티넘", 60_000L, "season-platinum", "platinum-investor", "platinum", 4),
-        new DefaultTierDefinition("DIAMOND", "다이아몬드", 300_000L, "season-diamond", "diamond-investor", "diamond", 5),
-        new DefaultTierDefinition("MASTER", "마스터", 1_800_000L, "season-master", "master-investor", "master", 6),
-        new DefaultTierDefinition("LEGEND", "레전드", 12_600_000L, "season-legend", "legend-investor", "legend", 7)
+        new DefaultTierDefinition("BRONZE", "브론즈", 0L, "season-bronze", "bronze-investor", "bronze", 5, 1),
+        new DefaultTierDefinition("SILVER", "실버", 5_000L, "season-silver", "silver-investor", "silver", 7, 2),
+        new DefaultTierDefinition("GOLD", "골드", 15_000L, "season-gold", "gold-investor", "gold", 10, 3),
+        new DefaultTierDefinition("PLATINUM", "플래티넘", 60_000L, "season-platinum", "platinum-investor", "platinum", 12, 4),
+        new DefaultTierDefinition("DIAMOND", "다이아몬드", 300_000L, "season-diamond", "diamond-investor", "diamond", 15, 5),
+        new DefaultTierDefinition("MASTER", "마스터", 1_800_000L, "season-master", "master-investor", "master", 17, 6),
+        new DefaultTierDefinition("LEGEND", "레전드", 12_600_000L, "season-legend", "legend-investor", "legend", 20, 7)
     );
 
     private final GameSeasonTierRepository gameSeasonTierRepository;
@@ -77,6 +77,7 @@ public class GameTierService {
                 definition.badgeCode(),
                 definition.titleCode(),
                 definition.profileThemeCode(),
+                definition.inventorySlots(),
                 definition.sortOrder(),
                 now
             ))
@@ -93,6 +94,7 @@ public class GameTierService {
                 tier.getBadgeCode(),
                 tier.getTitleCode(),
                 tier.getProfileThemeCode(),
+                normalizeInventorySlots(tier.getInventorySlots()),
                 tier.getSortOrder(),
                 now
             ))
@@ -107,6 +109,7 @@ public class GameTierService {
         String badgeCode,
         String titleCode,
         String profileThemeCode,
+        int inventorySlots,
         int sortOrder,
         Instant now
     ) {
@@ -118,9 +121,14 @@ public class GameTierService {
         tier.setBadgeCode(badgeCode);
         tier.setTitleCode(titleCode);
         tier.setProfileThemeCode(profileThemeCode);
+        tier.setInventorySlots(inventorySlots);
         tier.setSortOrder(sortOrder);
         tier.setCreatedAt(now);
         return tier;
+    }
+
+    private int normalizeInventorySlots(Integer inventorySlots) {
+        return inventorySlots == null || inventorySlots < 1 ? 5 : inventorySlots;
     }
 
     private record DefaultTierDefinition(
@@ -130,6 +138,7 @@ public class GameTierService {
         String badgeCode,
         String titleCode,
         String profileThemeCode,
+        int inventorySlots,
         int sortOrder
     ) {
     }

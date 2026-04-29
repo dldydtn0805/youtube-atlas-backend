@@ -14,6 +14,7 @@ public record CurrentSeasonResponse(
     Integer minHoldSeconds,
     Integer maxOpenPositions,
     Integer rankPointMultiplier,
+    InventorySlotResponse inventorySlots,
     WalletResponse wallet,
     List<GameNotificationResponse> notifications
 ) {
