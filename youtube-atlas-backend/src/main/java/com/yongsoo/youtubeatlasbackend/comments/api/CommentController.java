@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.yongsoo.youtubeatlasbackend.auth.AuthService;
+import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.comments.CommentPresenceService;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 
@@ -38,6 +39,15 @@ public class CommentController {
     @GetMapping("/api/comments/presence")
     public ChatPresenceResponse getCommentPresence() {
         return commentPresenceService.getPresence();
+    }
+
+    @PostMapping("/api/comments/presence/me")
+    public ChatPresenceResponse updateCommentPresence(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @Valid @RequestBody UpdateCommentPresenceRequest request
+    ) {
+        AuthenticatedUser user = authService.requireCurrentUser(authorizationHeader);
+        return commentPresenceService.rememberParticipantName(request.clientId(), user.displayName());
     }
 
     @GetMapping("/api/comments")

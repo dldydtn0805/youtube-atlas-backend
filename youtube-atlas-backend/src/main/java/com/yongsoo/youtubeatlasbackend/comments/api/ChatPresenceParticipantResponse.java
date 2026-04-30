@@ -1,16 +1,11 @@
 package com.yongsoo.youtubeatlasbackend.comments.api;
 
-import java.util.List;
-
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record ChatPresenceResponse(
-    int activeCount,
-    List<ChatPresenceParticipantResponse> participants
+public record ChatPresenceParticipantResponse(
+    String participantId,
+    String displayName
 ) {
-    public ChatPresenceResponse(int activeCount) {
-        this(activeCount, List.of());
-    }
 }

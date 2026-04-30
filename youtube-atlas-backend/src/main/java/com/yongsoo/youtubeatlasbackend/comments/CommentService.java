@@ -38,15 +38,18 @@ public class CommentService {
 
     private final CommentRepository commentRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final CommentPresenceService commentPresenceService;
     private final Clock clock;
 
     public CommentService(
         CommentRepository commentRepository,
         SimpMessagingTemplate messagingTemplate,
+        CommentPresenceService commentPresenceService,
         Clock clock
     ) {
         this.commentRepository = commentRepository;
         this.messagingTemplate = messagingTemplate;
+        this.commentPresenceService = commentPresenceService;
         this.clock = clock;
     }
 
@@ -140,6 +143,7 @@ public class CommentService {
         comment.setCreatedAt(now);
 
         ChatMessageResponse response = toResponse(commentRepository.save(comment));
+        commentPresenceService.rememberParticipantName(clientId, author);
         messagingTemplate.convertAndSend(GLOBAL_COMMENTS_TOPIC, response);
         return response;
     }

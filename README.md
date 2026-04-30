@@ -1202,6 +1202,40 @@ Authorization: Bearer {accessToken}
 전역 채팅방의 댓글을 생성 시각 오름차순으로 반환합니다.
 `since` 쿼리 파라미터에 ISO-8601 시각을 전달하면 해당 시각 이후에 생성된 댓글만 반환합니다.
 
+### `GET /api/comments/presence`
+
+전역 채팅방의 현재 접속자 수와 표시 가능한 참여자 목록을 반환합니다.
+아직 메시지를 보내지 않은 비로그인 참여자는 임시 익명 이름으로 표시됩니다.
+
+```json
+{
+  "active_count": 2,
+  "participants": [
+    {
+      "participant_id": "web-session-123",
+      "display_name": "yongsoo"
+    }
+  ]
+}
+```
+
+### `POST /api/comments/presence/me`
+
+로그인 사용자의 표시명을 현재 브라우저 채팅 참여자에 연결합니다.
+프론트는 로그인 상태에서 STOMP 연결이 준비되면 한 번 호출합니다.
+
+요청 헤더:
+
+- `Authorization: Bearer {accessToken}`
+
+요청 본문:
+
+```json
+{
+  "clientId": "web-session-123"
+}
+```
+
 ### `POST /api/comments`
 
 요청 본문:

@@ -26,6 +26,9 @@ class CommentPresenceServiceTest {
         commentPresenceService.handleSessionConnected("session-2", "participant-2");
 
         assertThat(commentPresenceService.getPresence().activeCount()).isEqualTo(2);
+        assertThat(commentPresenceService.getPresence().participants())
+            .extracting("displayName")
+            .containsExactly("익명 #nt-1", "익명 #nt-2");
         verify(messagingTemplate).convertAndSend(
             CommentPresenceService.COMMENTS_PRESENCE_TOPIC,
             commentPresenceService.getPresence()
@@ -51,6 +54,47 @@ class CommentPresenceServiceTest {
         commentPresenceService.handleSessionConnected("session-2", "participant-1");
 
         assertThat(commentPresenceService.getPresence().activeCount()).isEqualTo(1);
+    }
+
+    @Test
+    void remembersDisplayNamesForActiveParticipants() {
+        commentPresenceService.handleSessionConnected("session-1", "participant-1");
+
+        com.yongsoo.youtubeatlasbackend.comments.api.ChatPresenceResponse response =
+            commentPresenceService.rememberParticipantName("participant-1", " Atlas   User ");
+
+        assertThat(response.participants())
+            .singleElement()
+            .satisfies(participant -> assertThat(participant.displayName()).isEqualTo("Atlas User"));
+        assertThat(commentPresenceService.getPresence().participants())
+            .singleElement()
+            .satisfies(participant -> assertThat(participant.displayName()).isEqualTo("Atlas User"));
+        verify(messagingTemplate, atLeastOnce()).convertAndSend(
+            CommentPresenceService.COMMENTS_PRESENCE_TOPIC,
+            commentPresenceService.getPresence()
+        );
+    }
+
+    @Test
+    void keepsDistinctFallbackNamesForAnonymousParticipants() {
+        commentPresenceService.handleSessionConnected("session-1", "participant-1");
+
+        commentPresenceService.rememberParticipantName("participant-1", "익명");
+
+        assertThat(commentPresenceService.getPresence().participants())
+            .singleElement()
+            .satisfies(participant -> assertThat(participant.displayName()).isEqualTo("익명 #nt-1"));
+    }
+
+    @Test
+    void remembersDisplayNamesBeforeTheParticipantConnects() {
+        commentPresenceService.rememberParticipantName("participant-1", "Atlas User");
+
+        commentPresenceService.handleSessionConnected("session-1", "participant-1");
+
+        assertThat(commentPresenceService.getPresence().participants())
+            .singleElement()
+            .satisfies(participant -> assertThat(participant.displayName()).isEqualTo("Atlas User"));
     }
 
     @Test

@@ -27,14 +27,16 @@ class CommentServiceTest {
 
     private CommentRepository commentRepository;
     private SimpMessagingTemplate messagingTemplate;
+    private CommentPresenceService commentPresenceService;
     private CommentService commentService;
 
     @BeforeEach
     void setUp() {
         commentRepository = org.mockito.Mockito.mock(CommentRepository.class);
         messagingTemplate = org.mockito.Mockito.mock(SimpMessagingTemplate.class);
+        commentPresenceService = org.mockito.Mockito.mock(CommentPresenceService.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-03-24T10:00:00Z"), ZoneOffset.UTC);
-        commentService = new CommentService(commentRepository, messagingTemplate, fixedClock);
+        commentService = new CommentService(commentRepository, messagingTemplate, commentPresenceService, fixedClock);
     }
 
     @Test
@@ -96,6 +98,7 @@ class CommentServiceTest {
         assertThat(response.systemEventType()).isNull();
         assertThat(response.userId()).isNull();
         assertThat(response.videoId()).isEqualTo(CommentService.GLOBAL_ROOM_VIDEO_ID);
+        verify(commentPresenceService).rememberParticipantName("client-1", "익명");
         verify(messagingTemplate).convertAndSend("/topic/comments", response);
     }
 
@@ -145,6 +148,7 @@ class CommentServiceTest {
         assertThat(response.author()).isEqualTo("Atlas User");
         assertThat(response.userId()).isEqualTo(7L);
         assertThat(response.systemEventType()).isNull();
+        verify(commentPresenceService).rememberParticipantName("client-1", "Atlas User");
     }
 
     @Test
