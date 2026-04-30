@@ -19,15 +19,31 @@ import org.junit.jupiter.api.Test;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.comments.api.ChatMessageResponse;
 import com.yongsoo.youtubeatlasbackend.comments.api.CreateCommentRequest;
+import com.yongsoo.youtubeatlasbackend.game.GameHighlightState;
+import com.yongsoo.youtubeatlasbackend.game.GameHighlightStateRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameSeason;
+import com.yongsoo.youtubeatlasbackend.game.GameSeasonRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameSeasonTier;
+import com.yongsoo.youtubeatlasbackend.game.GameSeasonTierRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameTierService;
+import com.yongsoo.youtubeatlasbackend.game.GameWallet;
+import com.yongsoo.youtubeatlasbackend.game.GameWalletRepository;
+import com.yongsoo.youtubeatlasbackend.game.SeasonStatus;
 
 class CommentServiceTest {
 
     private CommentRepository commentRepository;
     private SimpMessagingTemplate messagingTemplate;
     private CommentPresenceService commentPresenceService;
+    private GameSeasonRepository gameSeasonRepository;
+    private GameWalletRepository gameWalletRepository;
+    private GameHighlightStateRepository gameHighlightStateRepository;
+    private GameSeasonTierRepository gameSeasonTierRepository;
+    private GameTierService gameTierService;
     private CommentService commentService;
 
     @BeforeEach
@@ -35,8 +51,23 @@ class CommentServiceTest {
         commentRepository = org.mockito.Mockito.mock(CommentRepository.class);
         messagingTemplate = org.mockito.Mockito.mock(SimpMessagingTemplate.class);
         commentPresenceService = org.mockito.Mockito.mock(CommentPresenceService.class);
+        gameSeasonRepository = org.mockito.Mockito.mock(GameSeasonRepository.class);
+        gameWalletRepository = org.mockito.Mockito.mock(GameWalletRepository.class);
+        gameHighlightStateRepository = org.mockito.Mockito.mock(GameHighlightStateRepository.class);
+        gameSeasonTierRepository = org.mockito.Mockito.mock(GameSeasonTierRepository.class);
+        gameTierService = org.mockito.Mockito.mock(GameTierService.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-03-24T10:00:00Z"), ZoneOffset.UTC);
-        commentService = new CommentService(commentRepository, messagingTemplate, commentPresenceService, fixedClock);
+        commentService = new CommentService(
+            commentRepository,
+            messagingTemplate,
+            commentPresenceService,
+            gameSeasonRepository,
+            gameWalletRepository,
+            gameHighlightStateRepository,
+            gameSeasonTierRepository,
+            gameTierService,
+            fixedClock
+        );
     }
 
     @Test
@@ -69,6 +100,40 @@ class CommentServiceTest {
             assertThat(message.systemEventType()).isNull();
         });
         verify(commentRepository).findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc(CommentService.GLOBAL_ROOM_VIDEO_ID, since);
+    }
+
+    @Test
+    void getCommentsIncludesCurrentTierCodeForRequestedRegion() {
+        AppUser user = appUser(7L);
+        GameSeason season = season(11L, "KR");
+        GameWallet wallet = wallet(season, user, 2_000L);
+        GameSeasonTier bronzeTier = tier(season, "BRONZE", 0L, 1);
+        GameSeasonTier goldTier = tier(season, "GOLD", 15_000L, 2);
+        List<GameSeasonTier> tiers = List.of(bronzeTier, goldTier);
+        Comment comment = comment(7L, "client-7", "티어 색 메시지", Instant.parse("2026-03-24T10:00:07Z"));
+        comment.setUserId(7L);
+
+        when(commentRepository.findTop20ByVideoIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID))
+            .thenReturn(List.of(comment));
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gameWalletRepository.findBySeasonIdAndUserId(11L, 7L)).thenReturn(Optional.of(wallet));
+        when(gameSeasonTierRepository.findBySeasonIdOrderBySortOrderAsc(11L)).thenReturn(tiers);
+        when(gameHighlightStateRepository
+            .findBySeasonIdAndUserIdAndBestSettledHighlightScoreGreaterThanOrderByBestSettledCreatedAtDesc(
+                11L,
+                7L,
+                0L
+            ))
+            .thenReturn(List.of(highlightState(14_000L)));
+        when(gameTierService.resolveTier(tiers, 16_000L)).thenReturn(goldTier);
+
+        List<ChatMessageResponse> response = commentService.getComments(null, "kr");
+
+        assertThat(response).singleElement().satisfies(message -> {
+            assertThat(message.userId()).isEqualTo(7L);
+            assertThat(message.currentTierCode()).isEqualTo("GOLD");
+        });
     }
 
     @Test
@@ -282,5 +347,44 @@ class CommentServiceTest {
         comment.setContent(content);
         comment.setCreatedAt(createdAt);
         return comment;
+    }
+
+    private AppUser appUser(Long id) {
+        AppUser user = new AppUser();
+        ReflectionTestUtils.setField(user, "id", id);
+        user.setDisplayName("Atlas User");
+        return user;
+    }
+
+    private GameSeason season(Long id, String regionCode) {
+        GameSeason season = new GameSeason();
+        ReflectionTestUtils.setField(season, "id", id);
+        season.setRegionCode(regionCode);
+        season.setStatus(SeasonStatus.ACTIVE);
+        return season;
+    }
+
+    private GameWallet wallet(GameSeason season, AppUser user, long manualTierScoreAdjustment) {
+        GameWallet wallet = new GameWallet();
+        wallet.setSeason(season);
+        wallet.setUser(user);
+        wallet.setManualTierScoreAdjustment(manualTierScoreAdjustment);
+        return wallet;
+    }
+
+    private GameSeasonTier tier(GameSeason season, String tierCode, long minScore, int sortOrder) {
+        GameSeasonTier tier = new GameSeasonTier();
+        tier.setSeason(season);
+        tier.setTierCode(tierCode);
+        tier.setDisplayName(tierCode);
+        tier.setMinScore(minScore);
+        tier.setSortOrder(sortOrder);
+        return tier;
+    }
+
+    private GameHighlightState highlightState(long score) {
+        GameHighlightState state = new GameHighlightState();
+        state.setBestSettledHighlightScore(score);
+        return state;
     }
 }

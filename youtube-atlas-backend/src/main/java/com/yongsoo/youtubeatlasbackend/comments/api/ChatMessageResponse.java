@@ -15,6 +15,7 @@ public record ChatMessageResponse(
     String content,
     String clientId,
     Long userId,
+    String currentTierCode,
     Instant createdAt
 ) {
 }

@@ -52,9 +52,10 @@ public class CommentController {
 
     @GetMapping("/api/comments")
     public List<ChatMessageResponse> getGlobalComments(
-        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant since
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant since,
+        @RequestParam(required = false) String regionCode
     ) {
-        return commentService.getComments(since);
+        return commentService.getComments(since, regionCode);
     }
 
     @PostMapping("/api/comments")
@@ -68,9 +69,10 @@ public class CommentController {
     @GetMapping("/api/videos/{videoId}/comments")
     public List<ChatMessageResponse> getComments(
         @PathVariable String videoId,
-        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant since
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant since,
+        @RequestParam(required = false) String regionCode
     ) {
-        return commentService.getComments(videoId, since);
+        return commentService.getComments(videoId, since, regionCode);
     }
 
     @PostMapping("/api/videos/{videoId}/comments")

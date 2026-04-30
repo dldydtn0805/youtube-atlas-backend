@@ -1201,6 +1201,7 @@ Authorization: Bearer {accessToken}
 
 전역 채팅방의 댓글을 생성 시각 오름차순으로 반환합니다.
 `since` 쿼리 파라미터에 ISO-8601 시각을 전달하면 해당 시각 이후에 생성된 댓글만 반환합니다.
+`regionCode` 쿼리 파라미터를 함께 전달하면 로그인 작성자의 현재 시즌 티어 코드가 `current_tier_code` 로 포함됩니다.
 
 ### `GET /api/comments/presence`
 
@@ -1244,13 +1245,15 @@ Authorization: Bearer {accessToken}
 {
   "author": "yongsoo",
   "content": "지금 보고 있어요",
-  "clientId": "web-session-123"
+  "clientId": "web-session-123",
+  "regionCode": "KR"
 }
 ```
 
 - `author` 가 비어 있으면 `"익명"` 으로 저장됩니다.
 - `Authorization: Bearer {accessToken}` 헤더가 있으면 댓글 작성자는 로그인 사용자 이름으로 고정됩니다.
 - 로그인 사용자가 보내면 응답과 실시간 메시지에 `user_id` 가 포함되어 다른 기기에서도 내 메시지로 구분할 수 있습니다.
+- `regionCode` 를 보내면 응답과 실시간 메시지에 작성자의 현재 시즌 `current_tier_code` 가 포함됩니다.
 - 로그인 사용자는 계정 기준, 비로그인 사용자는 같은 `clientId` 기준으로 5초 쿨다운이 있습니다.
 - 로그인 사용자는 계정 기준, 비로그인 사용자는 같은 `clientId` 기준으로 같은 메시지를 30초 안에 다시 보내면 중복으로 막습니다.
 - 댓글 응답 JSON은 `snake_case` 입니다.

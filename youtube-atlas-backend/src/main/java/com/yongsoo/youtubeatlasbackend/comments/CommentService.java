@@ -4,7 +4,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -15,6 +17,16 @@ import org.springframework.util.StringUtils;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.comments.api.ChatMessageResponse;
 import com.yongsoo.youtubeatlasbackend.comments.api.CreateCommentRequest;
+import com.yongsoo.youtubeatlasbackend.game.GameHighlightState;
+import com.yongsoo.youtubeatlasbackend.game.GameHighlightStateRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameSeason;
+import com.yongsoo.youtubeatlasbackend.game.GameSeasonRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameSeasonTier;
+import com.yongsoo.youtubeatlasbackend.game.GameSeasonTierRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameTierService;
+import com.yongsoo.youtubeatlasbackend.game.GameWallet;
+import com.yongsoo.youtubeatlasbackend.game.GameWalletRepository;
+import com.yongsoo.youtubeatlasbackend.game.SeasonStatus;
 
 @Service
 public class CommentService {
@@ -39,17 +51,32 @@ public class CommentService {
     private final CommentRepository commentRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final CommentPresenceService commentPresenceService;
+    private final GameSeasonRepository gameSeasonRepository;
+    private final GameWalletRepository gameWalletRepository;
+    private final GameHighlightStateRepository gameHighlightStateRepository;
+    private final GameSeasonTierRepository gameSeasonTierRepository;
+    private final GameTierService gameTierService;
     private final Clock clock;
 
     public CommentService(
         CommentRepository commentRepository,
         SimpMessagingTemplate messagingTemplate,
         CommentPresenceService commentPresenceService,
+        GameSeasonRepository gameSeasonRepository,
+        GameWalletRepository gameWalletRepository,
+        GameHighlightStateRepository gameHighlightStateRepository,
+        GameSeasonTierRepository gameSeasonTierRepository,
+        GameTierService gameTierService,
         Clock clock
     ) {
         this.commentRepository = commentRepository;
         this.messagingTemplate = messagingTemplate;
         this.commentPresenceService = commentPresenceService;
+        this.gameSeasonRepository = gameSeasonRepository;
+        this.gameWalletRepository = gameWalletRepository;
+        this.gameHighlightStateRepository = gameHighlightStateRepository;
+        this.gameSeasonTierRepository = gameSeasonTierRepository;
+        this.gameTierService = gameTierService;
         this.clock = clock;
     }
 
@@ -64,13 +91,24 @@ public class CommentService {
     }
 
     @Transactional(readOnly = true)
+    public List<ChatMessageResponse> getComments(String videoId, Instant since, String regionCode) {
+        return getComments(since, regionCode);
+    }
+
+    @Transactional(readOnly = true)
     public List<ChatMessageResponse> getComments(Instant since) {
+        return getComments(since, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ChatMessageResponse> getComments(Instant since, String regionCode) {
         List<Comment> comments = since == null
             ? findLatestGlobalComments()
             : commentRepository.findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc(GLOBAL_ROOM_VIDEO_ID, since);
+        Map<Long, String> tierCodesByUserId = new HashMap<>();
 
         return comments.stream()
-            .map(this::toResponse)
+            .map(comment -> toResponse(comment, regionCode, tierCodesByUserId))
             .toList();
     }
 
@@ -142,7 +180,7 @@ public class CommentService {
         comment.setContent(content);
         comment.setCreatedAt(now);
 
-        ChatMessageResponse response = toResponse(commentRepository.save(comment));
+        ChatMessageResponse response = toResponse(commentRepository.save(comment), request.regionCode());
         commentPresenceService.rememberParticipantName(clientId, author);
         messagingTemplate.convertAndSend(GLOBAL_COMMENTS_TOPIC, response);
         return response;
@@ -204,6 +242,18 @@ public class CommentService {
     }
 
     private ChatMessageResponse toResponse(Comment comment) {
+        return toResponse(comment, null);
+    }
+
+    private ChatMessageResponse toResponse(Comment comment, String regionCode) {
+        return toResponse(comment, regionCode, new HashMap<>());
+    }
+
+    private ChatMessageResponse toResponse(
+        Comment comment,
+        String regionCode,
+        Map<Long, String> tierCodesByUserId
+    ) {
         return new ChatMessageResponse(
             comment.getId(),
             comment.getVideoId(),
@@ -213,8 +263,59 @@ public class CommentService {
             comment.getContent(),
             comment.getClientId(),
             comment.getUserId(),
+            resolveCurrentTierCode(comment.getUserId(), regionCode, tierCodesByUserId),
             comment.getCreatedAt()
         );
+    }
+
+    private String resolveCurrentTierCode(
+        Long userId,
+        String regionCode,
+        Map<Long, String> tierCodesByUserId
+    ) {
+        if (userId == null) {
+            return null;
+        }
+        if (!tierCodesByUserId.containsKey(userId)) {
+            tierCodesByUserId.put(userId, resolveCurrentTierCode(userId, regionCode).orElse(null));
+        }
+
+        return tierCodesByUserId.get(userId);
+    }
+
+    private Optional<String> resolveCurrentTierCode(Long userId, String regionCode) {
+        String normalizedRegionCode = normalizeRegionCode(regionCode);
+        if (!StringUtils.hasText(normalizedRegionCode)) {
+            return Optional.empty();
+        }
+
+        GameSeason season = gameSeasonRepository
+            .findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, normalizedRegionCode)
+            .orElse(null);
+        if (season == null) {
+            return Optional.empty();
+        }
+
+        GameWallet wallet = gameWalletRepository.findBySeasonIdAndUserId(season.getId(), userId).orElse(null);
+        if (wallet == null) {
+            return Optional.empty();
+        }
+
+        List<GameSeasonTier> tiers = gameSeasonTierRepository.findBySeasonIdOrderBySortOrderAsc(season.getId());
+        if (tiers == null || tiers.isEmpty()) {
+            return Optional.empty();
+        }
+
+        long highlightScore = gameHighlightStateRepository
+            .findBySeasonIdAndUserIdAndBestSettledHighlightScoreGreaterThanOrderByBestSettledCreatedAtDesc(
+                season.getId(),
+                userId,
+                0L
+            ).stream()
+            .mapToLong(GameHighlightState::getBestSettledHighlightScore)
+            .sum();
+        long adjustedHighlightScore = highlightScore + normalizeTierScoreAdjustment(wallet.getManualTierScoreAdjustment());
+        return Optional.ofNullable(gameTierService.resolveTier(tiers, adjustedHighlightScore).getTierCode());
     }
 
     private Optional<Comment> findLatestUserComment(String clientId, Long userId) {
@@ -276,6 +377,14 @@ public class CommentService {
         }
 
         return normalized;
+    }
+
+    private String normalizeRegionCode(String regionCode) {
+        return StringUtils.hasText(regionCode) ? regionCode.trim().toUpperCase() : null;
+    }
+
+    private long normalizeTierScoreAdjustment(Long value) {
+        return value != null ? value : 0L;
     }
 
     private String normalizeRequired(String value, String message) {
