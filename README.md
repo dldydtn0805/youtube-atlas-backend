@@ -494,7 +494,7 @@ values
 - 알림은 서버에 저장되며 `readAt`, `deletedAt` 상태로 읽음/삭제를 관리합니다.
 - 로그인 직후 `GET /api/game/seasons/current` 응답의 `notifications` 를 사용하거나 이 API를 따로 호출하면 됩니다.
 - 로그인 상태에서 WebSocket을 연결하면 같은 알림이 `/user/queue/game/notifications` 로 실시간 전달됩니다.
-- 하이라이트 알림의 `highlightScore` 는 같은 루트 포지션의 기존 최고점 대비 이번 알림으로 추가되는 점수입니다.
+- 하이라이트 알림의 `highlightScore` 는 같은 루트 포지션의 기존 최고 하이라이트 대비 해당 태그가 추가로 올린 점수입니다.
 
 응답 예시:
 
@@ -832,7 +832,7 @@ Authorization: Bearer {accessToken}
 - `userId` 는 선택값이며, 지정하면 해당 유저의 거래내역만 정리합니다.
 - 미래 시각은 허용되지 않습니다.
 - `deleteBefore` 보다 이전에 종료된 `CLOSED`, `AUTO_CLOSED` 거래내역만 삭제됩니다.
-- 해당 거래내역에 연결된 원장, 배당 지급 데이터도 함께 삭제됩니다.
+- 해당 거래내역에 연결된 원장, 배당 지급, 예약 매도 데이터도 함께 삭제됩니다.
 - `OPEN` 포지션은 삭제 대상이 아닙니다.
 
 응답 예시:
@@ -843,7 +843,8 @@ Authorization: Bearer {accessToken}
   "deletedAt": "2026-04-15T03:00:00Z",
   "deletedPositionCount": 42,
   "deletedLedgerCount": 84,
-  "deletedDividendPayoutCount": 56
+  "deletedDividendPayoutCount": 56,
+  "deletedScheduledSellOrderCount": 3
 }
 ```
 
@@ -1031,7 +1032,7 @@ Authorization: Bearer {accessToken}
 - 인증 세션
 - 최근 재생 위치
 - 즐겨찾기
-- 게임 지갑/포지션/원장
+- 게임 지갑/포지션/원장/예약 매도
 
 위 데이터가 함께 삭제된 뒤 유저 계정이 제거됩니다.
 - 현재 댓글은 유저 FK가 아니라 작성자 문자열 기반이라, 기존 댓글 데이터는 유지됩니다.

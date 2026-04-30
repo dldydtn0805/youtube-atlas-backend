@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -140,6 +141,33 @@ class GameNotificationFactoryTest {
             0L,
             List.of(GameStrategyType.SMALL_CASHOUT)
         )).isEmpty();
+    }
+
+    @Test
+    void settledHighlightNotificationUsesPerTagScoreGain() {
+        GameHighlightResponse highlight = highlight(
+            List.of(GameStrategyType.SMALL_CASHOUT, GameStrategyType.SNIPE),
+            12_000L
+        );
+
+        List<GameNotificationResponse> notifications = GameNotificationFactory.fromHighlight(
+            highlight,
+            Map.of(
+                GameStrategyType.SMALL_CASHOUT, 1_200L,
+                GameStrategyType.SNIPE, 3_400L
+            ),
+            highlight.strategyTags()
+        );
+
+        assertThat(notifications)
+            .anySatisfy(notification -> {
+                assertThat(notification.notificationType()).isEqualTo("SMALL_CASHOUT");
+                assertThat(notification.highlightScore()).isEqualTo(1_200L);
+            })
+            .anySatisfy(notification -> {
+                assertThat(notification.notificationType()).isEqualTo("SNIPE");
+                assertThat(notification.highlightScore()).isEqualTo(3_400L);
+            });
     }
 
     private GameHighlightResponse highlight(List<GameStrategyType> strategyTags, long highlightScore) {

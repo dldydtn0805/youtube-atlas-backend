@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -86,7 +87,7 @@ public class GameNotificationService {
             currentValuePoints,
             capturedAt,
             notificationStrategyTags,
-            null
+            (Long) null
         );
     }
 
@@ -106,6 +107,36 @@ public class GameNotificationService {
             capturedAt,
             notificationStrategyTags,
             notificationHighlightScore
+        );
+        return notifications.stream()
+            .map(notification -> saveProjectedNotificationResult(position.getUser(), position.getSeason(), notification))
+            .filter(savedNotification -> savedNotification.created())
+            .filter(savedNotification -> savedNotification.notification().getDeletedAt() == null)
+            .map(savedNotification -> toResponse(savedNotification.notification()))
+            .peek(notification -> messagingTemplate.convertAndSendToUser(
+                position.getUser().getId().toString(),
+                USER_GAME_NOTIFICATIONS_QUEUE,
+                notification
+            ))
+            .toList();
+    }
+
+    @Transactional
+    public List<GameNotificationResponse> createAndPushPositionSnapshot(
+        GamePosition position,
+        int currentRank,
+        long currentValuePoints,
+        Instant capturedAt,
+        List<GameStrategyType> notificationStrategyTags,
+        Map<GameStrategyType, Long> notificationHighlightScoreByStrategyTag
+    ) {
+        List<GameNotificationResponse> notifications = GameNotificationFactory.fromPositionSnapshot(
+            position,
+            currentRank,
+            currentValuePoints,
+            capturedAt,
+            notificationStrategyTags,
+            notificationHighlightScoreByStrategyTag
         );
         return notifications.stream()
             .map(notification -> saveProjectedNotificationResult(position.getUser(), position.getSeason(), notification))

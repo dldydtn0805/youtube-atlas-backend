@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import jakarta.persistence.LockModeType;
@@ -63,4 +64,13 @@ public interface GameScheduledSellOrderRepository extends JpaRepository<GameSche
           and scheduledOrder.user.id = :userId
     """)
     Optional<GameScheduledSellOrder> findByIdAndUserIdForUpdate(Long id, Long userId);
+
+    @Modifying
+    @Query("""
+        delete from GameScheduledSellOrder scheduledOrder
+        where scheduledOrder.position.id in :positionIds
+    """)
+    long deleteByPositionIds(Collection<Long> positionIds);
+
+    void deleteByUserId(Long userId);
 }

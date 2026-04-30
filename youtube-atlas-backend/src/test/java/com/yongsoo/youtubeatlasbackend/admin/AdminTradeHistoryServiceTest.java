@@ -19,6 +19,7 @@ import com.yongsoo.youtubeatlasbackend.game.GameDividendPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePosition;
 import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameScheduledSellOrderRepository;
 import com.yongsoo.youtubeatlasbackend.game.PositionStatus;
 
 class AdminTradeHistoryServiceTest {
@@ -26,6 +27,7 @@ class AdminTradeHistoryServiceTest {
     private GamePositionRepository gamePositionRepository;
     private GameLedgerRepository gameLedgerRepository;
     private GameDividendPayoutRepository gameDividendPayoutRepository;
+    private GameScheduledSellOrderRepository gameScheduledSellOrderRepository;
     private AdminTradeHistoryService adminTradeHistoryService;
 
     @BeforeEach
@@ -33,11 +35,13 @@ class AdminTradeHistoryServiceTest {
         gamePositionRepository = org.mockito.Mockito.mock(GamePositionRepository.class);
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
         gameDividendPayoutRepository = org.mockito.Mockito.mock(GameDividendPayoutRepository.class);
+        gameScheduledSellOrderRepository = org.mockito.Mockito.mock(GameScheduledSellOrderRepository.class);
         Clock clock = Clock.fixed(Instant.parse("2026-04-15T03:00:00Z"), ZoneOffset.UTC);
         adminTradeHistoryService = new AdminTradeHistoryService(
             gamePositionRepository,
             gameLedgerRepository,
             gameDividendPayoutRepository,
+            gameScheduledSellOrderRepository,
             clock
         );
     }
@@ -54,6 +58,7 @@ class AdminTradeHistoryServiceTest {
         )).thenReturn(List.of(first, second));
         when(gameLedgerRepository.deleteByPositionIds(List.of(101L, 102L))).thenReturn(4L);
         when(gameDividendPayoutRepository.deleteByPositionIds(List.of(101L, 102L))).thenReturn(2L);
+        when(gameScheduledSellOrderRepository.deleteByPositionIds(List.of(101L, 102L))).thenReturn(3L);
         when(gamePositionRepository.deleteByIds(List.of(101L, 102L))).thenReturn(2L);
 
         var response = adminTradeHistoryService.deleteClosedTradeHistoryOlderThan(
@@ -65,8 +70,10 @@ class AdminTradeHistoryServiceTest {
         assertThat(response.deletedPositionCount()).isEqualTo(2L);
         assertThat(response.deletedLedgerCount()).isEqualTo(4L);
         assertThat(response.deletedDividendPayoutCount()).isEqualTo(2L);
+        assertThat(response.deletedScheduledSellOrderCount()).isEqualTo(3L);
         verify(gameLedgerRepository).deleteByPositionIds(List.of(101L, 102L));
         verify(gameDividendPayoutRepository).deleteByPositionIds(List.of(101L, 102L));
+        verify(gameScheduledSellOrderRepository).deleteByPositionIds(List.of(101L, 102L));
         verify(gamePositionRepository).deleteByIds(List.of(101L, 102L));
     }
 
@@ -85,6 +92,7 @@ class AdminTradeHistoryServiceTest {
         assertThat(response.deletedPositionCount()).isZero();
         assertThat(response.deletedLedgerCount()).isZero();
         assertThat(response.deletedDividendPayoutCount()).isZero();
+        assertThat(response.deletedScheduledSellOrderCount()).isZero();
     }
 
     @Test
@@ -111,6 +119,7 @@ class AdminTradeHistoryServiceTest {
         )).thenReturn(List.of(first));
         when(gameLedgerRepository.deleteByPositionIds(List.of(201L))).thenReturn(1L);
         when(gameDividendPayoutRepository.deleteByPositionIds(List.of(201L))).thenReturn(1L);
+        when(gameScheduledSellOrderRepository.deleteByPositionIds(List.of(201L))).thenReturn(1L);
         when(gamePositionRepository.deleteByIds(List.of(201L))).thenReturn(1L);
 
         var response = adminTradeHistoryService.deleteClosedTradeHistoryOlderThan(
@@ -120,6 +129,7 @@ class AdminTradeHistoryServiceTest {
         assertThat(response.deletedPositionCount()).isEqualTo(1L);
         assertThat(response.deletedLedgerCount()).isEqualTo(1L);
         assertThat(response.deletedDividendPayoutCount()).isEqualTo(1L);
+        assertThat(response.deletedScheduledSellOrderCount()).isEqualTo(1L);
     }
 
     private GamePosition closedPosition(Long id, String closedAt, PositionStatus status) {

@@ -3,6 +3,7 @@ package com.yongsoo.youtubeatlasbackend.game;
 import java.text.DecimalFormat;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import com.yongsoo.youtubeatlasbackend.game.api.GameHighlightResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.GameNotificationResponse;
@@ -15,12 +16,27 @@ final class GameNotificationFactory {
     }
 
     static List<GameNotificationResponse> fromHighlight(GameHighlightResponse highlight) {
-        return fromHighlight(highlight, highlight != null ? highlight.highlightScore() : 0L, null);
+        return fromHighlight(highlight, strategyScoreMap(highlight), null);
     }
 
     static List<GameNotificationResponse> fromHighlight(
         GameHighlightResponse highlight,
         long scoreGain,
+        List<GameStrategyType> notificationStrategyTags
+    ) {
+        if (scoreGain <= 0L) {
+            return List.of();
+        }
+
+        List<GameStrategyType> scoreTags = notificationStrategyTags != null
+            ? notificationStrategyTags
+            : highlight != null ? highlight.strategyTags() : List.of();
+        return fromHighlight(highlight, strategyScoreMap(scoreTags, scoreGain), notificationStrategyTags);
+    }
+
+    static List<GameNotificationResponse> fromHighlight(
+        GameHighlightResponse highlight,
+        Map<GameStrategyType, Long> scoreGainByStrategyTag,
         List<GameStrategyType> notificationStrategyTags
     ) {
         if (highlight == null) {
@@ -31,7 +47,7 @@ final class GameNotificationFactory {
             return List.of();
         }
 
-        if (scoreGain <= 0L) {
+        if (scoreGainByStrategyTag != null && scoreGainByStrategyTag.isEmpty()) {
             return List.of();
         }
 
@@ -44,7 +60,13 @@ final class GameNotificationFactory {
         }
 
         return strategyTags.stream()
-            .map(strategyType -> fromHighlight(highlight, scoreGain, strategyTags, strategyType))
+            .filter(strategyType -> resolveScoreGain(strategyType, scoreGainByStrategyTag, 0L) > 0L)
+            .map(strategyType -> fromHighlight(
+                highlight,
+                resolveScoreGain(strategyType, scoreGainByStrategyTag, 0L),
+                strategyTags,
+                strategyType
+            ))
             .toList();
     }
 
@@ -64,7 +86,7 @@ final class GameNotificationFactory {
         Instant createdAt,
         List<GameStrategyType> notificationStrategyTags
     ) {
-        return fromPositionSnapshot(position, currentRank, currentPricePoints, createdAt, notificationStrategyTags, null);
+        return fromPositionSnapshot(position, currentRank, currentPricePoints, createdAt, notificationStrategyTags, (Long) null);
     }
 
     static List<GameNotificationResponse> fromPositionSnapshot(
@@ -74,6 +96,26 @@ final class GameNotificationFactory {
         Instant createdAt,
         List<GameStrategyType> notificationStrategyTags,
         Long notificationHighlightScore
+    ) {
+        return fromPositionSnapshot(
+            position,
+            currentRank,
+            currentPricePoints,
+            createdAt,
+            notificationStrategyTags,
+            notificationHighlightScore != null && notificationStrategyTags != null
+                ? strategyScoreMap(notificationStrategyTags, notificationHighlightScore)
+                : null
+        );
+    }
+
+    static List<GameNotificationResponse> fromPositionSnapshot(
+        GamePosition position,
+        int currentRank,
+        long currentPricePoints,
+        Instant createdAt,
+        List<GameStrategyType> notificationStrategyTags,
+        Map<GameStrategyType, Long> notificationHighlightScoreByStrategyTag
     ) {
         long profitPoints = GamePointCalculator.calculateProfitPoints(position.getStakePoints(), currentPricePoints);
         Double profitRatePercent = GameStrategyResolver.calculateProfitRatePercent(
@@ -99,28 +141,32 @@ final class GameNotificationFactory {
         }
 
         int rankDiff = position.getBuyRank() - currentRank;
-        long projectedHighlightScore = GameService.calculateProjectedPositionHighlightScore(
-            position.getBuyRank(),
-            rankDiff,
-            profitRatePercent,
-            profitPoints,
-            strategyTags
-        );
-        long highlightScore = notificationHighlightScore != null
-            ? notificationHighlightScore
-            : projectedHighlightScore;
-        if (highlightScore <= 0L) {
+        Map<GameStrategyType, Long> highlightScoreByStrategyTag = notificationHighlightScoreByStrategyTag != null
+            ? notificationHighlightScoreByStrategyTag
+            : strategyScoreMap(projectedHighlight(
+                position.getBuyRank(),
+                rankDiff,
+                profitRatePercent,
+                profitPoints,
+                strategyTags
+            ));
+        if (highlightScoreByStrategyTag.isEmpty()) {
             return List.of();
         }
 
         return strategyTagsToNotify.stream()
+            .filter(strategyType -> resolveScoreGain(
+                strategyType,
+                highlightScoreByStrategyTag,
+                0L
+            ) > 0L)
             .map(strategyType -> fromPositionSnapshot(
                 position,
                 currentRank,
                 rankDiff,
                 profitRatePercent,
                 strategyTagsToNotify,
-                highlightScore,
+                resolveScoreGain(strategyType, highlightScoreByStrategyTag, 0L),
                 createdAt,
                 strategyType
             ))
@@ -280,6 +326,80 @@ final class GameNotificationFactory {
         return strategyTags.stream()
             .filter(notificationStrategyTags::contains)
             .toList();
+    }
+
+    private static long resolveScoreGain(
+        GameStrategyType strategyType,
+        Map<GameStrategyType, Long> scoreGainByStrategyTag,
+        Long fallbackScore
+    ) {
+        if (scoreGainByStrategyTag == null) {
+            return fallbackScore != null ? fallbackScore : 0L;
+        }
+
+        return scoreGainByStrategyTag.getOrDefault(strategyType, 0L);
+    }
+
+    private static Map<GameStrategyType, Long> strategyScoreMap(
+        List<GameStrategyType> strategyTags,
+        long score
+    ) {
+        if (strategyTags == null || strategyTags.isEmpty()) {
+            return Map.of();
+        }
+
+        return strategyTags.stream()
+            .collect(java.util.stream.Collectors.toMap(
+                strategyType -> strategyType,
+                strategyType -> score,
+                (left, right) -> left
+            ));
+    }
+
+    private static Map<GameStrategyType, Long> strategyScoreMap(GameHighlightResponse highlight) {
+        if (highlight == null || highlight.strategyTags() == null || highlight.strategyTags().isEmpty()) {
+            return Map.of();
+        }
+
+        return highlight.strategyTags().stream()
+            .collect(java.util.stream.Collectors.toMap(
+                strategyType -> strategyType,
+                strategyType -> GameService.calculateStrategyHighlightScore(strategyType, highlight),
+                (left, right) -> left
+            ));
+    }
+
+    private static GameHighlightResponse projectedHighlight(
+        Integer buyRank,
+        Integer rankDiff,
+        Double profitRatePercent,
+        Long profitPoints,
+        List<GameStrategyType> achievedStrategyTags
+    ) {
+        return new GameHighlightResponse(
+            "projected",
+            achievedStrategyTags.get(0).name(),
+            "Projected highlight",
+            "Projected highlight",
+            0L,
+            "projected",
+            "Projected highlight",
+            "Projected channel",
+            "",
+            buyRank != null ? buyRank : 0,
+            buyRank != null && rankDiff != null ? buyRank - rankDiff : null,
+            null,
+            rankDiff,
+            GamePointCalculator.QUANTITY_SCALE,
+            0L,
+            null,
+            profitPoints,
+            profitRatePercent,
+            achievedStrategyTags,
+            0L,
+            PositionStatus.OPEN.name(),
+            Instant.EPOCH
+        );
     }
 
     private static String resolveTitle(GameStrategyType strategyType) {

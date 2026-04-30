@@ -12,6 +12,7 @@ import com.yongsoo.youtubeatlasbackend.admin.api.AdminTradeHistoryCleanupRespons
 import com.yongsoo.youtubeatlasbackend.game.GameDividendPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameScheduledSellOrderRepository;
 import com.yongsoo.youtubeatlasbackend.game.PositionStatus;
 
 @Service
@@ -20,17 +21,20 @@ public class AdminTradeHistoryService {
     private final GamePositionRepository gamePositionRepository;
     private final GameLedgerRepository gameLedgerRepository;
     private final GameDividendPayoutRepository gameDividendPayoutRepository;
+    private final GameScheduledSellOrderRepository gameScheduledSellOrderRepository;
     private final Clock clock;
 
     public AdminTradeHistoryService(
         GamePositionRepository gamePositionRepository,
         GameLedgerRepository gameLedgerRepository,
         GameDividendPayoutRepository gameDividendPayoutRepository,
+        GameScheduledSellOrderRepository gameScheduledSellOrderRepository,
         Clock clock
     ) {
         this.gamePositionRepository = gamePositionRepository;
         this.gameLedgerRepository = gameLedgerRepository;
         this.gameDividendPayoutRepository = gameDividendPayoutRepository;
+        this.gameScheduledSellOrderRepository = gameScheduledSellOrderRepository;
         this.clock = clock;
     }
 
@@ -49,11 +53,12 @@ public class AdminTradeHistoryService {
             .toList();
 
         if (positionIds.isEmpty()) {
-            return new AdminTradeHistoryCleanupResponse(deleteBefore, now, 0L, 0L, 0L);
+            return new AdminTradeHistoryCleanupResponse(deleteBefore, now, 0L, 0L, 0L, 0L);
         }
 
         long deletedLedgerCount = gameLedgerRepository.deleteByPositionIds(positionIds);
         long deletedDividendPayoutCount = gameDividendPayoutRepository.deleteByPositionIds(positionIds);
+        long deletedScheduledSellOrderCount = gameScheduledSellOrderRepository.deleteByPositionIds(positionIds);
         long deletedPositionCount = gamePositionRepository.deleteByIds(positionIds);
 
         return new AdminTradeHistoryCleanupResponse(
@@ -61,7 +66,8 @@ public class AdminTradeHistoryService {
             now,
             deletedPositionCount,
             deletedLedgerCount,
-            deletedDividendPayoutCount
+            deletedDividendPayoutCount,
+            deletedScheduledSellOrderCount
         );
     }
 

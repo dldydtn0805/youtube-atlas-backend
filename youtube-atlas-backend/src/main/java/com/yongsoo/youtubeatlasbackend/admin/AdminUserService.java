@@ -27,6 +27,7 @@ import com.yongsoo.youtubeatlasbackend.game.GameDividendPayoutRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameHighlightStateRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameNotificationRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameScheduledSellOrderRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameService;
 import com.yongsoo.youtubeatlasbackend.game.GameSeason;
 import com.yongsoo.youtubeatlasbackend.game.GameSeasonTier;
@@ -59,6 +60,7 @@ public class AdminUserService {
     private final GameDividendPayoutRepository gameDividendPayoutRepository;
     private final GameHighlightStateRepository gameHighlightStateRepository;
     private final GameNotificationRepository gameNotificationRepository;
+    private final GameScheduledSellOrderRepository gameScheduledSellOrderRepository;
     private final UserAchievementTitleRepository userAchievementTitleRepository;
     private final UserAchievementTitleSettingRepository userAchievementTitleSettingRepository;
     private final GameTierService gameTierService;
@@ -79,6 +81,7 @@ public class AdminUserService {
         GameDividendPayoutRepository gameDividendPayoutRepository,
         GameHighlightStateRepository gameHighlightStateRepository,
         GameNotificationRepository gameNotificationRepository,
+        GameScheduledSellOrderRepository gameScheduledSellOrderRepository,
         UserAchievementTitleRepository userAchievementTitleRepository,
         UserAchievementTitleSettingRepository userAchievementTitleSettingRepository,
         GameTierService gameTierService,
@@ -98,6 +101,7 @@ public class AdminUserService {
         this.gameDividendPayoutRepository = gameDividendPayoutRepository;
         this.gameHighlightStateRepository = gameHighlightStateRepository;
         this.gameNotificationRepository = gameNotificationRepository;
+        this.gameScheduledSellOrderRepository = gameScheduledSellOrderRepository;
         this.userAchievementTitleRepository = userAchievementTitleRepository;
         this.userAchievementTitleSettingRepository = userAchievementTitleSettingRepository;
         this.gameTierService = gameTierService;
@@ -183,6 +187,7 @@ public class AdminUserService {
         gameDividendPayoutRepository.deleteByUserId(userId);
         gameHighlightStateRepository.deleteByUserId(userId);
         gameNotificationRepository.deleteByUserId(userId);
+        gameScheduledSellOrderRepository.deleteByUserId(userId);
         userAchievementTitleSettingRepository.deleteByUserId(userId);
         userAchievementTitleRepository.deleteByUserId(userId);
         gamePositionRepository.deleteByUserId(userId);

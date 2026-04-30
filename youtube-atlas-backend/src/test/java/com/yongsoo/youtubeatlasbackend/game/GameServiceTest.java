@@ -1111,7 +1111,7 @@ class GameServiceTest {
     }
 
     @Test
-    void splitSellSkipsHighlightNotificationWhenRootTagAlreadyScored() {
+    void splitSellPushesHighlightNotificationWhenSameRootTagImprovesScore() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         long unitBuyPricePoints = GamePointCalculator.calculatePricePoints(140);
@@ -1151,17 +1151,6 @@ class GameServiceTest {
 
             return List.of(position, closedSplit);
         });
-        when(gamePositionRepository.findBySeasonIdAndUserIdAndScoreRootIdAndStatus(1L, 7L, 301L, PositionStatus.CLOSED))
-            .thenAnswer(invocation -> {
-                List<GamePosition> closedPositions = new ArrayList<>();
-                if (closedSplitRef.get() != null) {
-                    closedPositions.add(closedSplitRef.get());
-                }
-                if (position.getStatus() == PositionStatus.CLOSED) {
-                    closedPositions.add(position);
-                }
-                return closedPositions;
-            });
         when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> {
             GamePosition savedPosition = invocation.getArgument(0, GamePosition.class);
             if (savedPosition != position && savedPosition.getId() == null) {
@@ -1176,13 +1165,25 @@ class GameServiceTest {
         gameService.sell(authenticatedUser(), new SellPositionsRequest("KR", 301L, null, ONE_SHARE));
         gameService.sell(authenticatedUser(), 301L);
 
-        verify(gameNotificationService, org.mockito.Mockito.times(1))
+        verify(gameNotificationService)
             .createAndPush(
                 org.mockito.ArgumentMatchers.eq(appUser),
                 org.mockito.ArgumentMatchers.eq(season),
                 org.mockito.ArgumentMatchers.argThat(notifications ->
                     notifications.stream().anyMatch(notification ->
                         "game-302-SMALL_CASHOUT".equals(notification.id())
+                    )
+                )
+            );
+        verify(gameNotificationService)
+            .createAndPush(
+                org.mockito.ArgumentMatchers.eq(appUser),
+                org.mockito.ArgumentMatchers.eq(season),
+                org.mockito.ArgumentMatchers.argThat(notifications ->
+                    notifications.stream().anyMatch(notification ->
+                        "game-301-SMALL_CASHOUT".equals(notification.id())
+                            && notification.highlightScore() != null
+                            && notification.highlightScore() > 0L
                     )
                 )
             );
@@ -1229,12 +1230,12 @@ class GameServiceTest {
             org.mockito.ArgumentMatchers.anyLong(),
             org.mockito.ArgumentMatchers.any(Instant.class),
             org.mockito.ArgumentMatchers.anyList(),
-            org.mockito.ArgumentMatchers.anyLong()
+            org.mockito.ArgumentMatchers.anyMap()
         );
     }
 
     @Test
-    void publishProjectedHighlightNotificationsSkipsRootTagAlreadyScored() {
+    void publishProjectedHighlightNotificationsPushesWhenSameRootTagImprovesScore() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         long buyPricePoints = GamePointCalculator.calculatePricePoints(140);
@@ -1265,20 +1266,20 @@ class GameServiceTest {
         when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(openPosition));
         when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L))
             .thenReturn(List.of(settledPosition, openPosition));
-        when(gamePositionRepository.findBySeasonIdAndUserIdAndScoreRootIdAndStatus(1L, 7L, 300L, PositionStatus.CLOSED))
-            .thenReturn(List.of(settledPosition));
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
             .thenReturn(List.of(signal("video-1", 70, 0)));
 
         gameService.publishProjectedHighlightNotifications("KR");
 
-        verify(gameNotificationService, never()).createAndPushPositionSnapshot(
-            org.mockito.ArgumentMatchers.any(GamePosition.class),
-            org.mockito.ArgumentMatchers.anyInt(),
+        verify(gameNotificationService).createAndPushPositionSnapshot(
+            org.mockito.ArgumentMatchers.eq(openPosition),
+            org.mockito.ArgumentMatchers.eq(70),
             org.mockito.ArgumentMatchers.anyLong(),
             org.mockito.ArgumentMatchers.any(Instant.class),
-            org.mockito.ArgumentMatchers.anyList(),
-            org.mockito.ArgumentMatchers.anyLong()
+            org.mockito.ArgumentMatchers.argThat(tags -> tags.contains(GameStrategyType.SMALL_CASHOUT)),
+            org.mockito.ArgumentMatchers.<java.util.Map<GameStrategyType, Long>>argThat(scoreGains ->
+                scoreGains.getOrDefault(GameStrategyType.SMALL_CASHOUT, 0L) > 0L
+            )
         );
     }
 

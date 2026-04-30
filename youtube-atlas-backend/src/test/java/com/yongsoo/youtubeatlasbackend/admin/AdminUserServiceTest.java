@@ -28,6 +28,7 @@ import com.yongsoo.youtubeatlasbackend.game.GameHighlightStateRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameLedgerRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameNotificationRepository;
 import com.yongsoo.youtubeatlasbackend.game.GamePositionRepository;
+import com.yongsoo.youtubeatlasbackend.game.GameScheduledSellOrderRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameService;
 import com.yongsoo.youtubeatlasbackend.game.GameSeason;
 import com.yongsoo.youtubeatlasbackend.game.GameSeasonRepository;
@@ -58,6 +59,7 @@ class AdminUserServiceTest {
     private GameDividendPayoutRepository gameDividendPayoutRepository;
     private GameHighlightStateRepository gameHighlightStateRepository;
     private GameNotificationRepository gameNotificationRepository;
+    private GameScheduledSellOrderRepository gameScheduledSellOrderRepository;
     private UserAchievementTitleRepository userAchievementTitleRepository;
     private UserAchievementTitleSettingRepository userAchievementTitleSettingRepository;
     private GameService gameService;
@@ -79,6 +81,7 @@ class AdminUserServiceTest {
         gameDividendPayoutRepository = org.mockito.Mockito.mock(GameDividendPayoutRepository.class);
         gameHighlightStateRepository = org.mockito.Mockito.mock(GameHighlightStateRepository.class);
         gameNotificationRepository = org.mockito.Mockito.mock(GameNotificationRepository.class);
+        gameScheduledSellOrderRepository = org.mockito.Mockito.mock(GameScheduledSellOrderRepository.class);
         userAchievementTitleRepository = org.mockito.Mockito.mock(UserAchievementTitleRepository.class);
         userAchievementTitleSettingRepository = org.mockito.Mockito.mock(UserAchievementTitleSettingRepository.class);
         gameService = org.mockito.Mockito.mock(GameService.class);
@@ -99,6 +102,7 @@ class AdminUserServiceTest {
             gameDividendPayoutRepository,
             gameHighlightStateRepository,
             gameNotificationRepository,
+            gameScheduledSellOrderRepository,
             userAchievementTitleRepository,
             userAchievementTitleSettingRepository,
             gameTierService,
@@ -304,6 +308,7 @@ class AdminUserServiceTest {
         org.mockito.Mockito.verify(gameDividendPayoutRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gameHighlightStateRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gameNotificationRepository).deleteByUserId(13L);
+        org.mockito.Mockito.verify(gameScheduledSellOrderRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(userAchievementTitleSettingRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(userAchievementTitleRepository).deleteByUserId(13L);
         org.mockito.Mockito.verify(gamePositionRepository).deleteByUserId(13L);
@@ -321,6 +326,7 @@ class AdminUserServiceTest {
         org.mockito.Mockito.verify(gameDividendPayoutRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(gameHighlightStateRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(gameNotificationRepository).deleteByUserId(17L);
+        org.mockito.Mockito.verify(gameScheduledSellOrderRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(userAchievementTitleSettingRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(userAchievementTitleRepository).deleteByUserId(17L);
         org.mockito.Mockito.verify(gamePositionRepository).deleteByUserId(17L);

@@ -7,6 +7,7 @@ public record AdminTradeHistoryCleanupResponse(
     Instant deletedAt,
     long deletedPositionCount,
     long deletedLedgerCount,
-    long deletedDividendPayoutCount
+    long deletedDividendPayoutCount,
+    long deletedScheduledSellOrderCount
 ) {
 }
