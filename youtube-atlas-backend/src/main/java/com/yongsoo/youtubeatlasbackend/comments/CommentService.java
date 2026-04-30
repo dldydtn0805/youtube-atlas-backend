@@ -18,6 +18,7 @@ import com.yongsoo.youtubeatlasbackend.auth.AuthException;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.comments.api.ChatMessageResponse;
 import com.yongsoo.youtubeatlasbackend.comments.api.CreateCommentRequest;
+import com.yongsoo.youtubeatlasbackend.game.AchievementTitleService;
 import com.yongsoo.youtubeatlasbackend.game.GameHighlightState;
 import com.yongsoo.youtubeatlasbackend.game.GameHighlightStateRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameSeason;
@@ -28,6 +29,7 @@ import com.yongsoo.youtubeatlasbackend.game.GameTierService;
 import com.yongsoo.youtubeatlasbackend.game.GameWallet;
 import com.yongsoo.youtubeatlasbackend.game.GameWalletRepository;
 import com.yongsoo.youtubeatlasbackend.game.SeasonStatus;
+import com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse;
 
 @Service
 public class CommentService {
@@ -57,6 +59,7 @@ public class CommentService {
     private final GameHighlightStateRepository gameHighlightStateRepository;
     private final GameSeasonTierRepository gameSeasonTierRepository;
     private final GameTierService gameTierService;
+    private final AchievementTitleService achievementTitleService;
     private final Clock clock;
 
     public CommentService(
@@ -68,6 +71,7 @@ public class CommentService {
         GameHighlightStateRepository gameHighlightStateRepository,
         GameSeasonTierRepository gameSeasonTierRepository,
         GameTierService gameTierService,
+        AchievementTitleService achievementTitleService,
         Clock clock
     ) {
         this.commentRepository = commentRepository;
@@ -78,6 +82,7 @@ public class CommentService {
         this.gameHighlightStateRepository = gameHighlightStateRepository;
         this.gameSeasonTierRepository = gameSeasonTierRepository;
         this.gameTierService = gameTierService;
+        this.achievementTitleService = achievementTitleService;
         this.clock = clock;
     }
 
@@ -107,9 +112,10 @@ public class CommentService {
             ? findLatestGlobalComments()
             : commentRepository.findByVideoIdAndCreatedAtAfterOrderByCreatedAtAsc(GLOBAL_ROOM_VIDEO_ID, since);
         Map<Long, String> tierCodesByUserId = new HashMap<>();
+        Map<Long, SelectedAchievementTitleResponse> selectedTitlesByUserId = findSelectedTitles(comments);
 
         return comments.stream()
-            .map(comment -> toResponse(comment, regionCode, tierCodesByUserId))
+            .map(comment -> toResponse(comment, regionCode, tierCodesByUserId, selectedTitlesByUserId))
             .toList();
     }
 
@@ -182,7 +188,13 @@ public class CommentService {
         comment.setContent(content);
         comment.setCreatedAt(now);
 
-        ChatMessageResponse response = toResponse(commentRepository.save(comment), request.regionCode());
+        Comment savedComment = commentRepository.save(comment);
+        ChatMessageResponse response = toResponse(
+            savedComment,
+            request.regionCode(),
+            new HashMap<>(),
+            findSelectedTitles(List.of(savedComment))
+        );
         commentPresenceService.rememberParticipantName(clientId, author);
         messagingTemplate.convertAndSend(GLOBAL_COMMENTS_TOPIC, response);
         return response;
@@ -259,10 +271,15 @@ public class CommentService {
         return toResponse(comment, regionCode, new HashMap<>());
     }
 
+    private ChatMessageResponse toResponse(Comment comment, String regionCode, Map<Long, String> tierCodesByUserId) {
+        return toResponse(comment, regionCode, tierCodesByUserId, findSelectedTitles(List.of(comment)));
+    }
+
     private ChatMessageResponse toResponse(
         Comment comment,
         String regionCode,
-        Map<Long, String> tierCodesByUserId
+        Map<Long, String> tierCodesByUserId,
+        Map<Long, SelectedAchievementTitleResponse> selectedTitlesByUserId
     ) {
         return new ChatMessageResponse(
             comment.getId(),
@@ -273,9 +290,32 @@ public class CommentService {
             comment.getContent(),
             comment.getClientId(),
             comment.getUserId(),
+            resolveSelectedTitle(comment.getUserId(), selectedTitlesByUserId),
             resolveCurrentTierCode(comment.getUserId(), regionCode, tierCodesByUserId),
             comment.getCreatedAt()
         );
+    }
+
+    private Map<Long, SelectedAchievementTitleResponse> findSelectedTitles(List<Comment> comments) {
+        List<Long> userIds = comments.stream()
+            .map(Comment::getUserId)
+            .filter(userId -> userId != null)
+            .distinct()
+            .toList();
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, SelectedAchievementTitleResponse> selectedTitles =
+            achievementTitleService.findSelectedTitlesByUserIds(userIds);
+        return selectedTitles != null ? selectedTitles : Map.of();
+    }
+
+    private SelectedAchievementTitleResponse resolveSelectedTitle(
+        Long userId,
+        Map<Long, SelectedAchievementTitleResponse> selectedTitlesByUserId
+    ) {
+        return userId != null ? selectedTitlesByUserId.get(userId) : null;
     }
 
     private String resolveCurrentTierCode(

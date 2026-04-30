@@ -12,6 +12,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +25,8 @@ import com.yongsoo.youtubeatlasbackend.auth.AuthException;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.comments.api.ChatMessageResponse;
 import com.yongsoo.youtubeatlasbackend.comments.api.CreateCommentRequest;
+import com.yongsoo.youtubeatlasbackend.game.AchievementTitleGrade;
+import com.yongsoo.youtubeatlasbackend.game.AchievementTitleService;
 import com.yongsoo.youtubeatlasbackend.game.GameHighlightState;
 import com.yongsoo.youtubeatlasbackend.game.GameHighlightStateRepository;
 import com.yongsoo.youtubeatlasbackend.game.GameSeason;
@@ -34,6 +37,7 @@ import com.yongsoo.youtubeatlasbackend.game.GameTierService;
 import com.yongsoo.youtubeatlasbackend.game.GameWallet;
 import com.yongsoo.youtubeatlasbackend.game.GameWalletRepository;
 import com.yongsoo.youtubeatlasbackend.game.SeasonStatus;
+import com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse;
 
 class CommentServiceTest {
 
@@ -45,6 +49,7 @@ class CommentServiceTest {
     private GameHighlightStateRepository gameHighlightStateRepository;
     private GameSeasonTierRepository gameSeasonTierRepository;
     private GameTierService gameTierService;
+    private AchievementTitleService achievementTitleService;
     private CommentService commentService;
 
     @BeforeEach
@@ -57,6 +62,7 @@ class CommentServiceTest {
         gameHighlightStateRepository = org.mockito.Mockito.mock(GameHighlightStateRepository.class);
         gameSeasonTierRepository = org.mockito.Mockito.mock(GameSeasonTierRepository.class);
         gameTierService = org.mockito.Mockito.mock(GameTierService.class);
+        achievementTitleService = org.mockito.Mockito.mock(AchievementTitleService.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-03-24T10:00:00Z"), ZoneOffset.UTC);
         commentService = new CommentService(
             commentRepository,
@@ -67,6 +73,7 @@ class CommentServiceTest {
             gameHighlightStateRepository,
             gameSeasonTierRepository,
             gameTierService,
+            achievementTitleService,
             fixedClock
         );
     }
@@ -138,6 +145,24 @@ class CommentServiceTest {
     }
 
     @Test
+    void getCommentsIncludesSelectedAchievementTitle() {
+        Comment comment = comment(7L, "client-7", "칭호 달고 채팅", Instant.parse("2026-03-24T10:00:07Z"));
+        comment.setUserId(7L);
+
+        when(commentRepository.findTop20ByVideoIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID))
+            .thenReturn(List.of(comment));
+        when(achievementTitleService.findSelectedTitlesByUserIds(List.of(7L)))
+            .thenReturn(Map.of(7L, selectedTitle()));
+
+        List<ChatMessageResponse> response = commentService.getComments((Instant) null);
+
+        assertThat(response).singleElement().satisfies(message -> {
+            assertThat(message.selectedAchievementTitle()).isNotNull();
+            assertThat(message.selectedAchievementTitle().code()).isEqualTo("ATLAS_SNIPER");
+        });
+    }
+
+    @Test
     void createCommentNormalizesContentAndPublishesRealtimeMessage() {
         when(commentRepository.findTopByVideoIdAndUserIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID, 7L))
             .thenReturn(Optional.empty());
@@ -147,6 +172,8 @@ class CommentServiceTest {
             eq("hello world"),
             any(Instant.class)
         )).thenReturn(false);
+        when(achievementTitleService.findSelectedTitlesByUserIds(List.of(7L)))
+            .thenReturn(Map.of(7L, selectedTitle()));
         when(commentRepository.save(any(Comment.class))).thenAnswer(invocation -> {
             Comment comment = invocation.getArgument(0, Comment.class);
             ReflectionTestUtils.setField(comment, "id", 1L);
@@ -164,6 +191,8 @@ class CommentServiceTest {
         assertThat(response.messageType()).isEqualTo(CommentService.USER_MESSAGE_TYPE);
         assertThat(response.systemEventType()).isNull();
         assertThat(response.userId()).isEqualTo(7L);
+        assertThat(response.selectedAchievementTitle()).isNotNull();
+        assertThat(response.selectedAchievementTitle().shortName()).isEqualTo("A. Sniper");
         assertThat(response.videoId()).isEqualTo(CommentService.GLOBAL_ROOM_VIDEO_ID);
         verify(commentPresenceService).rememberParticipantName("client-1", "Atlas User");
         verify(messagingTemplate).convertAndSend("/topic/comments", response);
@@ -374,6 +403,16 @@ class CommentServiceTest {
 
     private AuthenticatedUser authenticatedUser() {
         return new AuthenticatedUser(7L, "atlas@example.com", "Atlas User", null);
+    }
+
+    private SelectedAchievementTitleResponse selectedTitle() {
+        return new SelectedAchievementTitleResponse(
+            "ATLAS_SNIPER",
+            "Atlas Sniper",
+            "A. Sniper",
+            AchievementTitleGrade.ULTIMATE,
+            "모든 전략 칭호를 획득한 유저"
+        );
     }
 
     private GameSeason season(Long id, String regionCode) {

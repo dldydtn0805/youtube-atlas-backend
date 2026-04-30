@@ -4,6 +4,7 @@ import java.time.Instant;
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse;
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ChatMessageResponse(
@@ -15,6 +16,7 @@ public record ChatMessageResponse(
     String content,
     String clientId,
     Long userId,
+    SelectedAchievementTitleResponse selectedAchievementTitle,
     String currentTierCode,
     Instant createdAt
 ) {
