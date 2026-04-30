@@ -35,6 +35,21 @@ class GameHighlightScoringTest {
     }
 
     @Test
+    void exposesScoreBreakdownForEachStrategyTag() {
+        GameHighlightResponse highlight = highlight(List.of(GameStrategyType.MOONSHOT, GameStrategyType.SNIPE));
+
+        var breakdown = GameService.calculateHighlightScoreBreakdown(highlight);
+
+        assertThat(breakdown.totalScore()).isEqualTo(GameService.calculateHighlightScore(highlight));
+        assertThat(breakdown.strategyScores()).hasSize(2);
+        assertThat(breakdown.strategyScores().get(0).strategyType()).isEqualTo(GameStrategyType.MOONSHOT);
+        assertThat(breakdown.strategyScores().get(0).baseScore()).isEqualTo(20_000L);
+        assertThat(breakdown.strategyScores().get(0).rankDiffBonus()).isEqualTo(3_300L);
+        assertThat(breakdown.strategyScores().get(0).profitRateBonus()).isEqualTo(5_000L);
+        assertThat(breakdown.strategyScores().get(0).profitPointsBonus()).isEqualTo(7L);
+    }
+
+    @Test
     void appliesRaisedMoonshotBaseScore() {
         GameHighlightResponse highlight = highlight(List.of(GameStrategyType.MOONSHOT));
 

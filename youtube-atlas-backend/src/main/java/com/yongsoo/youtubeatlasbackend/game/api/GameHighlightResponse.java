@@ -26,7 +26,58 @@ public record GameHighlightResponse(
     Double profitRatePercent,
     List<GameStrategyType> strategyTags,
     Long highlightScore,
+    GameHighlightScoreBreakdownResponse scoreBreakdown,
     String status,
     Instant createdAt
 ) {
+    public GameHighlightResponse(
+        String id,
+        String highlightType,
+        String title,
+        String description,
+        Long positionId,
+        String videoId,
+        String videoTitle,
+        String channelTitle,
+        String thumbnailUrl,
+        Integer buyRank,
+        Integer highlightRank,
+        Integer sellRank,
+        Integer rankDiff,
+        Long quantity,
+        Long stakePoints,
+        Long currentPricePoints,
+        Long profitPoints,
+        Double profitRatePercent,
+        List<GameStrategyType> strategyTags,
+        Long highlightScore,
+        String status,
+        Instant createdAt
+    ) {
+        this(
+            id,
+            highlightType,
+            title,
+            description,
+            positionId,
+            videoId,
+            videoTitle,
+            channelTitle,
+            thumbnailUrl,
+            buyRank,
+            highlightRank,
+            sellRank,
+            rankDiff,
+            quantity,
+            stakePoints,
+            currentPricePoints,
+            profitPoints,
+            profitRatePercent,
+            strategyTags,
+            highlightScore,
+            null,
+            status,
+            createdAt
+        );
+    }
 }

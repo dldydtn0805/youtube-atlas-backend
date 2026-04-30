@@ -29,6 +29,8 @@ import com.yongsoo.youtubeatlasbackend.game.api.TierResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.CreatePositionRequest;
 import com.yongsoo.youtubeatlasbackend.game.api.CurrentSeasonResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.GameHighlightResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.GameHighlightScoreBreakdownResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.GameHighlightStrategyScoreResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.GameNotificationResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.InventorySlotResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.LeaderboardEntryResponse;
@@ -1073,7 +1075,7 @@ public class GameService {
     }
 
     private GameHighlightResponse toStoredHighlightResponse(GameHighlightState state) {
-        return new GameHighlightResponse(
+        return withScoreBreakdown(new GameHighlightResponse(
             state.getBestSettledPositionId() + "-" + state.getBestSettledHighlightType(),
             state.getBestSettledHighlightType(),
             state.getBestSettledTitle(),
@@ -1096,7 +1098,7 @@ public class GameService {
             state.getBestSettledHighlightScore(),
             PositionStatus.CLOSED.name(),
             state.getBestSettledCreatedAt()
-        );
+        ));
     }
 
     private List<GameStrategyType> parseStoredStrategyTags(String strategyTags) {
@@ -1567,7 +1569,7 @@ public class GameService {
             snapshot.createdAt()
         );
 
-        return new GameHighlightResponse(
+        GameHighlightResponse scoredHighlight = new GameHighlightResponse(
             highlight.id(),
             highlight.highlightType(),
             highlight.title(),
@@ -1591,6 +1593,7 @@ public class GameService {
             highlight.status(),
             highlight.createdAt()
         );
+        return withScoreBreakdown(scoredHighlight);
     }
 
     private GameHighlightResponse toSettledGameHighlightResponse(GamePosition position) {
@@ -1703,13 +1706,85 @@ public class GameService {
             return 0L;
         }
 
-        return highlight.strategyTags().stream()
-            .mapToLong(strategyType -> calculateStrategyHighlightScore(strategyType, highlight))
+        return calculateHighlightScoreBreakdown(highlight).totalScore();
+    }
+
+    private static GameHighlightResponse withScoreBreakdown(GameHighlightResponse highlight) {
+        return new GameHighlightResponse(
+            highlight.id(),
+            highlight.highlightType(),
+            highlight.title(),
+            highlight.description(),
+            highlight.positionId(),
+            highlight.videoId(),
+            highlight.videoTitle(),
+            highlight.channelTitle(),
+            highlight.thumbnailUrl(),
+            highlight.buyRank(),
+            highlight.highlightRank(),
+            highlight.sellRank(),
+            highlight.rankDiff(),
+            highlight.quantity(),
+            highlight.stakePoints(),
+            highlight.currentPricePoints(),
+            highlight.profitPoints(),
+            highlight.profitRatePercent(),
+            highlight.strategyTags(),
+            highlight.highlightScore(),
+            calculateHighlightScoreBreakdown(highlight),
+            highlight.status(),
+            highlight.createdAt()
+        );
+    }
+
+    static GameHighlightScoreBreakdownResponse calculateHighlightScoreBreakdown(GameHighlightResponse highlight) {
+        if (highlight.strategyTags() == null || highlight.strategyTags().isEmpty()) {
+            return new GameHighlightScoreBreakdownResponse(0L, List.of());
+        }
+
+        List<GameHighlightStrategyScoreResponse> strategyScores = highlight.strategyTags().stream()
+            .map(strategyType -> calculateStrategyHighlightScoreBreakdown(strategyType, highlight))
+            .toList();
+        long totalScore = strategyScores.stream()
+            .mapToLong(GameHighlightStrategyScoreResponse::totalScore)
             .sum();
+        return new GameHighlightScoreBreakdownResponse(totalScore, strategyScores);
     }
 
     static long calculateStrategyHighlightScore(GameStrategyType strategyType, GameHighlightResponse highlight) {
-        long baseScore = switch (strategyType) {
+        return calculateStrategyHighlightScoreBreakdown(strategyType, highlight).totalScore();
+    }
+
+    static GameHighlightStrategyScoreResponse calculateStrategyHighlightScoreBreakdown(
+        GameStrategyType strategyType,
+        GameHighlightResponse highlight
+    ) {
+        long baseScore = resolveStrategyBaseScore(strategyType);
+        long rankDiffBonus = calculateRankDiffHighlightBonus(highlight.rankDiff());
+        long profitRateBonus = calculateProfitRateHighlightBonus(highlight.profitRatePercent());
+        long profitPointsBonus = calculateProfitPointsHighlightBonus(highlight.profitPoints());
+        long totalScore = baseScore + rankDiffBonus + profitRateBonus + profitPointsBonus;
+
+        return new GameHighlightStrategyScoreResponse(
+            strategyType,
+            baseScore,
+            highlight.rankDiff(),
+            RANK_DIFF_HIGHLIGHT_SCORE_MULTIPLIER,
+            rankDiffBonus,
+            highlight.profitRatePercent(),
+            PROFIT_RATE_HIGHLIGHT_SCORE_MULTIPLIER,
+            MAX_PROFIT_RATE_HIGHLIGHT_BONUS,
+            profitRateBonus,
+            highlight.profitPoints(),
+            MIN_PROFIT_POINTS_HIGHLIGHT_BONUS,
+            MAX_PROFIT_POINTS_HIGHLIGHT_BONUS,
+            profitPointsBonus,
+            totalScore
+        );
+    }
+
+    private static long resolveStrategyBaseScore(GameStrategyType strategyType) {
+        return switch (strategyType) {
             case ATLAS_SHOT -> ATLAS_SHOT_HIGHLIGHT_BASE_SCORE;
             case GALAXY_SHOT -> GALAXY_SHOT_HIGHLIGHT_BASE_SCORE;
             case SOLAR_SHOT -> SOLAR_SHOT_HIGHLIGHT_BASE_SCORE;
@@ -1718,17 +1793,20 @@ public class GameService {
             case SMALL_CASHOUT -> SMALL_CASHOUT_HIGHLIGHT_BASE_SCORE;
             case SNIPE -> SNIPE_HIGHLIGHT_BASE_SCORE;
         };
-        long rankDiffBonus = Math.max(0, highlight.rankDiff() != null ? highlight.rankDiff() : 0)
+    }
+
+    private static long calculateRankDiffHighlightBonus(Integer rankDiff) {
+        return Math.max(0, rankDiff != null ? rankDiff : 0)
             * RANK_DIFF_HIGHLIGHT_SCORE_MULTIPLIER;
-        long profitRateBonus = highlight.profitRatePercent() != null
+    }
+
+    private static long calculateProfitRateHighlightBonus(Double profitRatePercent) {
+        return profitRatePercent != null
             ? Math.min(
                 MAX_PROFIT_RATE_HIGHLIGHT_BONUS,
-                Math.max(0L, Math.round(highlight.profitRatePercent() * PROFIT_RATE_HIGHLIGHT_SCORE_MULTIPLIER))
+                Math.max(0L, Math.round(profitRatePercent * PROFIT_RATE_HIGHLIGHT_SCORE_MULTIPLIER))
             )
             : 0L;
-        long profitPointsBonus = calculateProfitPointsHighlightBonus(highlight.profitPoints());
-
-        return baseScore + rankDiffBonus + profitRateBonus + profitPointsBonus;
     }
 
     static long calculateProfitPointsHighlightBonus(Long profitPoints) {
