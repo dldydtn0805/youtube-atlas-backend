@@ -1111,6 +1111,84 @@ class GameServiceTest {
     }
 
     @Test
+    void splitSellSkipsHighlightNotificationWhenRootTagAlreadyScored() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long unitBuyPricePoints = GamePointCalculator.calculatePricePoints(140);
+        long totalBuyPricePoints = GamePointCalculator.calculatePositionPoints(unitBuyPricePoints, TWO_SHARES);
+        GameWallet wallet = wallet(season, appUser, 50_000L - totalBuyPricePoints, totalBuyPricePoints, 0L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            140,
+            totalBuyPricePoints,
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+        position.setQuantity(TWO_SHARES);
+        ReflectionTestUtils.setField(position, "id", 301L);
+
+        java.util.concurrent.atomic.AtomicReference<GamePosition> closedSplitRef =
+            new java.util.concurrent.atomic.AtomicReference<>();
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(301L, 7L)).thenReturn(Optional.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(
+            Optional.of(signal("video-1", 80, 0)),
+            Optional.of(signal("video-1", 70, 0))
+        );
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenAnswer(invocation -> {
+            GamePosition closedSplit = closedSplitRef.get();
+            if (closedSplit == null) {
+                return List.of(position);
+            }
+
+            if (position.getStatus() == PositionStatus.OPEN) {
+                return List.of(closedSplit, position);
+            }
+
+            return List.of(position, closedSplit);
+        });
+        when(gamePositionRepository.findBySeasonIdAndUserIdAndScoreRootIdAndStatus(1L, 7L, 301L, PositionStatus.CLOSED))
+            .thenAnswer(invocation -> {
+                List<GamePosition> closedPositions = new ArrayList<>();
+                if (closedSplitRef.get() != null) {
+                    closedPositions.add(closedSplitRef.get());
+                }
+                if (position.getStatus() == PositionStatus.CLOSED) {
+                    closedPositions.add(position);
+                }
+                return closedPositions;
+            });
+        when(gamePositionRepository.save(any(GamePosition.class))).thenAnswer(invocation -> {
+            GamePosition savedPosition = invocation.getArgument(0, GamePosition.class);
+            if (savedPosition != position && savedPosition.getId() == null) {
+                ReflectionTestUtils.setField(savedPosition, "id", 302L);
+                closedSplitRef.set(savedPosition);
+            }
+            return savedPosition;
+        });
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        gameService.sell(authenticatedUser(), new SellPositionsRequest("KR", 301L, null, ONE_SHARE));
+        gameService.sell(authenticatedUser(), 301L);
+
+        verify(gameNotificationService, org.mockito.Mockito.times(1))
+            .createAndPush(
+                org.mockito.ArgumentMatchers.eq(appUser),
+                org.mockito.ArgumentMatchers.eq(season),
+                org.mockito.ArgumentMatchers.argThat(notifications ->
+                    notifications.stream().anyMatch(notification ->
+                        "game-302-SMALL_CASHOUT".equals(notification.id())
+                    )
+                )
+            );
+    }
+
+    @Test
     void publishProjectedHighlightNotificationsPushesWhenProjectedScoreBeatsRecordedHighScore() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
@@ -1149,7 +1227,58 @@ class GameServiceTest {
             org.mockito.ArgumentMatchers.eq(openPosition),
             org.mockito.ArgumentMatchers.eq(10),
             org.mockito.ArgumentMatchers.anyLong(),
-            org.mockito.ArgumentMatchers.any(Instant.class)
+            org.mockito.ArgumentMatchers.any(Instant.class),
+            org.mockito.ArgumentMatchers.anyList(),
+            org.mockito.ArgumentMatchers.anyLong()
+        );
+    }
+
+    @Test
+    void publishProjectedHighlightNotificationsSkipsRootTagAlreadyScored() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(140);
+        GamePosition openPosition = openPosition(
+            season,
+            appUser,
+            "video-1",
+            140,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:40:00Z")
+        );
+        ReflectionTestUtils.setField(openPosition, "id", 300L);
+        GamePosition settledPosition = closedPosition(
+            season,
+            appUser,
+            301L,
+            buyPricePoints,
+            140,
+            80,
+            Instant.parse("2026-04-01T05:40:00Z"),
+            Instant.parse("2026-04-01T05:50:00Z")
+        );
+        settledPosition.setOriginPositionId(300L);
+        settledPosition.setVideoId("video-1");
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(openPosition));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L))
+            .thenReturn(List.of(settledPosition, openPosition));
+        when(gamePositionRepository.findBySeasonIdAndUserIdAndScoreRootIdAndStatus(1L, 7L, 300L, PositionStatus.CLOSED))
+            .thenReturn(List.of(settledPosition));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
+            .thenReturn(List.of(signal("video-1", 70, 0)));
+
+        gameService.publishProjectedHighlightNotifications("KR");
+
+        verify(gameNotificationService, never()).createAndPushPositionSnapshot(
+            org.mockito.ArgumentMatchers.any(GamePosition.class),
+            org.mockito.ArgumentMatchers.anyInt(),
+            org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.any(Instant.class),
+            org.mockito.ArgumentMatchers.anyList(),
+            org.mockito.ArgumentMatchers.anyLong()
         );
     }
 

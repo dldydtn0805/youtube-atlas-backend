@@ -2278,17 +2278,38 @@ public class GameService {
         if (currentScore <= previousBestScore) {
             return;
         }
+        long scoreGain = currentScore - previousBestScore;
+        if (scoreGain <= 0L) {
+            return;
+        }
+
+        Set<GameStrategyType> scoredStrategyTags = resolveScoredRootStrategyTags(
+            settledPosition,
+            settledPosition.getId()
+        );
+        scoredStrategyTags.addAll(parseStoredStrategyTags(state.getStrategyTags()));
+        List<GameStrategyType> notificationStrategyTags = removeScoredStrategyTags(
+            currentHighlight.strategyTags(),
+            scoredStrategyTags
+        );
 
         applyStoredHighlight(state, currentHighlight);
         GameHighlightState savedState = gameHighlightStateRepository.save(state);
         List<AchievementTitle> unlockedTitles =
             achievementTitleService.grantTitlesForHighlight(savedState, AchievementTitleSourceType.HIGHLIGHT);
-
-        gameNotificationService.createAndPush(
-            settledPosition.getUser(),
-            settledPosition.getSeason(),
-            GameNotificationFactory.fromHighlight(currentHighlight)
+        List<GameNotificationResponse> highlightNotifications = GameNotificationFactory.fromHighlight(
+            currentHighlight,
+            scoreGain,
+            notificationStrategyTags
         );
+
+        if (!highlightNotifications.isEmpty()) {
+            gameNotificationService.createAndPush(
+                settledPosition.getUser(),
+                settledPosition.getSeason(),
+                highlightNotifications
+            );
+        }
         if (!unlockedTitles.isEmpty()) {
             gameNotificationService.createAndPush(
                 settledPosition.getUser(),
@@ -2334,12 +2355,17 @@ public class GameService {
             resolveOpenPositionUnitPricePoints(snapshot),
             getPositionQuantity(position)
         );
+        List<GameStrategyType> achievedStrategyTags = GameStrategyResolver.resolveAchievedPositionStrategyTags(
+            position,
+            snapshot.currentRank(),
+            currentPricePoints
+        );
         long projectedScore = calculateProjectedPositionHighlightScore(
             position.getBuyRank(),
             position.getBuyRank() - snapshot.currentRank(),
             GameStrategyResolver.calculateProfitRatePercent(position.getStakePoints(), currentPricePoints),
             GamePointCalculator.calculateProfitPoints(position.getStakePoints(), currentPricePoints),
-            GameStrategyResolver.resolveAchievedPositionStrategyTags(position, snapshot.currentRank(), currentPricePoints)
+            achievedStrategyTags
         );
         if (projectedScore <= 0L) {
             return;
@@ -2351,7 +2377,18 @@ public class GameService {
             position.getUser(),
             resolvePositionScoreRootId(position)
         );
-        if (projectedScore <= state.getBestSettledHighlightScore()
+        Set<GameStrategyType> scoredStrategyTags = resolveScoredRootStrategyTags(position, null);
+        scoredStrategyTags.addAll(parseStoredStrategyTags(state.getStrategyTags()));
+        List<GameStrategyType> notificationStrategyTags = removeScoredStrategyTags(
+            achievedStrategyTags,
+            scoredStrategyTags
+        );
+        if (notificationStrategyTags.isEmpty()) {
+            return;
+        }
+
+        long projectedScoreGain = projectedScore - state.getBestSettledHighlightScore();
+        if (projectedScoreGain <= 0L
             || projectedScore <= state.getBestProjectedNotificationScore()) {
             return;
         }
@@ -2364,8 +2401,67 @@ public class GameService {
             position,
             snapshot.currentRank(),
             currentPricePoints,
-            snapshot.capturedAt()
+            snapshot.capturedAt(),
+            notificationStrategyTags,
+            projectedScoreGain
         );
+    }
+
+    private List<GameStrategyType> removeScoredStrategyTags(
+        List<GameStrategyType> strategyTags,
+        Set<GameStrategyType> scoredStrategyTags
+    ) {
+        if (strategyTags == null || strategyTags.isEmpty()) {
+            return List.of();
+        }
+
+        if (scoredStrategyTags == null || scoredStrategyTags.isEmpty()) {
+            return strategyTags;
+        }
+
+        return strategyTags.stream()
+            .filter(strategyTag -> !scoredStrategyTags.contains(strategyTag))
+            .toList();
+    }
+
+    private Set<GameStrategyType> resolveScoredRootStrategyTags(GamePosition position, Long excludedPositionId) {
+        if (position == null || position.getSeason() == null || position.getUser() == null) {
+            return new HashSet<>();
+        }
+
+        List<GamePosition> settledPositions = gamePositionRepository.findBySeasonIdAndUserIdAndScoreRootIdAndStatus(
+            position.getSeason().getId(),
+            position.getUser().getId(),
+            resolvePositionScoreRootId(position),
+            PositionStatus.CLOSED
+        );
+        if (settledPositions == null || settledPositions.isEmpty()) {
+            return new HashSet<>();
+        }
+
+        List<GameHighlightResponse> highlights = settledPositions.stream()
+            .filter(settledPosition -> !Objects.equals(settledPosition.getId(), excludedPositionId))
+            .map(this::toSettledGameHighlightResponse)
+            .filter(Objects::nonNull)
+            .sorted(
+                Comparator
+                    .comparing(GameHighlightResponse::createdAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                    .thenComparing(GameHighlightResponse::positionId, Comparator.nullsLast(Comparator.naturalOrder()))
+            )
+            .toList();
+
+        Set<GameStrategyType> scoredStrategyTags = new HashSet<>();
+        long bestScore = 0L;
+        for (GameHighlightResponse highlight : highlights) {
+            long highlightScore = calculateHighlightScore(highlight);
+            if (highlightScore <= bestScore) {
+                continue;
+            }
+
+            scoredStrategyTags.addAll(highlight.strategyTags());
+            bestScore = highlightScore;
+        }
+        return scoredStrategyTags;
     }
 
     private GameHighlightState findOrCreateHighlightStateForUpdate(GameSeason season, AppUser user, Long rootPositionId) {

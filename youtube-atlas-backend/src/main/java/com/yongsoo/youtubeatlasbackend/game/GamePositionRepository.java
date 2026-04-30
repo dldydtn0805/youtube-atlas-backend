@@ -109,6 +109,25 @@ public interface GamePositionRepository extends JpaRepository<GamePosition, Long
 
     List<GamePosition> findBySeasonId(Long seasonId);
 
+    @Query("""
+        select position
+        from GamePosition position
+        where position.season.id = :seasonId
+          and position.user.id = :userId
+          and position.status = :status
+          and (
+            position.id = :rootPositionId
+            or position.originPositionId = :rootPositionId
+          )
+        order by position.closedAt asc nulls last, position.id asc
+    """)
+    List<GamePosition> findBySeasonIdAndUserIdAndScoreRootIdAndStatus(
+        Long seasonId,
+        Long userId,
+        Long rootPositionId,
+        PositionStatus status
+    );
+
     @org.springframework.data.jpa.repository.Modifying
     @Query("""
         delete from GamePosition position

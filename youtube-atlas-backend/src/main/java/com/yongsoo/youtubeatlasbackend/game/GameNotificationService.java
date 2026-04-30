@@ -69,11 +69,43 @@ public class GameNotificationService {
         long currentValuePoints,
         Instant capturedAt
     ) {
+        return createAndPushPositionSnapshot(position, currentRank, currentValuePoints, capturedAt, null);
+    }
+
+    @Transactional
+    public List<GameNotificationResponse> createAndPushPositionSnapshot(
+        GamePosition position,
+        int currentRank,
+        long currentValuePoints,
+        Instant capturedAt,
+        List<GameStrategyType> notificationStrategyTags
+    ) {
+        return createAndPushPositionSnapshot(
+            position,
+            currentRank,
+            currentValuePoints,
+            capturedAt,
+            notificationStrategyTags,
+            null
+        );
+    }
+
+    @Transactional
+    public List<GameNotificationResponse> createAndPushPositionSnapshot(
+        GamePosition position,
+        int currentRank,
+        long currentValuePoints,
+        Instant capturedAt,
+        List<GameStrategyType> notificationStrategyTags,
+        Long notificationHighlightScore
+    ) {
         List<GameNotificationResponse> notifications = GameNotificationFactory.fromPositionSnapshot(
             position,
             currentRank,
             currentValuePoints,
-            capturedAt
+            capturedAt,
+            notificationStrategyTags,
+            notificationHighlightScore
         );
         return notifications.stream()
             .map(notification -> saveProjectedNotificationResult(position.getUser(), position.getSeason(), notification))

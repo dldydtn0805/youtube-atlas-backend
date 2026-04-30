@@ -15,6 +15,14 @@ final class GameNotificationFactory {
     }
 
     static List<GameNotificationResponse> fromHighlight(GameHighlightResponse highlight) {
+        return fromHighlight(highlight, highlight != null ? highlight.highlightScore() : 0L, null);
+    }
+
+    static List<GameNotificationResponse> fromHighlight(
+        GameHighlightResponse highlight,
+        long scoreGain,
+        List<GameStrategyType> notificationStrategyTags
+    ) {
         if (highlight == null) {
             return List.of();
         }
@@ -23,8 +31,20 @@ final class GameNotificationFactory {
             return List.of();
         }
 
-        return highlight.strategyTags().stream()
-            .map(strategyType -> fromHighlight(highlight, strategyType))
+        if (scoreGain <= 0L) {
+            return List.of();
+        }
+
+        List<GameStrategyType> strategyTags = resolveNotificationStrategyTags(
+            highlight.strategyTags(),
+            notificationStrategyTags
+        );
+        if (strategyTags.isEmpty()) {
+            return List.of();
+        }
+
+        return strategyTags.stream()
+            .map(strategyType -> fromHighlight(highlight, scoreGain, strategyTags, strategyType))
             .toList();
     }
 
@@ -33,6 +53,27 @@ final class GameNotificationFactory {
         int currentRank,
         long currentPricePoints,
         Instant createdAt
+    ) {
+        return fromPositionSnapshot(position, currentRank, currentPricePoints, createdAt, null);
+    }
+
+    static List<GameNotificationResponse> fromPositionSnapshot(
+        GamePosition position,
+        int currentRank,
+        long currentPricePoints,
+        Instant createdAt,
+        List<GameStrategyType> notificationStrategyTags
+    ) {
+        return fromPositionSnapshot(position, currentRank, currentPricePoints, createdAt, notificationStrategyTags, null);
+    }
+
+    static List<GameNotificationResponse> fromPositionSnapshot(
+        GamePosition position,
+        int currentRank,
+        long currentPricePoints,
+        Instant createdAt,
+        List<GameStrategyType> notificationStrategyTags,
+        Long notificationHighlightScore
     ) {
         long profitPoints = GamePointCalculator.calculateProfitPoints(position.getStakePoints(), currentPricePoints);
         Double profitRatePercent = GameStrategyResolver.calculateProfitRatePercent(
@@ -49,6 +90,14 @@ final class GameNotificationFactory {
             return List.of();
         }
 
+        List<GameStrategyType> strategyTagsToNotify = resolveNotificationStrategyTags(
+            strategyTags,
+            notificationStrategyTags
+        );
+        if (strategyTagsToNotify.isEmpty()) {
+            return List.of();
+        }
+
         int rankDiff = position.getBuyRank() - currentRank;
         long projectedHighlightScore = GameService.calculateProjectedPositionHighlightScore(
             position.getBuyRank(),
@@ -57,14 +106,21 @@ final class GameNotificationFactory {
             profitPoints,
             strategyTags
         );
-        return strategyTags.stream()
+        long highlightScore = notificationHighlightScore != null
+            ? notificationHighlightScore
+            : projectedHighlightScore;
+        if (highlightScore <= 0L) {
+            return List.of();
+        }
+
+        return strategyTagsToNotify.stream()
             .map(strategyType -> fromPositionSnapshot(
                 position,
                 currentRank,
                 rankDiff,
                 profitRatePercent,
-                strategyTags,
-                projectedHighlightScore,
+                strategyTagsToNotify,
+                highlightScore,
                 createdAt,
                 strategyType
             ))
@@ -133,7 +189,12 @@ final class GameNotificationFactory {
             .toList();
     }
 
-    private static GameNotificationResponse fromHighlight(GameHighlightResponse highlight, GameStrategyType strategyType) {
+    private static GameNotificationResponse fromHighlight(
+        GameHighlightResponse highlight,
+        long scoreGain,
+        List<GameStrategyType> strategyTags,
+        GameStrategyType strategyType
+    ) {
         return new GameNotificationResponse(
             resolveId(highlight.positionId(), strategyType),
             GameNotificationEventType.TIER_SCORE_GAIN,
@@ -145,8 +206,8 @@ final class GameNotificationFactory {
             highlight.videoTitle(),
             highlight.channelTitle(),
             highlight.thumbnailUrl(),
-            highlight.strategyTags(),
-            highlight.highlightScore(),
+            strategyTags,
+            scoreGain,
             null,
             null,
             null,
@@ -202,6 +263,23 @@ final class GameNotificationFactory {
 
     private static String resolveTitleUnlockId(String titleCode) {
         return "title-unlock-" + titleCode;
+    }
+
+    private static List<GameStrategyType> resolveNotificationStrategyTags(
+        List<GameStrategyType> strategyTags,
+        List<GameStrategyType> notificationStrategyTags
+    ) {
+        if (notificationStrategyTags == null) {
+            return strategyTags;
+        }
+
+        if (notificationStrategyTags.isEmpty()) {
+            return List.of();
+        }
+
+        return strategyTags.stream()
+            .filter(notificationStrategyTags::contains)
+            .toList();
     }
 
     private static String resolveTitle(GameStrategyType strategyType) {

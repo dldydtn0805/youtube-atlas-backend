@@ -494,6 +494,7 @@ values
 - 알림은 서버에 저장되며 `readAt`, `deletedAt` 상태로 읽음/삭제를 관리합니다.
 - 로그인 직후 `GET /api/game/seasons/current` 응답의 `notifications` 를 사용하거나 이 API를 따로 호출하면 됩니다.
 - 로그인 상태에서 WebSocket을 연결하면 같은 알림이 `/user/queue/game/notifications` 로 실시간 전달됩니다.
+- 하이라이트 알림의 `highlightScore` 는 같은 루트 포지션의 기존 최고점 대비 이번 알림으로 추가되는 점수입니다.
 
 응답 예시:
 
