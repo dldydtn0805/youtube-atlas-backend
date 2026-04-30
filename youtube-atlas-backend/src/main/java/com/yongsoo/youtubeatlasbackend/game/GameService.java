@@ -78,8 +78,9 @@ public class GameService {
     private static final long PROFIT_RATE_HIGHLIGHT_SCORE_MULTIPLIER = 10L;
     private static final long MAX_PROFIT_RATE_HIGHLIGHT_BONUS = 5_000L;
     private static final long MIN_PROFIT_POINTS_HIGHLIGHT_BONUS = 5_000L;
-    private static final double PROFIT_POINTS_HIGHLIGHT_SQRT_SCALE = 0.75D;
     private static final long MAX_PROFIT_POINTS_HIGHLIGHT_BONUS = 15_000L;
+    private static final double PROFIT_POINTS_HIGHLIGHT_LOG_SCALE = 5_000_000D;
+    private static final double PROFIT_POINTS_HIGHLIGHT_LOG_SOFT_CAP_WIDTH = 3D;
 
     private final GameSeasonRepository gameSeasonRepository;
     private final GameWalletRepository gameWalletRepository;
@@ -1736,11 +1737,10 @@ public class GameService {
         }
 
         double normalizedProfitPoints = Math.max(0D, profitPoints - MIN_PROFIT_POINTS_HIGHLIGHT_BONUS);
-
-        return Math.min(
-            MAX_PROFIT_POINTS_HIGHLIGHT_BONUS,
-            Math.max(0L, Math.round(Math.sqrt(normalizedProfitPoints) * PROFIT_POINTS_HIGHLIGHT_SQRT_SCALE))
-        );
+        double logBonus = Math.log1p(normalizedProfitPoints / PROFIT_POINTS_HIGHLIGHT_LOG_SCALE);
+        double softCappedBonus = MAX_PROFIT_POINTS_HIGHLIGHT_BONUS
+            * (logBonus / (logBonus + PROFIT_POINTS_HIGHLIGHT_LOG_SOFT_CAP_WIDTH));
+        return Math.max(0L, (long) Math.floor(softCappedBonus));
     }
 
     @Transactional(readOnly = true)

@@ -39,7 +39,7 @@ class GameHighlightScoringTest {
         GameHighlightResponse highlight = highlight(List.of(GameStrategyType.MOONSHOT));
 
         assertThat(GameService.calculateStrategyHighlightScore(GameStrategyType.MOONSHOT, highlight))
-            .isEqualTo(28_367L);
+            .isEqualTo(28_307L);
     }
 
     @Test
@@ -47,7 +47,7 @@ class GameHighlightScoringTest {
         GameHighlightResponse highlight = highlight(List.of(GameStrategyType.ATLAS_SHOT));
 
         assertThat(GameService.calculateStrategyHighlightScore(GameStrategyType.ATLAS_SHOT, highlight))
-            .isEqualTo(68_367L);
+            .isEqualTo(68_307L);
     }
 
     @Test
@@ -55,7 +55,7 @@ class GameHighlightScoringTest {
         GameHighlightResponse highlight = highlight(List.of(GameStrategyType.GALAXY_SHOT));
 
         assertThat(GameService.calculateStrategyHighlightScore(GameStrategyType.GALAXY_SHOT, highlight))
-            .isEqualTo(53_367L);
+            .isEqualTo(53_307L);
     }
 
     @Test
@@ -63,7 +63,7 @@ class GameHighlightScoringTest {
         GameHighlightResponse highlight = highlight(List.of(GameStrategyType.SOLAR_SHOT));
 
         assertThat(GameService.calculateStrategyHighlightScore(GameStrategyType.SOLAR_SHOT, highlight))
-            .isEqualTo(43_367L);
+            .isEqualTo(43_307L);
     }
 
     @Test
@@ -71,15 +71,16 @@ class GameHighlightScoringTest {
         GameHighlightResponse highlight = highlight(List.of(GameStrategyType.SNIPE));
 
         assertThat(GameService.calculateStrategyHighlightScore(GameStrategyType.SNIPE, highlight))
-            .isEqualTo(13_367L);
+            .isEqualTo(13_307L);
     }
 
     @Test
-    void usesUnifiedProfitBonusCap() {
+    void usesLogProfitBonusCurveBelowCap() {
         assertThat(GameService.calculateProfitPointsHighlightBonus(5_000L)).isZero();
-        assertThat(GameService.calculateProfitPointsHighlightBonus(1_000_000L)).isEqualTo(748L);
-        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000_000L)).isEqualTo(7_500L);
-        assertThat(GameService.calculateProfitPointsHighlightBonus(400_005_000L)).isEqualTo(15_000L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(1_000_000L)).isEqualTo(855L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000_000L)).isEqualTo(7_555L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(400_005_000L)).isEqualTo(8_914L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(Long.MAX_VALUE)).isLessThan(15_000L);
     }
 
     private GameHighlightResponse highlight(List<GameStrategyType> strategyTags) {
