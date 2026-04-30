@@ -1980,15 +1980,16 @@ class GameServiceTest {
     }
 
     @Test
-    void calculateProfitPointsHighlightBonusUsesThresholdAndSqrtCap() {
+    void calculateProfitPointsHighlightBonusUsesThresholdAndLogSoftCap() {
         assertThat(GameService.calculateProfitPointsHighlightBonus(null)).isZero();
         assertThat(GameService.calculateProfitPointsHighlightBonus(4_999L)).isZero();
         assertThat(GameService.calculateProfitPointsHighlightBonus(5_000L)).isZero();
-        assertThat(GameService.calculateProfitPointsHighlightBonus(30_000L)).isEqualTo(119L);
-        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000L)).isEqualTo(231L);
-        assertThat(GameService.calculateProfitPointsHighlightBonus(1_000_000L)).isEqualTo(748L);
-        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000_000L)).isEqualTo(7_500L);
-        assertThat(GameService.calculateProfitPointsHighlightBonus(400_005_000L)).isEqualTo(15_000L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(30_000L)).isEqualTo(24L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000L)).isEqualTo(93L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(1_000_000L)).isEqualTo(855L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(100_000_000L)).isEqualTo(7_555L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(400_005_000L)).isEqualTo(8_914L);
+        assertThat(GameService.calculateProfitPointsHighlightBonus(Long.MAX_VALUE)).isLessThan(15_000L);
     }
 
     @Test

@@ -89,7 +89,13 @@ with recalculated_highlights as (
                 end
                 + case
                     when ghs.profit_points is null or ghs.profit_points < 5000 then 0
-                    else least(15000, greatest(0, round((sqrt((ghs.profit_points - 5000)::double precision) * 0.75)::numeric)::bigint))
+                    else floor(
+                        15000
+                        * (
+                            ln(1 + ((ghs.profit_points - 5000)::double precision / 5000000))
+                            / (ln(1 + ((ghs.profit_points - 5000)::double precision / 5000000)) + 3)
+                        )
+                    )::bigint
                 end
             end
         ), 0) as highlight_score
