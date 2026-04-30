@@ -345,7 +345,7 @@ class GameServiceTest {
         assertThat(response.get(0).stakePoints()).isEqualTo(buyPricePoints);
         assertThat(response.get(0).currentPricePoints()).isEqualTo(buyPricePoints);
         assertThat(response.get(0).achievedStrategyTags()).isEmpty();
-        assertThat(response.get(0).targetStrategyTags()).isEmpty();
+        assertThat(response.get(0).targetStrategyTags()).containsExactly(GameStrategyType.SNIPE);
         assertThat(response.get(0).projectedHighlightScore()).isZero();
         assertThat(wallet.getBalancePoints()).isEqualTo(10_000L - buyPricePoints);
         assertThat(wallet.getReservedPoints()).isEqualTo(buyPricePoints);

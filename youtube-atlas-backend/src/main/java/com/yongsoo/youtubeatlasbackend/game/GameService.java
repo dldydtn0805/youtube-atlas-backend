@@ -1409,6 +1409,8 @@ public class GameService {
             currentPricePoints
         );
         List<GameStrategyType> targetStrategyTags = GameStrategyResolver.resolveTargetPositionStrategyTags(
+            position,
+            snapshot.currentRank(),
             strategyTags,
             achievedStrategyTags
         );

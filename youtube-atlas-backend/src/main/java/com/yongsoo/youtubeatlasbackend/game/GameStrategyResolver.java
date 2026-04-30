@@ -109,6 +109,8 @@ final class GameStrategyResolver {
     }
 
     static List<GameStrategyType> resolveTargetPositionStrategyTags(
+        GamePosition position,
+        Integer currentRank,
         List<GameStrategyType> positionStrategyTags,
         List<GameStrategyType> achievedStrategyTags
     ) {
@@ -121,7 +123,71 @@ final class GameStrategyResolver {
             targets.add(0, GameStrategyType.BIG_CASHOUT);
         }
 
+        GameStrategyType nextShotTarget = resolveNextShotTarget(position.getBuyRank(), currentRank);
+        if (nextShotTarget != null && !targets.contains(nextShotTarget)) {
+            targets.add(nextShotTarget);
+        }
+
         return List.copyOf(targets);
+    }
+
+    private static GameStrategyType resolveNextShotTarget(Integer buyRank, Integer currentRank) {
+        if (canTargetSnipe(buyRank, currentRank)) {
+            return GameStrategyType.SNIPE;
+        }
+
+        if (canTargetMoonshot(buyRank, currentRank)) {
+            return GameStrategyType.MOONSHOT;
+        }
+
+        if (canTargetSolarShot(buyRank, currentRank)) {
+            return GameStrategyType.SOLAR_SHOT;
+        }
+
+        if (canTargetGalaxyShot(buyRank, currentRank)) {
+            return GameStrategyType.GALAXY_SHOT;
+        }
+
+        if (canTargetAtlasShot(buyRank, currentRank)) {
+            return GameStrategyType.ATLAS_SHOT;
+        }
+
+        return null;
+    }
+
+    private static boolean canTargetSnipe(Integer buyRank, Integer currentRank) {
+        return buyRank != null
+            && currentRank != null
+            && buyRank >= SNIPE_BUY_RANK_MIN
+            && currentRank > SNIPE_TARGET_RANK_MAX;
+    }
+
+    private static boolean canTargetMoonshot(Integer buyRank, Integer currentRank) {
+        return buyRank != null
+            && currentRank != null
+            && buyRank >= MOONSHOT_BUY_RANK_MIN
+            && currentRank > MOONSHOT_TARGET_RANK_MAX;
+    }
+
+    private static boolean canTargetSolarShot(Integer buyRank, Integer currentRank) {
+        return buyRank != null
+            && currentRank != null
+            && buyRank >= SOLAR_SHOT_BUY_RANK_MIN
+            && currentRank > SOLAR_SHOT_TARGET_RANK_MAX;
+    }
+
+    private static boolean canTargetGalaxyShot(Integer buyRank, Integer currentRank) {
+        return buyRank != null
+            && currentRank != null
+            && buyRank >= GALAXY_SHOT_BUY_RANK_MIN
+            && currentRank > GALAXY_SHOT_TARGET_RANK_MAX;
+    }
+
+    private static boolean canTargetAtlasShot(Integer buyRank, Integer currentRank) {
+        return buyRank != null
+            && currentRank != null
+            && buyRank >= ATLAS_SHOT_BUY_RANK_MIN
+            && currentRank > ATLAS_SHOT_TARGET_RANK_MAX;
     }
 
     private static boolean matchesAtlasShot(Integer buyRank, Integer currentRank) {

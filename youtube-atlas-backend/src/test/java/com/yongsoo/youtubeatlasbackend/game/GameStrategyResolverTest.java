@@ -183,9 +183,59 @@ class GameStrategyResolverTest {
             GameStrategyType.SMALL_CASHOUT,
             GameStrategyType.SNIPE
         );
-        assertThat(GameStrategyResolver.resolveTargetPositionStrategyTags(positionTags, achievedTags)).containsExactly(
-            GameStrategyType.BIG_CASHOUT
+        assertThat(GameStrategyResolver.resolveTargetPositionStrategyTags(position, 15, positionTags, achievedTags)).containsExactly(
+            GameStrategyType.BIG_CASHOUT,
+            GameStrategyType.GALAXY_SHOT
         );
+    }
+
+    @Test
+    void resolvesOnlyTheNextShotTarget() {
+        GamePosition position = openPosition(180, Instant.parse("2026-04-01T05:30:00Z"), 100L);
+
+        assertThat(shotTargetTags(position, 120)).containsExactly(GameStrategyType.SNIPE);
+        assertThat(shotTargetTags(position, 80)).containsExactly(GameStrategyType.MOONSHOT);
+        assertThat(shotTargetTags(position, 45)).containsExactly(GameStrategyType.SOLAR_SHOT);
+        assertThat(shotTargetTags(position, 15)).containsExactly(GameStrategyType.GALAXY_SHOT);
+        assertThat(shotTargetTags(position, 4)).containsExactly(GameStrategyType.ATLAS_SHOT);
+    }
+
+    @Test
+    void skipsShotTargetsThatCannotBeEarnedFromBuyRank() {
+        GamePosition solarPosition = openPosition(80, Instant.parse("2026-04-01T05:30:00Z"), 100L);
+        GamePosition atlasPosition = openPosition(10, Instant.parse("2026-04-01T05:30:00Z"), 100L);
+
+        assertThat(shotTargetTags(solarPosition, 80)).containsExactly(GameStrategyType.SOLAR_SHOT);
+        assertThat(shotTargetTags(atlasPosition, 4)).containsExactly(GameStrategyType.ATLAS_SHOT);
+    }
+
+    private List<GameStrategyType> shotTargetTags(GamePosition position, int currentRank) {
+        return targetTags(position, currentRank).stream()
+            .filter(GameStrategyResolverTest::isShotTag)
+            .toList();
+    }
+
+    private static boolean isShotTag(GameStrategyType tag) {
+        return switch (tag) {
+            case SNIPE, MOONSHOT, SOLAR_SHOT, GALAXY_SHOT, ATLAS_SHOT -> true;
+            case SMALL_CASHOUT, BIG_CASHOUT -> false;
+        };
+    }
+
+    private List<GameStrategyType> targetTags(GamePosition position, int currentRank) {
+        List<GameStrategyType> positionTags = GameStrategyResolver.resolvePositionStrategyTags(
+            position,
+            currentRank,
+            position.getStakePoints(),
+            false,
+            Instant.parse("2026-04-01T06:00:00Z")
+        );
+        List<GameStrategyType> achievedTags = GameStrategyResolver.resolveAchievedPositionStrategyTags(
+            position,
+            currentRank,
+            position.getStakePoints()
+        );
+        return GameStrategyResolver.resolveTargetPositionStrategyTags(position, currentRank, positionTags, achievedTags);
     }
 
     private GamePosition openPosition(int buyRank, Instant createdAt, long stakePoints) {
