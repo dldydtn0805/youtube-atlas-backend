@@ -20,6 +20,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.yongsoo.youtubeatlasbackend.auth.AppUser;
+import com.yongsoo.youtubeatlasbackend.auth.AuthException;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.comments.api.ChatMessageResponse;
 import com.yongsoo.youtubeatlasbackend.comments.api.CreateCommentRequest;
@@ -138,11 +139,11 @@ class CommentServiceTest {
 
     @Test
     void createCommentNormalizesContentAndPublishesRealtimeMessage() {
-        when(commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID, "client-1"))
+        when(commentRepository.findTopByVideoIdAndUserIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID, 7L))
             .thenReturn(Optional.empty());
-        when(commentRepository.existsByVideoIdAndClientIdAndContentAndCreatedAtAfter(
+        when(commentRepository.existsByVideoIdAndUserIdAndContentAndCreatedAtAfter(
             eq(CommentService.GLOBAL_ROOM_VIDEO_ID),
-            eq("client-1"),
+            eq(7L),
             eq("hello world"),
             any(Instant.class)
         )).thenReturn(false);
@@ -154,16 +155,17 @@ class CommentServiceTest {
 
         ChatMessageResponse response = commentService.createComment(
             "video-1",
-            new CreateCommentRequest("  ", " hello   world ", " client-1 ")
+            new CreateCommentRequest("  ", " hello   world ", " client-1 "),
+            authenticatedUser()
         );
 
-        assertThat(response.author()).isEqualTo("익명");
+        assertThat(response.author()).isEqualTo("Atlas User");
         assertThat(response.content()).isEqualTo("hello world");
         assertThat(response.messageType()).isEqualTo(CommentService.USER_MESSAGE_TYPE);
         assertThat(response.systemEventType()).isNull();
-        assertThat(response.userId()).isNull();
+        assertThat(response.userId()).isEqualTo(7L);
         assertThat(response.videoId()).isEqualTo(CommentService.GLOBAL_ROOM_VIDEO_ID);
-        verify(commentPresenceService).rememberParticipantName("client-1", "익명");
+        verify(commentPresenceService).rememberParticipantName("client-1", "Atlas User");
         verify(messagingTemplate).convertAndSend("/topic/comments", response);
     }
 
@@ -172,17 +174,31 @@ class CommentServiceTest {
         Comment latestComment = new Comment();
         latestComment.setVideoId("video-1");
         latestComment.setClientId("client-1");
+        latestComment.setUserId(7L);
         latestComment.setCreatedAt(Instant.parse("2026-03-24T09:59:57Z"));
 
-        when(commentRepository.findTopByVideoIdAndClientIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID, "client-1"))
+        when(commentRepository.findTopByVideoIdAndUserIdOrderByCreatedAtDesc(CommentService.GLOBAL_ROOM_VIDEO_ID, 7L))
             .thenReturn(Optional.of(latestComment));
 
         assertThatThrownBy(() -> commentService.createComment(
             "video-1",
-            new CreateCommentRequest("익명", "다음 메시지", "client-1")
+            new CreateCommentRequest("익명", "다음 메시지", "client-1"),
+            authenticatedUser()
         ))
             .isInstanceOf(CommentPolicyViolationException.class)
             .hasMessageContaining("초 후에 다시");
+
+        verify(commentRepository, never()).save(any(Comment.class));
+        verify(messagingTemplate, never()).convertAndSend(any(String.class), any(Object.class));
+    }
+
+    @Test
+    void createCommentRejectsUnauthenticatedUser() {
+        assertThatThrownBy(() -> commentService.createComment(
+            new CreateCommentRequest("익명", "로그인 없이 보내기", "client-1")
+        ))
+            .isInstanceOf(AuthException.class)
+            .hasMessage("로그인이 필요합니다.");
 
         verify(commentRepository, never()).save(any(Comment.class));
         verify(messagingTemplate, never()).convertAndSend(any(String.class), any(Object.class));
@@ -207,7 +223,7 @@ class CommentServiceTest {
         ChatMessageResponse response = commentService.createComment(
             "video-1",
             new CreateCommentRequest("익명", "로그인한 사용자입니다", "client-1"),
-            new AuthenticatedUser(7L, "atlas@example.com", "Atlas User", null)
+            authenticatedUser()
         );
 
         assertThat(response.author()).isEqualTo("Atlas User");
@@ -230,7 +246,7 @@ class CommentServiceTest {
         assertThatThrownBy(() -> commentService.createComment(
             "video-1",
             new CreateCommentRequest("익명", "다음 메시지", "client-1"),
-            new AuthenticatedUser(7L, "atlas@example.com", "Atlas User", null)
+            authenticatedUser()
         ))
             .isInstanceOf(CommentPolicyViolationException.class)
             .hasMessageContaining("초 후에 다시");
@@ -354,6 +370,10 @@ class CommentServiceTest {
         ReflectionTestUtils.setField(user, "id", id);
         user.setDisplayName("Atlas User");
         return user;
+    }
+
+    private AuthenticatedUser authenticatedUser() {
+        return new AuthenticatedUser(7L, "atlas@example.com", "Atlas User", null);
     }
 
     private GameSeason season(Long id, String regionCode) {

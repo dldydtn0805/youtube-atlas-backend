@@ -1206,7 +1206,7 @@ Authorization: Bearer {accessToken}
 ### `GET /api/comments/presence`
 
 전역 채팅방의 현재 접속자 수와 표시 가능한 참여자 목록을 반환합니다.
-아직 메시지를 보내지 않은 비로그인 참여자는 임시 익명 이름으로 표시됩니다.
+아직 로그인 표시명이 연결되지 않은 참여자는 임시 익명 이름으로 표시됩니다.
 
 ```json
 {
@@ -1239,6 +1239,10 @@ Authorization: Bearer {accessToken}
 
 ### `POST /api/comments`
 
+요청 헤더:
+
+- `Authorization: Bearer {accessToken}`
+
 요청 본문:
 
 ```json
@@ -1250,14 +1254,14 @@ Authorization: Bearer {accessToken}
 }
 ```
 
-- `author` 가 비어 있으면 `"익명"` 으로 저장됩니다.
-- `Authorization: Bearer {accessToken}` 헤더가 있으면 댓글 작성자는 로그인 사용자 이름으로 고정됩니다.
+- 로그인 세션이 없거나 유효하지 않으면 `401` 응답을 반환합니다.
+- 댓글 작성자는 로그인 사용자 이름으로 고정됩니다. `author` 는 호환용 필드입니다.
 - 로그인 사용자가 보내면 응답과 실시간 메시지에 `user_id` 가 포함되어 다른 기기에서도 내 메시지로 구분할 수 있습니다.
 - `regionCode` 를 보내면 응답과 실시간 메시지에 작성자의 현재 시즌 `current_tier_code` 가 포함됩니다.
-- 로그인 사용자는 계정 기준, 비로그인 사용자는 같은 `clientId` 기준으로 5초 쿨다운이 있습니다.
-- 로그인 사용자는 계정 기준, 비로그인 사용자는 같은 `clientId` 기준으로 같은 메시지를 30초 안에 다시 보내면 중복으로 막습니다.
+- 로그인 사용자 계정 기준으로 5초 쿨다운이 있습니다.
+- 같은 로그인 사용자 계정으로 같은 메시지를 30초 안에 다시 보내면 중복으로 막습니다.
 - 댓글 응답 JSON은 `snake_case` 입니다.
-- 기존 `/api/videos/{videoId}/comments` 경로도 호환용으로 유지되지만, 같은 전역 채팅방을 조회/작성합니다.
+- 기존 `/api/videos/{videoId}/comments` 경로도 호환용으로 유지되지만, 같은 전역 채팅방을 조회/작성하며 작성 시 같은 인증 헤더가 필요합니다.
 
 실시간 브로드캐스트:
 

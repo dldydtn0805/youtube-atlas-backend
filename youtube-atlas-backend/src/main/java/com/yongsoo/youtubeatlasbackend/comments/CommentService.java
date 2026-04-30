@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.yongsoo.youtubeatlasbackend.auth.AuthException;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.comments.api.ChatMessageResponse;
 import com.yongsoo.youtubeatlasbackend.comments.api.CreateCommentRequest;
@@ -137,14 +138,15 @@ public class CommentService {
 
     @Transactional
     public ChatMessageResponse createComment(CreateCommentRequest request, AuthenticatedUser authenticatedUser) {
+        AuthenticatedUser user = requireAuthenticatedUser(authenticatedUser);
         String clientId = normalizeRequired(request.clientId(), "clientId는 필수입니다.");
         if (clientId.startsWith(SYSTEM_CLIENT_ID_PREFIX)) {
             throw new CommentValidationException("사용할 수 없는 clientId입니다.");
         }
 
         String content = normalizeContent(request.content());
-        String author = resolveAuthor(request.author(), authenticatedUser);
-        Long userId = authenticatedUser == null ? null : authenticatedUser.id();
+        String author = resolveAuthor(request.author(), user);
+        Long userId = user.id();
         Instant now = Instant.now(clock);
 
         findLatestUserComment(clientId, userId)
@@ -184,6 +186,14 @@ public class CommentService {
         commentPresenceService.rememberParticipantName(clientId, author);
         messagingTemplate.convertAndSend(GLOBAL_COMMENTS_TOPIC, response);
         return response;
+    }
+
+    private AuthenticatedUser requireAuthenticatedUser(AuthenticatedUser authenticatedUser) {
+        if (authenticatedUser == null) {
+            throw new AuthException("unauthorized", "로그인이 필요합니다.");
+        }
+
+        return authenticatedUser;
     }
 
     @Transactional

@@ -63,7 +63,8 @@ public class CommentController {
         @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
         @Valid @RequestBody CreateCommentRequest request
     ) {
-        return commentService.createComment(request, authService.getCurrentUserOrNull(authorizationHeader));
+        AuthenticatedUser user = authService.requireCurrentUser(authorizationHeader);
+        return commentService.createComment(request, user);
     }
 
     @GetMapping("/api/videos/{videoId}/comments")
@@ -81,6 +82,7 @@ public class CommentController {
         @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
         @Valid @RequestBody CreateCommentRequest request
     ) {
-        return commentService.createComment(videoId, request, authService.getCurrentUserOrNull(authorizationHeader));
+        AuthenticatedUser user = authService.requireCurrentUser(authorizationHeader);
+        return commentService.createComment(videoId, request, user);
     }
 }
