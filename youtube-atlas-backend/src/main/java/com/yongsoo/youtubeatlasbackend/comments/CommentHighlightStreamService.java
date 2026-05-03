@@ -73,7 +73,7 @@ public class CommentHighlightStreamService {
             highlights.stream().limit(MAX_EMISSIONS_PER_STREAM).toList()
         );
         activeStreamsBySessionId.put(normalizedSessionId, stream);
-        scheduleNext(stream);
+        emitNext(stream);
     }
 
     public void stop(Principal principal, String sessionId) {
