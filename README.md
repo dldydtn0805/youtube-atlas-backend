@@ -1269,9 +1269,21 @@ Authorization: Bearer {accessToken}
 
 - WebSocket endpoint: `/ws`
 - subscribe topic: `/topic/comments`
+- 개인 댓글 하이라이트 subscribe queue: `/user/queue/comments/highlights`
+- 댓글 하이라이트 시작 send destination: `/app/comments/highlights/start`
+- 댓글 하이라이트 중지 send destination: `/app/comments/highlights/stop`
 - game update topic: `/topic/game/{regionCode}`
 - personal game notifications: `/user/queue/game/notifications`
 - 개인 게임 알림을 받으려면 STOMP `CONNECT` native header에 `Authorization: Bearer {accessToken}` 을 포함합니다.
+- 개인 댓글 하이라이트도 같은 인증 헤더가 필요하며, 서버 DB에 저장하지 않고 해당 WebSocket 세션에만 5~10초 랜덤 간격으로 최대 100개까지 전송합니다.
+
+댓글 하이라이트 시작 메시지:
+
+```json
+{
+  "videoId": "youtube-video-id"
+}
+```
 
 ## 급상승 API
 

@@ -17,6 +17,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.yongsoo.youtubeatlasbackend.common.ExternalServiceException;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasContentDetails;
+import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasCommentHighlight;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasThumbnail;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasThumbnails;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasVideo;
@@ -112,6 +113,33 @@ public class YouTubeApiClient {
             .toList();
     }
 
+    public List<AtlasCommentHighlight> fetchTopLevelCommentHighlights(String videoId) {
+        if (!StringUtils.hasText(videoId)) {
+            return List.of();
+        }
+
+        String apiKey = requireApiKey();
+        String url = UriComponentsBuilder.fromHttpUrl(atlasProperties.getYoutube().getApiBaseUrl())
+            .path("/commentThreads")
+            .queryParam("part", "snippet")
+            .queryParam("videoId", videoId.trim())
+            .queryParam("maxResults", 100)
+            .queryParam("order", "relevance")
+            .queryParam("textFormat", "plainText")
+            .queryParam("key", apiKey)
+            .toUriString();
+
+        RemoteCommentThreadListResponse result = get(url, RemoteCommentThreadListResponse.class);
+        if (result.items() == null) {
+            return List.of();
+        }
+
+        return result.items().stream()
+            .map(this::toCommentHighlight)
+            .filter(comment -> StringUtils.hasText(comment.id()) && StringUtils.hasText(comment.text()))
+            .toList();
+    }
+
     public boolean isIgnorableCategoryFetchError(RuntimeException exception) {
         String message = exception.getMessage();
         return message != null && (
@@ -169,7 +197,28 @@ public class YouTubeApiClient {
         );
     }
 
+    private AtlasCommentHighlight toCommentHighlight(RemoteCommentThreadItem item) {
+        RemoteTopLevelComment topLevelComment = item.snippet() != null ? item.snippet().topLevelComment() : null;
+        RemoteCommentSnippet snippet = topLevelComment != null ? topLevelComment.snippet() : null;
+
+        if (snippet == null) {
+            return new AtlasCommentHighlight(item.id(), null, null, null, null);
+        }
+
+        return new AtlasCommentHighlight(
+            StringUtils.hasText(topLevelComment.id()) ? topLevelComment.id() : item.id(),
+            snippet.authorDisplayName(),
+            StringUtils.hasText(snippet.textDisplay()) ? snippet.textDisplay() : snippet.textOriginal(),
+            snippet.likeCount(),
+            parseOffsetDateTime(snippet.publishedAt())
+        );
+    }
+
     private OffsetDateTime parsePublishedAt(String publishedAt) {
+        return parseOffsetDateTime(publishedAt);
+    }
+
+    private OffsetDateTime parseOffsetDateTime(String publishedAt) {
         if (!StringUtils.hasText(publishedAt)) {
             return null;
         }
@@ -217,7 +266,10 @@ public class YouTubeApiClient {
     ) {
     }
 
-    public sealed interface RemoteApiResponse permits RemoteVideoCategoryListResponse, RemoteVideoListResponse {
+    public sealed interface RemoteApiResponse permits
+        RemoteVideoCategoryListResponse,
+        RemoteVideoListResponse,
+        RemoteCommentThreadListResponse {
         RemoteApiError error();
     }
 
@@ -254,6 +306,43 @@ public class YouTubeApiClient {
         String nextPageToken,
         RemoteApiError error
     ) implements RemoteApiResponse {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record RemoteCommentThreadListResponse(
+        List<RemoteCommentThreadItem> items,
+        RemoteApiError error
+    ) implements RemoteApiResponse {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record RemoteCommentThreadItem(
+        String id,
+        RemoteCommentThreadSnippet snippet
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record RemoteCommentThreadSnippet(
+        RemoteTopLevelComment topLevelComment
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record RemoteTopLevelComment(
+        String id,
+        RemoteCommentSnippet snippet
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record RemoteCommentSnippet(
+        String authorDisplayName,
+        String textDisplay,
+        String textOriginal,
+        Long likeCount,
+        String publishedAt
+    ) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
