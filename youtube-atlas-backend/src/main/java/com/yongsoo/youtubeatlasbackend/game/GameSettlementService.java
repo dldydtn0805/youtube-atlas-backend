@@ -30,6 +30,7 @@ public class GameSettlementService {
     private final GamePositionRepository gamePositionRepository;
     private final GameWalletRepository gameWalletRepository;
     private final GameLedgerRepository gameLedgerRepository;
+    private final GameSeasonResultRepository gameSeasonResultRepository;
     private final GameTierService gameTierService;
     private final TrendSignalRepository trendSignalRepository;
     private final Clock clock;
@@ -40,6 +41,7 @@ public class GameSettlementService {
         GamePositionRepository gamePositionRepository,
         GameWalletRepository gameWalletRepository,
         GameLedgerRepository gameLedgerRepository,
+        GameSeasonResultRepository gameSeasonResultRepository,
         GameTierService gameTierService,
         TrendSignalRepository trendSignalRepository,
         Clock clock
@@ -49,6 +51,7 @@ public class GameSettlementService {
         this.gamePositionRepository = gamePositionRepository;
         this.gameWalletRepository = gameWalletRepository;
         this.gameLedgerRepository = gameLedgerRepository;
+        this.gameSeasonResultRepository = gameSeasonResultRepository;
         this.gameTierService = gameTierService;
         this.trendSignalRepository = trendSignalRepository;
         this.clock = clock;
@@ -104,6 +107,9 @@ public class GameSettlementService {
         }
 
         Instant now = Instant.now(clock);
+        if (season.getEndAt() == null || season.getEndAt().isAfter(now)) {
+            season.setEndAt(now);
+        }
         settleSeason(season, now);
         ensureManagedActiveSeasons();
     }
@@ -129,8 +135,94 @@ public class GameSettlementService {
             settlePosition(position, signalByVideoId.get(position.getVideoId()), fallbackRank, fallbackRunId, fallbackCapturedAt, now);
         }
 
+        snapshotSeasonResults(season, now);
         season.setStatus(SeasonStatus.ENDED);
         gameSeasonRepository.save(season);
+    }
+
+    private void snapshotSeasonResults(GameSeason season, Instant now) {
+        Set<Long> existingUserIds = gameSeasonResultRepository.findBySeasonId(season.getId()).stream()
+            .map(result -> result.getUser().getId())
+            .collect(Collectors.toSet());
+        Map<Long, List<GamePosition>> positionsByUserId = gamePositionRepository.findBySeasonId(season.getId()).stream()
+            .collect(Collectors.groupingBy(position -> position.getUser().getId()));
+        List<SeasonResultCandidate> candidates = gameWalletRepository.findBySeasonId(season.getId()).stream()
+            .map(wallet -> toSeasonResultCandidate(wallet, positionsByUserId.getOrDefault(wallet.getUser().getId(), List.of())))
+            .sorted(
+                java.util.Comparator.comparingLong(SeasonResultCandidate::finalAssetPoints).reversed()
+                    .thenComparing(java.util.Comparator.comparingLong(SeasonResultCandidate::realizedPnlPoints).reversed())
+                    .thenComparing(
+                        candidate -> java.util.Objects.toString(candidate.wallet().getUser().getDisplayName(), ""),
+                        String.CASE_INSENSITIVE_ORDER
+                    )
+            )
+            .toList();
+
+        for (int index = 0; index < candidates.size(); index += 1) {
+            SeasonResultCandidate candidate = candidates.get(index);
+            if (!existingUserIds.contains(candidate.wallet().getUser().getId())) {
+                gameSeasonResultRepository.save(toSeasonResult(season, candidate, index + 1, now));
+            }
+        }
+    }
+
+    private SeasonResultCandidate toSeasonResultCandidate(GameWallet wallet, List<GamePosition> positions) {
+        long balancePoints = valueOrZero(wallet.getBalancePoints());
+        long reservedPoints = valueOrZero(wallet.getReservedPoints());
+        return new SeasonResultCandidate(
+            wallet,
+            positions,
+            balancePoints + reservedPoints,
+            valueOrZero(wallet.getRealizedPnlPoints())
+        );
+    }
+
+    private GameSeasonResult toSeasonResult(
+        GameSeason season,
+        SeasonResultCandidate candidate,
+        int finalRank,
+        Instant now
+    ) {
+        GamePosition bestPosition = findBestPosition(candidate.positions());
+        GameWallet wallet = candidate.wallet();
+
+        GameSeasonResult result = new GameSeasonResult();
+        result.setSeason(season);
+        result.setUser(wallet.getUser());
+        result.setRegionCode(season.getRegionCode());
+        result.setSeasonName(season.getName());
+        result.setSeasonStartAt(season.getStartAt());
+        result.setSeasonEndAt(season.getEndAt());
+        result.setFinalRank(finalRank);
+        result.setFinalAssetPoints(candidate.finalAssetPoints());
+        result.setFinalBalancePoints(valueOrZero(wallet.getBalancePoints()));
+        result.setRealizedPnlPoints(candidate.realizedPnlPoints());
+        result.setPositionCount((long) candidate.positions().size());
+        applyBestPosition(result, bestPosition);
+        result.setCreatedAt(now);
+        return result;
+    }
+
+    private void applyBestPosition(GameSeasonResult result, GamePosition bestPosition) {
+        if (bestPosition == null) {
+            return;
+        }
+
+        result.setBestPositionId(bestPosition.getId());
+        result.setBestPositionVideoId(bestPosition.getVideoId());
+        result.setBestPositionTitle(bestPosition.getTitle());
+        result.setBestPositionChannelTitle(bestPosition.getChannelTitle());
+        result.setBestPositionThumbnailUrl(bestPosition.getThumbnailUrl());
+        result.setBestPositionProfitPoints(valueOrZero(bestPosition.getPnlPoints()));
+    }
+
+    private GamePosition findBestPosition(List<GamePosition> positions) {
+        return positions.stream()
+            .max(
+                java.util.Comparator.comparingLong((GamePosition position) -> valueOrZero(position.getPnlPoints()))
+                    .thenComparing(GamePosition::getCreatedAt, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+            )
+            .orElse(null);
     }
 
     private void settlePosition(
@@ -185,6 +277,10 @@ public class GameSettlementService {
         gameLedgerRepository.save(ledger);
     }
 
+    private long valueOrZero(Long value) {
+        return value != null ? value : 0L;
+    }
+
     private List<String> resolveManagedRegionCodes() {
         Set<String> managedRegions = atlasProperties.getTrending().getJobs().stream()
             .map(AtlasProperties.SyncJob::getRegionCode)
@@ -201,7 +297,7 @@ public class GameSettlementService {
 
     private GameSeason createNextSeason(String regionCode, GameSeason latestSeason, Instant now) {
         Instant startAt = resolveNextSeasonStartAt(latestSeason, now);
-        Duration duration = resolveSeasonDuration(latestSeason);
+        Duration duration = resolveSeasonDuration();
 
         GameSeason season = new GameSeason();
         season.setName(regionCode + " Daily Season");
@@ -230,19 +326,20 @@ public class GameSettlementService {
             return now;
         }
 
-        return latestSeason.getEndAt().isAfter(now) ? latestSeason.getEndAt() : now;
+        return latestSeason.getStatus() != SeasonStatus.ENDED && latestSeason.getEndAt().isAfter(now)
+            ? latestSeason.getEndAt()
+            : now;
     }
 
-    private Duration resolveSeasonDuration(GameSeason latestSeason) {
-        if (
-            latestSeason != null
-            && latestSeason.getStartAt() != null
-            && latestSeason.getEndAt() != null
-            && latestSeason.getEndAt().isAfter(latestSeason.getStartAt())
-        ) {
-            return Duration.between(latestSeason.getStartAt(), latestSeason.getEndAt());
-        }
-
+    private Duration resolveSeasonDuration() {
         return Duration.ofDays(Math.max(1, atlasProperties.getGame().getSeasonDurationDays()));
+    }
+
+    private record SeasonResultCandidate(
+        GameWallet wallet,
+        List<GamePosition> positions,
+        long finalAssetPoints,
+        long realizedPnlPoints
+    ) {
     }
 }

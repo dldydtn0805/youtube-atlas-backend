@@ -30,6 +30,7 @@ class GameSettlementServiceTest {
     private GamePositionRepository gamePositionRepository;
     private GameWalletRepository gameWalletRepository;
     private GameLedgerRepository gameLedgerRepository;
+    private GameSeasonResultRepository gameSeasonResultRepository;
     private GameTierService gameTierService;
     private TrendSignalRepository trendSignalRepository;
     private GameSettlementService gameSettlementService;
@@ -41,6 +42,7 @@ class GameSettlementServiceTest {
         gamePositionRepository = org.mockito.Mockito.mock(GamePositionRepository.class);
         gameWalletRepository = org.mockito.Mockito.mock(GameWalletRepository.class);
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
+        gameSeasonResultRepository = org.mockito.Mockito.mock(GameSeasonResultRepository.class);
         gameTierService = org.mockito.Mockito.mock(GameTierService.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-08T00:01:00Z"), ZoneOffset.UTC);
@@ -51,10 +53,12 @@ class GameSettlementServiceTest {
             gamePositionRepository,
             gameWalletRepository,
             gameLedgerRepository,
+            gameSeasonResultRepository,
             gameTierService,
             trendSignalRepository,
             fixedClock
         );
+        when(gameSeasonResultRepository.findBySeasonId(any())).thenReturn(List.of());
     }
 
     @Test
@@ -75,6 +79,7 @@ class GameSettlementServiceTest {
             .thenReturn(List.of(signal));
         when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN))
             .thenReturn(List.of(position));
+        when(gamePositionRepository.findBySeasonId(1L)).thenReturn(List.of(position));
         when(gameWalletRepository.findBySeasonIdAndUserId(1L, 7L)).thenReturn(Optional.of(wallet));
         when(gameWalletRepository.findBySeasonId(1L)).thenReturn(List.of(wallet));
         when(gamePositionRepository.save(position)).thenReturn(position);
@@ -94,6 +99,16 @@ class GameSettlementServiceTest {
         assertThat(wallet.getRealizedPnlPoints()).isEqualTo(pnlPoints);
         assertThat(season.getStatus()).isEqualTo(SeasonStatus.ENDED);
         verify(gameLedgerRepository).save(any(GameLedger.class));
+        org.mockito.ArgumentCaptor<GameSeasonResult> resultCaptor =
+            org.mockito.ArgumentCaptor.forClass(GameSeasonResult.class);
+        verify(gameSeasonResultRepository).save(resultCaptor.capture());
+        GameSeasonResult result = resultCaptor.getValue();
+        assertThat(result.getFinalRank()).isEqualTo(1);
+        assertThat(result.getFinalAssetPoints()).isEqualTo(wallet.getBalancePoints());
+        assertThat(result.getRealizedPnlPoints()).isEqualTo(wallet.getRealizedPnlPoints());
+        assertThat(result.getPositionCount()).isEqualTo(1L);
+        assertThat(result.getBestPositionId()).isEqualTo(position.getId());
+        assertThat(result.getBestPositionProfitPoints()).isEqualTo(pnlPoints);
         verify(gameSeasonRepository).save(season);
     }
 
@@ -191,6 +206,30 @@ class GameSettlementServiceTest {
         assertThat(createdSeason.getMinHoldSeconds()).isEqualTo(300);
         assertThat(createdSeason.getMaxOpenPositions()).isEqualTo(7);
         assertThat(createdSeason.getRankPointMultiplier()).isEqualTo(150);
+    }
+
+    @Test
+    void settleEndedSeasonsScheduledUsesConfiguredSeasonDurationInsteadOfLongPreviousSeason() {
+        atlasProperties.getGame().setSchedulerEnabled(true);
+        atlasProperties.getGame().setSeasonDurationDays(7);
+        atlasProperties.getTrending().setJobs(List.of(syncJob("KR")));
+        GameSeason longSeason = endedSeason("KR");
+        longSeason.setStartAt(Instant.parse("2026-04-01T00:00:00Z"));
+        longSeason.setEndAt(Instant.parse("2026-12-31T00:00:00Z"));
+
+        when(gameSeasonRepository.findByStatusAndEndAtLessThanEqual(SeasonStatus.ACTIVE, Instant.parse("2026-04-08T00:01:00Z")))
+            .thenReturn(List.of());
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.empty());
+        when(gameSeasonRepository.findTopByRegionCodeOrderByStartAtDesc("KR"))
+            .thenReturn(Optional.of(longSeason));
+        when(gameSeasonRepository.save(any(GameSeason.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        gameSettlementService.settleEndedSeasonsScheduled();
+
+        org.mockito.ArgumentCaptor<GameSeason> captor = org.mockito.ArgumentCaptor.forClass(GameSeason.class);
+        verify(gameSeasonRepository).save(captor.capture());
+        assertThat(captor.getValue().getEndAt()).isEqualTo(Instant.parse("2026-04-15T00:01:00Z"));
     }
 
     private GameSeason activeSeasonEndingNow() {

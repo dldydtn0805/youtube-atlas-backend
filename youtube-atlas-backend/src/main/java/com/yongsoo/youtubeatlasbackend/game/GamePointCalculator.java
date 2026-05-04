@@ -1,5 +1,7 @@
 package com.yongsoo.youtubeatlasbackend.game;
 
+import java.math.BigInteger;
+
 final class GamePointCalculator {
 
     static final long QUANTITY_SCALE = 100L;
@@ -100,8 +102,11 @@ final class GamePointCalculator {
             return 0L;
         }
 
-        long scaledPoints = Math.multiplyExact(unitPricePoints, quantity);
-        return Math.floorDiv(scaledPoints + (QUANTITY_SCALE / 2L), QUANTITY_SCALE);
+        return BigInteger.valueOf(unitPricePoints)
+            .multiply(BigInteger.valueOf(quantity))
+            .add(BigInteger.valueOf(QUANTITY_SCALE / 2L))
+            .divide(BigInteger.valueOf(QUANTITY_SCALE))
+            .longValueExact();
     }
 
     static long estimateUnitPricePoints(long totalPricePoints, long quantity) {
@@ -121,7 +126,10 @@ final class GamePointCalculator {
             return 0L;
         }
 
-        return (currentPricePoints * SELL_FEE_NUMERATOR) / SELL_FEE_DENOMINATOR;
+        return BigInteger.valueOf(currentPricePoints)
+            .multiply(BigInteger.valueOf(SELL_FEE_NUMERATOR))
+            .divide(BigInteger.valueOf(SELL_FEE_DENOMINATOR))
+            .longValueExact();
     }
 
     static int estimateRankForPricePoints(long pricePoints) {

@@ -38,6 +38,7 @@ import com.yongsoo.youtubeatlasbackend.game.api.MarketVideoResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionRankHistoryPointResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionRankHistoryResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.SeasonResultResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPreviewItemResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPreviewResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPositionResponse;
@@ -90,6 +91,7 @@ public class GameService {
     private final GameScheduledSellOrderRepository gameScheduledSellOrderRepository;
     private final GameHighlightStateRepository gameHighlightStateRepository;
     private final GameLedgerRepository gameLedgerRepository;
+    private final GameSeasonResultRepository gameSeasonResultRepository;
     private final GameTierService gameTierService;
     private final GameNotificationService gameNotificationService;
     private final AchievementTitleService achievementTitleService;
@@ -108,6 +110,7 @@ public class GameService {
         GameScheduledSellOrderRepository gameScheduledSellOrderRepository,
         GameHighlightStateRepository gameHighlightStateRepository,
         GameLedgerRepository gameLedgerRepository,
+        GameSeasonResultRepository gameSeasonResultRepository,
         GameTierService gameTierService,
         GameNotificationService gameNotificationService,
         AchievementTitleService achievementTitleService,
@@ -125,6 +128,7 @@ public class GameService {
         this.gameScheduledSellOrderRepository = gameScheduledSellOrderRepository;
         this.gameHighlightStateRepository = gameHighlightStateRepository;
         this.gameLedgerRepository = gameLedgerRepository;
+        this.gameSeasonResultRepository = gameSeasonResultRepository;
         this.gameTierService = gameTierService;
         this.gameNotificationService = gameNotificationService;
         this.achievementTitleService = achievementTitleService;
@@ -142,6 +146,22 @@ public class GameService {
         GameSeason season = requireActiveSeason(regionCode);
         GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
         return toCurrentSeasonResponse(season, wallet, syncAndListNotifications(season, authenticatedUser.id()));
+    }
+
+    @Transactional(readOnly = true)
+    public List<SeasonResultResponse> getMySeasonResults(
+        AuthenticatedUser authenticatedUser,
+        String regionCode,
+        Integer limit
+    ) {
+        String normalizedRegionCode = normalizeRequired(regionCode, "regionCode는 필수입니다.").toUpperCase();
+        int normalizedLimit = normalizeSeasonResultFetchLimit(limit);
+
+        return gameSeasonResultRepository.findRecentByUserAndRegion(
+            authenticatedUser.id(),
+            normalizedRegionCode,
+            PageRequest.of(0, normalizedLimit)
+        ).stream().map(this::toSeasonResultResponse).toList();
     }
 
     @Transactional
@@ -1210,6 +1230,30 @@ public class GameService {
             wallet.getReservedPoints(),
             wallet.getRealizedPnlPoints(),
             wallet.getBalancePoints() + wallet.getReservedPoints()
+        );
+    }
+
+    private SeasonResultResponse toSeasonResultResponse(GameSeasonResult result) {
+        return new SeasonResultResponse(
+            result.getId(),
+            result.getSeason().getId(),
+            result.getSeasonName(),
+            result.getRegionCode(),
+            result.getSeasonStartAt(),
+            result.getSeasonEndAt(),
+            result.getFinalRank(),
+            result.getFinalAssetPoints(),
+            result.getFinalBalancePoints(),
+            result.getRealizedPnlPoints(),
+            result.getPositionCount(),
+            result.getBestPositionId(),
+            result.getBestPositionVideoId(),
+            result.getBestPositionTitle(),
+            result.getBestPositionChannelTitle(),
+            result.getBestPositionThumbnailUrl(),
+            result.getBestPositionProfitPoints(),
+            result.getTitleCode(),
+            result.getCreatedAt()
         );
     }
 
@@ -2771,6 +2815,18 @@ public class GameService {
         }
 
         return Math.min(limit, 30);
+    }
+
+    private int normalizeSeasonResultFetchLimit(Integer limit) {
+        if (limit == null) {
+            return 3;
+        }
+
+        if (limit < 1) {
+            throw new IllegalArgumentException("limit는 1 이상이어야 합니다.");
+        }
+
+        return Math.min(limit, 10);
     }
 
     private long getPositionQuantity(GamePosition position) {

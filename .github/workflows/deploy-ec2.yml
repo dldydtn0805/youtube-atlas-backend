@@ -64,16 +64,18 @@ jobs:
           DB_PSQL_URL="${DB_URL#jdbc:}"
 
           sudo docker run --rm \
+            -e DB_PSQL_URL="$DB_PSQL_URL" \
+            -e DB_USERNAME="$DB_USERNAME" \
             -e PGPASSWORD="$DB_PASSWORD" \
             -v "$PWD/sql:/sql:ro" \
             postgres:18 \
-            psql "$DB_PSQL_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 -f /sql/migrate_game_achievement_titles.sql
-
-          sudo docker run --rm \
-            -e PGPASSWORD="$DB_PASSWORD" \
-            -v "$PWD/sql:/sql:ro" \
-            postgres:18 \
-            psql "$DB_PSQL_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 -f /sql/migrate_game_notification_titles.sql
+            sh -c '
+              set -eu
+              for migration in $(find /sql -maxdepth 1 -type f -name "migrate_*.sql" | sort); do
+                echo "Running $(basename "$migration")"
+                psql "$DB_PSQL_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 -f "$migration"
+              done
+            '
 
           sudo docker builder prune -af || true
           sudo docker system prune -af || true

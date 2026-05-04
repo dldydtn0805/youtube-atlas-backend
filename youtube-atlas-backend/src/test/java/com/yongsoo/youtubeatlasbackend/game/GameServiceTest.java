@@ -49,6 +49,7 @@ class GameServiceTest {
     private GameScheduledSellOrderRepository gameScheduledSellOrderRepository;
     private GameHighlightStateRepository gameHighlightStateRepository;
     private GameLedgerRepository gameLedgerRepository;
+    private GameSeasonResultRepository gameSeasonResultRepository;
     private GameTierService gameTierService;
     private GameNotificationService gameNotificationService;
     private AchievementTitleService achievementTitleService;
@@ -68,6 +69,7 @@ class GameServiceTest {
         gameScheduledSellOrderRepository = org.mockito.Mockito.mock(GameScheduledSellOrderRepository.class);
         gameHighlightStateRepository = org.mockito.Mockito.mock(GameHighlightStateRepository.class);
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
+        gameSeasonResultRepository = org.mockito.Mockito.mock(GameSeasonResultRepository.class);
         gameTierService = org.mockito.Mockito.mock(GameTierService.class);
         gameNotificationService = org.mockito.Mockito.mock(GameNotificationService.class);
         achievementTitleService = org.mockito.Mockito.mock(AchievementTitleService.class);
@@ -88,6 +90,7 @@ class GameServiceTest {
             gameScheduledSellOrderRepository,
             gameHighlightStateRepository,
             gameLedgerRepository,
+            gameSeasonResultRepository,
             gameTierService,
             gameNotificationService,
             achievementTitleService,

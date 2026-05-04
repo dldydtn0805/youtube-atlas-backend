@@ -50,6 +50,15 @@ public class GameController {
         return gameService.getCurrentSeason(authService.requireCurrentUser(authorizationHeader), regionCode);
     }
 
+    @GetMapping("/season-results/me")
+    public List<SeasonResultResponse> getMySeasonResults(
+        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestParam String regionCode,
+        @RequestParam(required = false) Integer limit
+    ) {
+        return gameService.getMySeasonResults(authService.requireCurrentUser(authorizationHeader), regionCode, limit);
+    }
+
     @GetMapping("/wallet")
     public WalletResponse getWallet(
         @RequestHeader("Authorization") String authorizationHeader,
