@@ -31,6 +31,7 @@ public class GameSettlementService {
     private final GameWalletRepository gameWalletRepository;
     private final GameLedgerRepository gameLedgerRepository;
     private final GameSeasonResultRepository gameSeasonResultRepository;
+    private final GameHighlightStateRepository gameHighlightStateRepository;
     private final GameTierService gameTierService;
     private final TrendSignalRepository trendSignalRepository;
     private final Clock clock;
@@ -42,6 +43,7 @@ public class GameSettlementService {
         GameWalletRepository gameWalletRepository,
         GameLedgerRepository gameLedgerRepository,
         GameSeasonResultRepository gameSeasonResultRepository,
+        GameHighlightStateRepository gameHighlightStateRepository,
         GameTierService gameTierService,
         TrendSignalRepository trendSignalRepository,
         Clock clock
@@ -52,6 +54,7 @@ public class GameSettlementService {
         this.gameWalletRepository = gameWalletRepository;
         this.gameLedgerRepository = gameLedgerRepository;
         this.gameSeasonResultRepository = gameSeasonResultRepository;
+        this.gameHighlightStateRepository = gameHighlightStateRepository;
         this.gameTierService = gameTierService;
         this.trendSignalRepository = trendSignalRepository;
         this.clock = clock;
@@ -146,8 +149,21 @@ public class GameSettlementService {
             .collect(Collectors.toSet());
         Map<Long, List<GamePosition>> positionsByUserId = gamePositionRepository.findBySeasonId(season.getId()).stream()
             .collect(Collectors.groupingBy(position -> position.getUser().getId()));
+        Map<Long, Long> highlightScoreByUserId = gameHighlightStateRepository
+            .findBySeasonIdAndBestSettledHighlightScoreGreaterThan(season.getId(), 0L)
+            .stream()
+            .collect(Collectors.groupingBy(
+                state -> state.getUser().getId(),
+                Collectors.summingLong(GameHighlightState::getBestSettledHighlightScore)
+            ));
+        List<GameSeasonTier> tiers = gameTierService.getOrCreateTiers(season);
         List<SeasonResultCandidate> candidates = gameWalletRepository.findBySeasonId(season.getId()).stream()
-            .map(wallet -> toSeasonResultCandidate(wallet, positionsByUserId.getOrDefault(wallet.getUser().getId(), List.of())))
+            .map(wallet -> toSeasonResultCandidate(
+                wallet,
+                positionsByUserId.getOrDefault(wallet.getUser().getId(), List.of()),
+                tiers,
+                highlightScoreByUserId.getOrDefault(wallet.getUser().getId(), 0L)
+            ))
             .sorted(
                 java.util.Comparator.comparingLong(SeasonResultCandidate::finalAssetPoints).reversed()
                     .thenComparing(java.util.Comparator.comparingLong(SeasonResultCandidate::realizedPnlPoints).reversed())
@@ -166,14 +182,23 @@ public class GameSettlementService {
         }
     }
 
-    private SeasonResultCandidate toSeasonResultCandidate(GameWallet wallet, List<GamePosition> positions) {
+    private SeasonResultCandidate toSeasonResultCandidate(
+        GameWallet wallet,
+        List<GamePosition> positions,
+        List<GameSeasonTier> tiers,
+        long calculatedHighlightScore
+    ) {
         long balancePoints = valueOrZero(wallet.getBalancePoints());
         long reservedPoints = valueOrZero(wallet.getReservedPoints());
+        long finalHighlightScore = calculatedHighlightScore + valueOrZero(wallet.getManualTierScoreAdjustment());
+        GameSeasonTier finalTier = resolveFinalTier(tiers, finalHighlightScore);
         return new SeasonResultCandidate(
             wallet,
             positions,
             balancePoints + reservedPoints,
-            valueOrZero(wallet.getRealizedPnlPoints())
+            valueOrZero(wallet.getRealizedPnlPoints()),
+            finalHighlightScore,
+            finalTier
         );
     }
 
@@ -197,10 +222,28 @@ public class GameSettlementService {
         result.setFinalAssetPoints(candidate.finalAssetPoints());
         result.setFinalBalancePoints(valueOrZero(wallet.getBalancePoints()));
         result.setRealizedPnlPoints(candidate.realizedPnlPoints());
+        result.setStartingBalancePoints(valueOrZero(season.getStartingBalancePoints()));
+        result.setProfitRatePercent(calculateProfitRatePercent(
+            candidate.finalAssetPoints() - valueOrZero(season.getStartingBalancePoints()),
+            valueOrZero(season.getStartingBalancePoints())
+        ));
+        result.setFinalHighlightScore(candidate.finalHighlightScore());
+        applyFinalTier(result, candidate.finalTier());
         result.setPositionCount((long) candidate.positions().size());
         applyBestPosition(result, bestPosition);
         result.setCreatedAt(now);
         return result;
+    }
+
+    private void applyFinalTier(GameSeasonResult result, GameSeasonTier finalTier) {
+        if (finalTier == null) {
+            return;
+        }
+
+        result.setFinalTierCode(finalTier.getTierCode());
+        result.setFinalTierName(finalTier.getDisplayName());
+        result.setFinalTierBadgeCode(finalTier.getBadgeCode());
+        result.setFinalTierTitleCode(finalTier.getTitleCode());
     }
 
     private void applyBestPosition(GameSeasonResult result, GamePosition bestPosition) {
@@ -214,6 +257,13 @@ public class GameSettlementService {
         result.setBestPositionChannelTitle(bestPosition.getChannelTitle());
         result.setBestPositionThumbnailUrl(bestPosition.getThumbnailUrl());
         result.setBestPositionProfitPoints(valueOrZero(bestPosition.getPnlPoints()));
+        result.setBestPositionProfitRatePercent(calculateProfitRatePercent(
+            valueOrZero(bestPosition.getPnlPoints()),
+            valueOrZero(bestPosition.getStakePoints())
+        ));
+        result.setBestPositionRankDiff(bestPosition.getRankDiff());
+        result.setBestPositionBuyRank(bestPosition.getBuyRank());
+        result.setBestPositionSellRank(bestPosition.getSellRank());
     }
 
     private GamePosition findBestPosition(List<GamePosition> positions) {
@@ -223,6 +273,14 @@ public class GameSettlementService {
                     .thenComparing(GamePosition::getCreatedAt, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
             )
             .orElse(null);
+    }
+
+    private GameSeasonTier resolveFinalTier(List<GameSeasonTier> tiers, long finalHighlightScore) {
+        if (tiers == null || tiers.isEmpty()) {
+            return null;
+        }
+
+        return gameTierService.resolveTier(tiers, finalHighlightScore);
     }
 
     private void settlePosition(
@@ -279,6 +337,14 @@ public class GameSettlementService {
 
     private long valueOrZero(Long value) {
         return value != null ? value : 0L;
+    }
+
+    private Double calculateProfitRatePercent(long profitPoints, long stakePoints) {
+        if (stakePoints <= 0L) {
+            return null;
+        }
+
+        return Math.round((double) profitPoints * 1000D / stakePoints) / 10D;
     }
 
     private List<String> resolveManagedRegionCodes() {
@@ -339,7 +405,9 @@ public class GameSettlementService {
         GameWallet wallet,
         List<GamePosition> positions,
         long finalAssetPoints,
-        long realizedPnlPoints
+        long realizedPnlPoints,
+        long finalHighlightScore,
+        GameSeasonTier finalTier
     ) {
     }
 }

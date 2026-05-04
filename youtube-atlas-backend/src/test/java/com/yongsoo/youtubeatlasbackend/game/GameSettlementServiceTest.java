@@ -2,6 +2,7 @@ package com.yongsoo.youtubeatlasbackend.game;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -31,6 +32,7 @@ class GameSettlementServiceTest {
     private GameWalletRepository gameWalletRepository;
     private GameLedgerRepository gameLedgerRepository;
     private GameSeasonResultRepository gameSeasonResultRepository;
+    private GameHighlightStateRepository gameHighlightStateRepository;
     private GameTierService gameTierService;
     private TrendSignalRepository trendSignalRepository;
     private GameSettlementService gameSettlementService;
@@ -43,6 +45,7 @@ class GameSettlementServiceTest {
         gameWalletRepository = org.mockito.Mockito.mock(GameWalletRepository.class);
         gameLedgerRepository = org.mockito.Mockito.mock(GameLedgerRepository.class);
         gameSeasonResultRepository = org.mockito.Mockito.mock(GameSeasonResultRepository.class);
+        gameHighlightStateRepository = org.mockito.Mockito.mock(GameHighlightStateRepository.class);
         gameTierService = org.mockito.Mockito.mock(GameTierService.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-08T00:01:00Z"), ZoneOffset.UTC);
@@ -54,11 +57,18 @@ class GameSettlementServiceTest {
             gameWalletRepository,
             gameLedgerRepository,
             gameSeasonResultRepository,
+            gameHighlightStateRepository,
             gameTierService,
             trendSignalRepository,
             fixedClock
         );
         when(gameSeasonResultRepository.findBySeasonId(any())).thenReturn(List.of());
+        when(gameHighlightStateRepository.findBySeasonIdAndBestSettledHighlightScoreGreaterThan(any(), any()))
+            .thenReturn(List.of());
+        when(gameTierService.getOrCreateTiers(any(GameSeason.class)))
+            .thenAnswer(invocation -> List.of(tier(invocation.getArgument(0), "BRONZE", "브론즈", 0L, 1)));
+        when(gameTierService.resolveTier(any(), anyLong()))
+            .thenAnswer(invocation -> invocation.<List<GameSeasonTier>>getArgument(0).get(0));
     }
 
     @Test
@@ -106,9 +116,16 @@ class GameSettlementServiceTest {
         assertThat(result.getFinalRank()).isEqualTo(1);
         assertThat(result.getFinalAssetPoints()).isEqualTo(wallet.getBalancePoints());
         assertThat(result.getRealizedPnlPoints()).isEqualTo(wallet.getRealizedPnlPoints());
+        assertThat(result.getStartingBalancePoints()).isEqualTo(season.getStartingBalancePoints());
+        assertThat(result.getProfitRatePercent()).isEqualTo(rate(pnlPoints, season.getStartingBalancePoints()));
+        assertThat(result.getFinalHighlightScore()).isZero();
+        assertThat(result.getFinalTierCode()).isEqualTo("BRONZE");
+        assertThat(result.getFinalTierName()).isEqualTo("브론즈");
         assertThat(result.getPositionCount()).isEqualTo(1L);
         assertThat(result.getBestPositionId()).isEqualTo(position.getId());
         assertThat(result.getBestPositionProfitPoints()).isEqualTo(pnlPoints);
+        assertThat(result.getBestPositionProfitRatePercent()).isEqualTo(rate(pnlPoints, buyPricePoints));
+        assertThat(result.getBestPositionRankDiff()).isEqualTo(20);
         verify(gameSeasonRepository).save(season);
     }
 
@@ -322,6 +339,10 @@ class GameSettlementServiceTest {
         tier.setSortOrder(sortOrder);
         tier.setCreatedAt(Instant.parse("2026-04-07T23:55:00Z"));
         return tier;
+    }
+
+    private double rate(long profitPoints, long stakePoints) {
+        return Math.round((double) profitPoints * 1000D / stakePoints) / 10D;
     }
 
     private TrendSignal signal(String videoId, int currentRank) {

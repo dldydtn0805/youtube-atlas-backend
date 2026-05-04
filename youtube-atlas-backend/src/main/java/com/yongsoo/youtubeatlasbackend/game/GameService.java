@@ -155,6 +155,13 @@ public class GameService {
         Integer limit
     ) {
         String normalizedRegionCode = normalizeRequired(regionCode, "regionCode는 필수입니다.").toUpperCase();
+        if (limit == null) {
+            return gameSeasonResultRepository.findAllByUserAndRegion(
+                authenticatedUser.id(),
+                normalizedRegionCode
+            ).stream().map(this::toSeasonResultResponse).toList();
+        }
+
         int normalizedLimit = normalizeSeasonResultFetchLimit(limit);
 
         return gameSeasonResultRepository.findRecentByUserAndRegion(
@@ -1245,6 +1252,13 @@ public class GameService {
             result.getFinalAssetPoints(),
             result.getFinalBalancePoints(),
             result.getRealizedPnlPoints(),
+            result.getStartingBalancePoints(),
+            result.getProfitRatePercent(),
+            result.getFinalHighlightScore(),
+            result.getFinalTierCode(),
+            result.getFinalTierName(),
+            result.getFinalTierBadgeCode(),
+            result.getFinalTierTitleCode(),
             result.getPositionCount(),
             result.getBestPositionId(),
             result.getBestPositionVideoId(),
@@ -1252,6 +1266,10 @@ public class GameService {
             result.getBestPositionChannelTitle(),
             result.getBestPositionThumbnailUrl(),
             result.getBestPositionProfitPoints(),
+            result.getBestPositionProfitRatePercent(),
+            result.getBestPositionRankDiff(),
+            result.getBestPositionBuyRank(),
+            result.getBestPositionSellRank(),
             result.getTitleCode(),
             result.getCreatedAt()
         );
@@ -2819,14 +2837,14 @@ public class GameService {
 
     private int normalizeSeasonResultFetchLimit(Integer limit) {
         if (limit == null) {
-            return 3;
+            return 50;
         }
 
         if (limit < 1) {
             throw new IllegalArgumentException("limit는 1 이상이어야 합니다.");
         }
 
-        return Math.min(limit, 10);
+        return Math.min(limit, 200);
     }
 
     private long getPositionQuantity(GamePosition position) {

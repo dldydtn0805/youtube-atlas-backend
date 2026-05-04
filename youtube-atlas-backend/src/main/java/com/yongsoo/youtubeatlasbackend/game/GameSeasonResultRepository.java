@@ -17,5 +17,14 @@ public interface GameSeasonResultRepository extends JpaRepository<GameSeasonResu
           and result.regionCode = :regionCode
         order by result.seasonEndAt desc, result.createdAt desc
     """)
+    List<GameSeasonResult> findAllByUserAndRegion(Long userId, String regionCode);
+
+    @Query("""
+        select result
+        from GameSeasonResult result
+        where result.user.id = :userId
+          and result.regionCode = :regionCode
+        order by result.seasonEndAt desc, result.createdAt desc
+    """)
     List<GameSeasonResult> findRecentByUserAndRegion(Long userId, String regionCode, Pageable pageable);
 }

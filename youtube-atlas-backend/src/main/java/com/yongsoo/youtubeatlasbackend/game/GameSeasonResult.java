@@ -60,6 +60,27 @@ public class GameSeasonResult {
     @Column(name = "realized_pnl_points", nullable = false)
     private Long realizedPnlPoints;
 
+    @Column(name = "starting_balance_points", nullable = false)
+    private Long startingBalancePoints;
+
+    @Column(name = "profit_rate_percent")
+    private Double profitRatePercent;
+
+    @Column(name = "final_highlight_score", nullable = false)
+    private Long finalHighlightScore;
+
+    @Column(name = "final_tier_code", length = 50)
+    private String finalTierCode;
+
+    @Column(name = "final_tier_name", length = 100)
+    private String finalTierName;
+
+    @Column(name = "final_tier_badge_code", length = 100)
+    private String finalTierBadgeCode;
+
+    @Column(name = "final_tier_title_code", length = 100)
+    private String finalTierTitleCode;
+
     @Column(name = "position_count", nullable = false)
     private Long positionCount;
 
@@ -80,6 +101,18 @@ public class GameSeasonResult {
 
     @Column(name = "best_position_profit_points")
     private Long bestPositionProfitPoints;
+
+    @Column(name = "best_position_profit_rate_percent")
+    private Double bestPositionProfitRatePercent;
+
+    @Column(name = "best_position_rank_diff")
+    private Integer bestPositionRankDiff;
+
+    @Column(name = "best_position_buy_rank")
+    private Integer bestPositionBuyRank;
+
+    @Column(name = "best_position_sell_rank")
+    private Integer bestPositionSellRank;
 
     @Column(name = "title_code", length = 80)
     private String titleCode;
@@ -171,6 +204,62 @@ public class GameSeasonResult {
         this.realizedPnlPoints = realizedPnlPoints;
     }
 
+    public Long getStartingBalancePoints() {
+        return startingBalancePoints;
+    }
+
+    public void setStartingBalancePoints(Long startingBalancePoints) {
+        this.startingBalancePoints = startingBalancePoints;
+    }
+
+    public Double getProfitRatePercent() {
+        return profitRatePercent;
+    }
+
+    public void setProfitRatePercent(Double profitRatePercent) {
+        this.profitRatePercent = profitRatePercent;
+    }
+
+    public Long getFinalHighlightScore() {
+        return finalHighlightScore;
+    }
+
+    public void setFinalHighlightScore(Long finalHighlightScore) {
+        this.finalHighlightScore = finalHighlightScore;
+    }
+
+    public String getFinalTierCode() {
+        return finalTierCode;
+    }
+
+    public void setFinalTierCode(String finalTierCode) {
+        this.finalTierCode = finalTierCode;
+    }
+
+    public String getFinalTierName() {
+        return finalTierName;
+    }
+
+    public void setFinalTierName(String finalTierName) {
+        this.finalTierName = finalTierName;
+    }
+
+    public String getFinalTierBadgeCode() {
+        return finalTierBadgeCode;
+    }
+
+    public void setFinalTierBadgeCode(String finalTierBadgeCode) {
+        this.finalTierBadgeCode = finalTierBadgeCode;
+    }
+
+    public String getFinalTierTitleCode() {
+        return finalTierTitleCode;
+    }
+
+    public void setFinalTierTitleCode(String finalTierTitleCode) {
+        this.finalTierTitleCode = finalTierTitleCode;
+    }
+
     public Long getPositionCount() {
         return positionCount;
     }
@@ -225,6 +314,38 @@ public class GameSeasonResult {
 
     public void setBestPositionProfitPoints(Long bestPositionProfitPoints) {
         this.bestPositionProfitPoints = bestPositionProfitPoints;
+    }
+
+    public Double getBestPositionProfitRatePercent() {
+        return bestPositionProfitRatePercent;
+    }
+
+    public void setBestPositionProfitRatePercent(Double bestPositionProfitRatePercent) {
+        this.bestPositionProfitRatePercent = bestPositionProfitRatePercent;
+    }
+
+    public Integer getBestPositionRankDiff() {
+        return bestPositionRankDiff;
+    }
+
+    public void setBestPositionRankDiff(Integer bestPositionRankDiff) {
+        this.bestPositionRankDiff = bestPositionRankDiff;
+    }
+
+    public Integer getBestPositionBuyRank() {
+        return bestPositionBuyRank;
+    }
+
+    public void setBestPositionBuyRank(Integer bestPositionBuyRank) {
+        this.bestPositionBuyRank = bestPositionBuyRank;
+    }
+
+    public Integer getBestPositionSellRank() {
+        return bestPositionSellRank;
+    }
+
+    public void setBestPositionSellRank(Integer bestPositionSellRank) {
+        this.bestPositionSellRank = bestPositionSellRank;
     }
 
     public String getTitleCode() {
