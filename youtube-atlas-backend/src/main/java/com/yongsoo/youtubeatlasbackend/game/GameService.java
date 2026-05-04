@@ -1,6 +1,7 @@
 package com.yongsoo.youtubeatlasbackend.game;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -38,6 +39,8 @@ import com.yongsoo.youtubeatlasbackend.game.api.MarketVideoResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionRankHistoryPointResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionRankHistoryResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.PositionResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.SeasonResultHighlightItemResponse;
+import com.yongsoo.youtubeatlasbackend.game.api.SeasonResultHighlightsResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SeasonResultResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPreviewItemResponse;
 import com.yongsoo.youtubeatlasbackend.game.api.SellPreviewResponse;
@@ -156,19 +159,19 @@ public class GameService {
     ) {
         String normalizedRegionCode = normalizeRequired(regionCode, "regionCode는 필수입니다.").toUpperCase();
         if (limit == null) {
-            return gameSeasonResultRepository.findAllByUserAndRegion(
+            return toSeasonResultResponses(gameSeasonResultRepository.findAllByUserAndRegion(
                 authenticatedUser.id(),
                 normalizedRegionCode
-            ).stream().map(this::toSeasonResultResponse).toList();
+            ), authenticatedUser.id());
         }
 
         int normalizedLimit = normalizeSeasonResultFetchLimit(limit);
 
-        return gameSeasonResultRepository.findRecentByUserAndRegion(
+        return toSeasonResultResponses(gameSeasonResultRepository.findRecentByUserAndRegion(
             authenticatedUser.id(),
             normalizedRegionCode,
             PageRequest.of(0, normalizedLimit)
-        ).stream().map(this::toSeasonResultResponse).toList();
+        ), authenticatedUser.id());
     }
 
     @Transactional
@@ -1240,7 +1243,29 @@ public class GameService {
         );
     }
 
-    private SeasonResultResponse toSeasonResultResponse(GameSeasonResult result) {
+    private List<SeasonResultResponse> toSeasonResultResponses(List<GameSeasonResult> results, Long userId) {
+        if (results.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> seasonIds = results.stream()
+            .map(result -> result.getSeason().getId())
+            .distinct()
+            .toList();
+        Map<Long, List<GamePosition>> positionsBySeasonId = gamePositionRepository
+            .findBySeasonIdInAndUserIdOrderByCreatedAtDesc(seasonIds, userId)
+            .stream()
+            .collect(Collectors.groupingBy(position -> position.getSeason().getId()));
+
+        return results.stream()
+            .map(result -> toSeasonResultResponse(
+                result,
+                positionsBySeasonId.getOrDefault(result.getSeason().getId(), List.of())
+            ))
+            .toList();
+    }
+
+    private SeasonResultResponse toSeasonResultResponse(GameSeasonResult result, List<GamePosition> positions) {
         return new SeasonResultResponse(
             result.getId(),
             result.getSeason().getId(),
@@ -1271,7 +1296,103 @@ public class GameService {
             result.getBestPositionBuyRank(),
             result.getBestPositionSellRank(),
             result.getTitleCode(),
-            result.getCreatedAt()
+            result.getCreatedAt(),
+            buildSeasonResultHighlights(positions)
+        );
+    }
+
+    private SeasonResultHighlightsResponse buildSeasonResultHighlights(List<GamePosition> positions) {
+        List<SeasonResultHighlightCandidate> candidates = positions.stream()
+            .filter(this::isSettledSeasonResultPosition)
+            .map(this::toSeasonResultHighlightCandidate)
+            .toList();
+
+        SeasonResultHighlightItemResponse topRankRiser = candidates.stream()
+            .filter(candidate -> valueOrZero(candidate.position().getRankDiff()) > 0)
+            .max(
+                Comparator.comparingInt((SeasonResultHighlightCandidate candidate) -> valueOrZero(candidate.position().getRankDiff()))
+                    .thenComparingLong(candidate -> valueOrZero(candidate.position().getPnlPoints()))
+                    .thenComparing(candidate -> candidate.position().getClosedAt(), Comparator.nullsFirst(Comparator.naturalOrder()))
+            )
+            .map(this::toSeasonResultHighlightItemResponse)
+            .orElse(null);
+
+        SeasonResultHighlightItemResponse mostTagged = candidates.stream()
+            .filter(candidate -> candidate.tagCount() > 0)
+            .max(
+                Comparator.comparingInt(SeasonResultHighlightCandidate::tagCount)
+                    .thenComparingLong(candidate -> valueOrZero(candidate.highlightScore()))
+                    .thenComparingLong(candidate -> valueOrZero(candidate.position().getPnlPoints()))
+                    .thenComparing(candidate -> candidate.position().getClosedAt(), Comparator.nullsFirst(Comparator.naturalOrder()))
+            )
+            .map(this::toSeasonResultHighlightItemResponse)
+            .orElse(null);
+
+        SeasonResultHighlightItemResponse longestHeld = candidates.stream()
+            .filter(candidate -> candidate.holdDurationSeconds() > 0L)
+            .max(
+                Comparator.comparingLong(SeasonResultHighlightCandidate::holdDurationSeconds)
+                    .thenComparingLong(candidate -> valueOrZero(candidate.position().getPnlPoints()))
+                    .thenComparing(candidate -> candidate.position().getClosedAt(), Comparator.nullsFirst(Comparator.naturalOrder()))
+            )
+            .map(this::toSeasonResultHighlightItemResponse)
+            .orElse(null);
+
+        return new SeasonResultHighlightsResponse(
+            topRankRiser,
+            mostTagged != null ? List.of(mostTagged) : List.of(),
+            longestHeld
+        );
+    }
+
+    private boolean isSettledSeasonResultPosition(GamePosition position) {
+        return position.getStatus() == PositionStatus.CLOSED || position.getStatus() == PositionStatus.AUTO_CLOSED;
+    }
+
+    private SeasonResultHighlightCandidate toSeasonResultHighlightCandidate(GamePosition position) {
+        List<GameStrategyType> strategyTags = position.getSellRank() != null && position.getSettledPoints() != null
+            ? GameStrategyResolver.resolveAchievedPositionStrategyTags(position, position.getSellRank(), position.getSettledPoints())
+            : List.of();
+        return new SeasonResultHighlightCandidate(
+            position,
+            strategyTags,
+            resolveHoldDurationSeconds(position),
+            calculateProjectedPositionHighlightScore(
+                position.getBuyRank(),
+                position.getRankDiff(),
+                calculateProfitRatePercent(valueOrZero(position.getPnlPoints()), valueOrZero(position.getStakePoints())),
+                position.getPnlPoints(),
+                strategyTags
+            )
+        );
+    }
+
+    private Long resolveHoldDurationSeconds(GamePosition position) {
+        Instant closedAt = position.getClosedAt() != null ? position.getClosedAt() : position.getSellCapturedAt();
+        if (position.getCreatedAt() == null || closedAt == null) {
+            return 0L;
+        }
+
+        return Math.max(0L, Duration.between(position.getCreatedAt(), closedAt).getSeconds());
+    }
+
+    private SeasonResultHighlightItemResponse toSeasonResultHighlightItemResponse(SeasonResultHighlightCandidate candidate) {
+        GamePosition position = candidate.position();
+        return new SeasonResultHighlightItemResponse(
+            position.getId(),
+            position.getVideoId(),
+            position.getTitle(),
+            position.getChannelTitle(),
+            position.getThumbnailUrl(),
+            position.getBuyRank(),
+            position.getSellRank(),
+            position.getRankDiff(),
+            position.getPnlPoints(),
+            calculateProfitRatePercent(valueOrZero(position.getPnlPoints()), valueOrZero(position.getStakePoints())),
+            candidate.holdDurationSeconds(),
+            candidate.tagCount(),
+            candidate.highlightScore(),
+            candidate.strategyTags()
         );
     }
 
@@ -2873,6 +2994,14 @@ public class GameService {
         return Math.round((double) profitPoints * 1000D / stakePoints) / 10D;
     }
 
+    private int valueOrZero(Integer value) {
+        return value != null ? value : 0;
+    }
+
+    private long valueOrZero(Long value) {
+        return value != null ? value : 0L;
+    }
+
     private long resolveUnitStakePoints(GamePosition position) {
         return GamePointCalculator.estimateUnitPricePoints(position.getStakePoints(), getPositionQuantity(position));
     }
@@ -2923,6 +3052,17 @@ public class GameService {
     }
 
     private record PositionHighlightScore(GamePosition position, GameHighlightResponse highlight) {
+    }
+
+    private record SeasonResultHighlightCandidate(
+        GamePosition position,
+        List<GameStrategyType> strategyTags,
+        Long holdDurationSeconds,
+        Long highlightScore
+    ) {
+        int tagCount() {
+            return strategyTags != null ? strategyTags.size() : 0;
+        }
     }
 
     private String normalizeRequired(String value, String message) {

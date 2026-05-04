@@ -32,6 +32,7 @@ public record SeasonResultResponse(
     Integer bestPositionBuyRank,
     Integer bestPositionSellRank,
     String titleCode,
-    Instant createdAt
+    Instant createdAt,
+    SeasonResultHighlightsResponse highlights
 ) {
 }

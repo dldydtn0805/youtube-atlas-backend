@@ -72,6 +72,8 @@ public interface GamePositionRepository extends JpaRepository<GamePosition, Long
 
     List<GamePosition> findBySeasonIdAndUserIdOrderByCreatedAtDesc(Long seasonId, Long userId, Pageable pageable);
 
+    List<GamePosition> findBySeasonIdInAndUserIdOrderByCreatedAtDesc(Collection<Long> seasonIds, Long userId);
+
     List<GamePosition> findBySeasonIdAndUserIdAndVideoIdAndStatusOrderByCreatedAtAsc(
         Long seasonId,
         Long userId,

@@ -197,6 +197,69 @@ class GameServiceTest {
     }
 
     @Test
+    void getMySeasonResultsIncludesPastSeasonHighlightSummaries() {
+        GameSeason season = activeSeason();
+        season.setStatus(SeasonStatus.ENDED);
+        AppUser appUser = user(7L);
+        GameSeasonResult result = seasonResult(season, appUser);
+        GamePosition topRankRiser = closedPosition(
+            season,
+            appUser,
+            301L,
+            GamePointCalculator.calculatePricePoints(190),
+            190,
+            70,
+            Instant.parse("2026-04-01T01:00:00Z"),
+            Instant.parse("2026-04-01T08:00:00Z")
+        );
+        GamePosition mostTagged = closedPosition(
+            season,
+            appUser,
+            302L,
+            GamePointCalculator.calculatePricePoints(100),
+            100,
+            1,
+            Instant.parse("2026-04-01T02:00:00Z"),
+            Instant.parse("2026-04-01T09:00:00Z")
+        );
+        GamePosition mostTaggedHigherScore = closedPosition(
+            season,
+            appUser,
+            304L,
+            GamePointCalculator.calculatePricePoints(150),
+            100,
+            1,
+            Instant.parse("2026-04-01T02:30:00Z"),
+            Instant.parse("2026-04-01T09:30:00Z")
+        );
+        GamePosition longestHeld = closedPosition(
+            season,
+            appUser,
+            303L,
+            GamePointCalculator.calculatePricePoints(30),
+            30,
+            25,
+            Instant.parse("2026-04-01T03:00:00Z"),
+            Instant.parse("2026-04-04T03:00:00Z")
+        );
+
+        when(gameSeasonResultRepository.findRecentByUserAndRegion(7L, "KR", PageRequest.of(0, 3)))
+            .thenReturn(List.of(result));
+        when(gamePositionRepository.findBySeasonIdInAndUserIdOrderByCreatedAtDesc(List.of(1L), 7L))
+            .thenReturn(List.of(mostTagged, mostTaggedHigherScore, longestHeld, topRankRiser));
+
+        var response = gameService.getMySeasonResults(authenticatedUser(), "kr", 3).getFirst();
+
+        assertThat(response.highlights().topRankRiser().positionId()).isEqualTo(301L);
+        assertThat(response.highlights().topRankRiser().highlightScore()).isPositive();
+        assertThat(response.highlights().mostTaggedPositions()).hasSize(1);
+        assertThat(response.highlights().mostTaggedPositions().getFirst().positionId()).isEqualTo(304L);
+        assertThat(response.highlights().mostTaggedPositions().getFirst().tagCount()).isGreaterThan(1);
+        assertThat(response.highlights().longestHeld().positionId()).isEqualTo(303L);
+        assertThat(response.highlights().longestHeld().holdDurationSeconds()).isEqualTo(259_200L);
+    }
+
+    @Test
     void getInventorySlotsUsesCurrentTierReward() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
@@ -2385,6 +2448,27 @@ class GameServiceTest {
         wallet.setRealizedPnlPoints(realizedPnl);
         wallet.setUpdatedAt(Instant.parse("2026-04-01T05:30:00Z"));
         return wallet;
+    }
+
+    private GameSeasonResult seasonResult(GameSeason season, AppUser appUser) {
+        GameSeasonResult result = new GameSeasonResult();
+        ReflectionTestUtils.setField(result, "id", 900L);
+        result.setSeason(season);
+        result.setUser(appUser);
+        result.setRegionCode(season.getRegionCode());
+        result.setSeasonName(season.getName());
+        result.setSeasonStartAt(season.getStartAt());
+        result.setSeasonEndAt(season.getEndAt());
+        result.setFinalRank(1);
+        result.setFinalAssetPoints(20_000L);
+        result.setFinalBalancePoints(20_000L);
+        result.setRealizedPnlPoints(10_000L);
+        result.setStartingBalancePoints(season.getStartingBalancePoints());
+        result.setProfitRatePercent(100D);
+        result.setFinalHighlightScore(0L);
+        result.setPositionCount(3L);
+        result.setCreatedAt(Instant.parse("2026-04-08T00:01:00Z"));
+        return result;
     }
 
     private GameSeasonTier tier(GameSeason season, String tierCode, String displayName, long minScore, int sortOrder) {
