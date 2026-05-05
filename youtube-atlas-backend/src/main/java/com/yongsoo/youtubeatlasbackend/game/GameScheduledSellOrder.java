@@ -39,8 +39,15 @@ public class GameScheduledSellOrder {
     @Column(name = "region_code", nullable = false, length = 10)
     private String regionCode;
 
-    @Column(name = "target_rank", nullable = false)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "trigger_type", nullable = false, length = 30)
+    private ScheduledSellTriggerType triggerType = ScheduledSellTriggerType.RANK;
+
+    @Column(name = "target_rank")
     private Integer targetRank;
+
+    @Column(name = "target_profit_rate_percent")
+    private Double targetProfitRatePercent;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "trigger_direction", nullable = false, length = 30)
@@ -119,12 +126,28 @@ public class GameScheduledSellOrder {
         this.regionCode = regionCode;
     }
 
+    public ScheduledSellTriggerType getTriggerType() {
+        return triggerType;
+    }
+
+    public void setTriggerType(ScheduledSellTriggerType triggerType) {
+        this.triggerType = triggerType;
+    }
+
     public Integer getTargetRank() {
         return targetRank;
     }
 
     public void setTargetRank(Integer targetRank) {
         this.targetRank = targetRank;
+    }
+
+    public Double getTargetProfitRatePercent() {
+        return targetProfitRatePercent;
+    }
+
+    public void setTargetProfitRatePercent(Double targetProfitRatePercent) {
+        this.targetProfitRatePercent = targetProfitRatePercent;
     }
 
     public ScheduledSellTriggerDirection getTriggerDirection() {

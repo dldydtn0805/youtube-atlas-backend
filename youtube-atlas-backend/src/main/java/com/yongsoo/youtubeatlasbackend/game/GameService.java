@@ -1455,17 +1455,27 @@ public class GameService {
                 order -> order.getPosition().getId(),
                 order -> new ScheduledSellOrderSummary(
                     order.getId(),
+                    resolveScheduledSellTriggerType(order),
                     order.getTargetRank(),
+                    order.getTargetProfitRatePercent(),
                     resolveScheduledSellTriggerDirection(order),
                     order.getQuantity()
                 ),
                 (left, right) -> new ScheduledSellOrderSummary(
                     left.id(),
+                    left.triggerType(),
                     left.targetRank(),
+                    left.targetProfitRatePercent(),
                     left.triggerDirection(),
                     left.quantity() + right.quantity()
                 )
             ));
+    }
+
+    private ScheduledSellTriggerType resolveScheduledSellTriggerType(GameScheduledSellOrder order) {
+        return order.getTriggerType() != null
+            ? order.getTriggerType()
+            : ScheduledSellTriggerType.RANK;
     }
 
     private ScheduledSellTriggerDirection resolveScheduledSellTriggerDirection(GameScheduledSellOrder order) {
@@ -1546,7 +1556,9 @@ public class GameService {
             false,
             reservedForSell,
             reservedForSell ? scheduledSellOrder.id() : null,
+            reservedForSell ? scheduledSellOrder.triggerType().name() : null,
             reservedForSell ? scheduledSellOrder.targetRank() : null,
+            reservedForSell ? scheduledSellOrder.targetProfitRatePercent() : null,
             reservedForSell ? scheduledSellOrder.triggerDirection().name() : null,
             reservedForSell ? scheduledSellOrder.quantity() : null,
             position.getStatus().name(),
@@ -1625,7 +1637,9 @@ public class GameService {
             snapshot.chartOut(),
             scheduledSellOrder != null,
             scheduledSellOrder != null ? scheduledSellOrder.id() : null,
+            scheduledSellOrder != null ? scheduledSellOrder.triggerType().name() : null,
             scheduledSellOrder != null ? scheduledSellOrder.targetRank() : null,
+            scheduledSellOrder != null ? scheduledSellOrder.targetProfitRatePercent() : null,
             scheduledSellOrder != null ? scheduledSellOrder.triggerDirection().name() : null,
             scheduledSellOrder != null ? scheduledSellOrder.quantity() : null,
             position.getStatus().name(),
@@ -3165,7 +3179,9 @@ public class GameService {
 
     private record ScheduledSellOrderSummary(
         Long id,
+        ScheduledSellTriggerType triggerType,
         Integer targetRank,
+        Double targetProfitRatePercent,
         ScheduledSellTriggerDirection triggerDirection,
         Long quantity
     ) {

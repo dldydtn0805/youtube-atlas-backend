@@ -64,7 +64,7 @@ class GameScheduledSellOrderServiceTest {
 
         assertThatThrownBy(() -> service.create(
             authenticatedUser(),
-            new CreateScheduledSellOrderRequest(300L, 10, ONE_SHARE, ScheduledSellTriggerDirection.RANK_IMPROVES_TO)
+            new CreateScheduledSellOrderRequest(300L, null, 10, null, ONE_SHARE, ScheduledSellTriggerDirection.RANK_IMPROVES_TO)
         ))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("예약 매도 수량이 보유 수량을 초과했습니다.");
@@ -79,7 +79,7 @@ class GameScheduledSellOrderServiceTest {
 
         assertThatThrownBy(() -> service.create(
             authenticatedUser(),
-            new CreateScheduledSellOrderRequest(300L, 110, ONE_SHARE, ScheduledSellTriggerDirection.RANK_IMPROVES_TO)
+            new CreateScheduledSellOrderRequest(300L, null, 110, null, ONE_SHARE, ScheduledSellTriggerDirection.RANK_IMPROVES_TO)
         ))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("현재 순위가 이미 예약 매도 조건을 만족합니다. 바로 매도하거나 조건 순위를 조정해 주세요.");
@@ -94,10 +94,25 @@ class GameScheduledSellOrderServiceTest {
 
         assertThatThrownBy(() -> service.create(
             authenticatedUser(),
-            new CreateScheduledSellOrderRequest(300L, 110, ONE_SHARE, ScheduledSellTriggerDirection.RANK_DROPS_TO)
+            new CreateScheduledSellOrderRequest(300L, null, 110, null, ONE_SHARE, ScheduledSellTriggerDirection.RANK_DROPS_TO)
         ))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("현재 순위가 이미 예약 매도 조건을 만족합니다. 바로 매도하거나 조건 순위를 조정해 주세요.");
+    }
+
+    @Test
+    void createRejectsProfitRateTriggerWhenCurrentProfitRateAlreadyMeetsTarget() {
+        GamePosition position = openPosition();
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1")))
+            .thenReturn(Optional.of(signal("video-1", 120)));
+
+        assertThatThrownBy(() -> service.create(
+            authenticatedUser(),
+            new CreateScheduledSellOrderRequest(300L, ScheduledSellTriggerType.PROFIT_RATE, null, 300D, ONE_SHARE, null)
+        ))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("현재 수익률이 이미 예약 매도 조건을 만족합니다. 바로 매도하거나 조건 수익률을 조정해 주세요.");
     }
 
     @Test
@@ -186,6 +201,53 @@ class GameScheduledSellOrderServiceTest {
         assertThat(order.getSettledPoints()).isEqualTo(697L);
     }
 
+    @Test
+    void executeTriggeredOrdersWaitsForProfitRateTriggerUntilTargetIsReached() {
+        GameScheduledSellOrder order = pendingProfitRateOrder(openPosition(), 300D);
+
+        when(gameScheduledSellOrderRepository.findByRegionCodeAndStatusOrderByCreatedAtAsc("KR", ScheduledSellOrderStatus.PENDING))
+            .thenReturn(List.of(order));
+        when(gameScheduledSellOrderRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(order));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal("video-1", 130)));
+
+        service.executeTriggeredOrders("KR");
+
+        org.mockito.Mockito.verifyNoInteractions(gameService);
+        assertThat(order.getStatus()).isEqualTo(ScheduledSellOrderStatus.PENDING);
+    }
+
+    @Test
+    void executeTriggeredOrdersSellsWhenProfitRateTargetIsReached() {
+        GameScheduledSellOrder order = pendingProfitRateOrder(openPosition(), 300D);
+
+        when(gameScheduledSellOrderRepository.findByRegionCodeAndStatusOrderByCreatedAtAsc("KR", ScheduledSellOrderStatus.PENDING))
+            .thenReturn(List.of(order));
+        when(gameScheduledSellOrderRepository.findByIdForUpdate(500L)).thenReturn(Optional.of(order));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(signal("video-1", 120)));
+        when(gameService.sellScheduledPosition(7L, 300L, ONE_SHARE))
+            .thenReturn(new SellPositionResponse(
+                300L,
+                "video-1",
+                170,
+                120,
+                50,
+                ONE_SHARE,
+                7_500L,
+                31_000L,
+                23_407L,
+                30_907L,
+                15_000L,
+                40_907L,
+                Instant.parse("2026-04-01T06:00:00Z")
+            ));
+
+        service.executeTriggeredOrders("KR");
+
+        verify(gameService).sellScheduledPosition(7L, 300L, ONE_SHARE);
+        assertThat(order.getStatus()).isEqualTo(ScheduledSellOrderStatus.EXECUTED);
+        assertThat(order.getSellPricePoints()).isEqualTo(31_000L);
+    }
+
     private AuthenticatedUser authenticatedUser() {
         return new AuthenticatedUser(7L, "atlas@example.com", "Atlas User", null);
     }
@@ -241,11 +303,20 @@ class GameScheduledSellOrderServiceTest {
         order.setUser(position.getUser());
         order.setPosition(position);
         order.setRegionCode(position.getRegionCode());
+        order.setTriggerType(ScheduledSellTriggerType.RANK);
         order.setTargetRank(targetRank);
         order.setQuantity(ONE_SHARE);
         order.setStatus(ScheduledSellOrderStatus.PENDING);
         order.setCreatedAt(Instant.parse("2026-04-01T05:50:00Z"));
         order.setUpdatedAt(Instant.parse("2026-04-01T05:50:00Z"));
+        return order;
+    }
+
+    private GameScheduledSellOrder pendingProfitRateOrder(GamePosition position, double targetProfitRatePercent) {
+        GameScheduledSellOrder order = pendingOrder(position, 10);
+        order.setTriggerType(ScheduledSellTriggerType.PROFIT_RATE);
+        order.setTargetRank(null);
+        order.setTargetProfitRatePercent(targetProfitRatePercent);
         return order;
     }
 
