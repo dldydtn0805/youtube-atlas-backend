@@ -59,15 +59,18 @@ final class GameNotificationFactory {
             return List.of();
         }
 
-        return strategyTags.stream()
+        List<GameStrategyType> notificationTags = strategyTags.stream()
             .filter(strategyType -> resolveScoreGain(strategyType, scoreGainByStrategyTag, 0L) > 0L)
-            .map(strategyType -> fromHighlight(
-                highlight,
-                resolveScoreGain(strategyType, scoreGainByStrategyTag, 0L),
-                strategyTags,
-                strategyType
-            ))
             .toList();
+        if (notificationTags.isEmpty()) {
+            return List.of();
+        }
+
+        return List.of(fromGroupedHighlight(
+            highlight,
+            sumScoreGain(notificationTags, scoreGainByStrategyTag, 0L),
+            notificationTags
+        ));
     }
 
     static List<GameNotificationResponse> fromPositionSnapshot(
@@ -154,23 +157,26 @@ final class GameNotificationFactory {
             return List.of();
         }
 
-        return strategyTagsToNotify.stream()
+        List<GameStrategyType> notificationTags = strategyTagsToNotify.stream()
             .filter(strategyType -> resolveScoreGain(
                 strategyType,
                 highlightScoreByStrategyTag,
                 0L
             ) > 0L)
-            .map(strategyType -> fromPositionSnapshot(
-                position,
-                currentRank,
-                rankDiff,
-                profitRatePercent,
-                strategyTagsToNotify,
-                resolveScoreGain(strategyType, highlightScoreByStrategyTag, 0L),
-                createdAt,
-                strategyType
-            ))
             .toList();
+        if (notificationTags.isEmpty()) {
+            return List.of();
+        }
+
+        return List.of(fromGroupedPositionSnapshot(
+            position,
+            currentRank,
+            rankDiff,
+            profitRatePercent,
+            notificationTags,
+            sumScoreGain(notificationTags, highlightScoreByStrategyTag, 0L),
+            createdAt
+        ));
     }
 
     static List<GameNotificationResponse> fromTierPromotion(
@@ -235,18 +241,19 @@ final class GameNotificationFactory {
             .toList();
     }
 
-    private static GameNotificationResponse fromHighlight(
+    private static GameNotificationResponse fromGroupedHighlight(
         GameHighlightResponse highlight,
         long scoreGain,
-        List<GameStrategyType> strategyTags,
-        GameStrategyType strategyType
+        List<GameStrategyType> strategyTags
     ) {
+        GameStrategyType representativeType = resolveRepresentativeStrategyType(strategyTags);
+
         return new GameNotificationResponse(
-            resolveId(highlight.positionId(), strategyType),
+            resolveId(highlight.positionId()),
             GameNotificationEventType.TIER_SCORE_GAIN,
-            strategyType.name(),
-            resolveTitle(strategyType),
-            resolveMessage(highlight.buyRank(), highlight.highlightRank(), highlight.rankDiff(), highlight.profitRatePercent(), strategyType),
+            representativeType.name(),
+            resolveTitle(strategyTags),
+            resolveMessage(highlight.buyRank(), highlight.highlightRank(), highlight.rankDiff(), highlight.profitRatePercent(), strategyTags),
             highlight.positionId(),
             highlight.videoId(),
             highlight.videoTitle(),
@@ -263,22 +270,23 @@ final class GameNotificationFactory {
         );
     }
 
-    private static GameNotificationResponse fromPositionSnapshot(
+    private static GameNotificationResponse fromGroupedPositionSnapshot(
         GamePosition position,
         int currentRank,
         int rankDiff,
         Double profitRatePercent,
         List<GameStrategyType> strategyTags,
         long projectedHighlightScore,
-        Instant createdAt,
-        GameStrategyType strategyType
+        Instant createdAt
     ) {
+        GameStrategyType representativeType = resolveRepresentativeStrategyType(strategyTags);
+
         return new GameNotificationResponse(
-            resolveProjectedId(position.getId(), strategyType),
+            resolveProjectedId(position.getId()),
             GameNotificationEventType.PROJECTED_HIGHLIGHT,
-            strategyType.name(),
-            resolveProjectedTitle(strategyType),
-            resolveProjectedMessage(position.getBuyRank(), currentRank, rankDiff, profitRatePercent, strategyType),
+            representativeType.name(),
+            resolveProjectedTitle(strategyTags),
+            resolveProjectedMessage(position.getBuyRank(), currentRank, rankDiff, profitRatePercent, strategyTags),
             position.getId(),
             position.getVideoId(),
             position.getTitle(),
@@ -295,16 +303,16 @@ final class GameNotificationFactory {
         );
     }
 
-    private static String resolveId(Long positionId, GameStrategyType strategyType) {
-        return "game-" + positionId + "-" + strategyType.name();
+    private static String resolveId(Long positionId) {
+        return "game-" + positionId;
     }
 
     private static String resolveTierPromotionId(Long seasonId, String tierCode, Long positionId) {
         return "tier-promotion-" + seasonId + "-" + tierCode + "-" + positionId;
     }
 
-    private static String resolveProjectedId(Long positionId, GameStrategyType strategyType) {
-        return "projected-game-" + positionId + "-" + strategyType.name();
+    private static String resolveProjectedId(Long positionId) {
+        return "projected-game-" + positionId;
     }
 
     private static String resolveTitleUnlockId(String titleCode) {
@@ -338,6 +346,20 @@ final class GameNotificationFactory {
         }
 
         return scoreGainByStrategyTag.getOrDefault(strategyType, 0L);
+    }
+
+    private static long sumScoreGain(
+        List<GameStrategyType> strategyTags,
+        Map<GameStrategyType, Long> scoreGainByStrategyTag,
+        Long fallbackScore
+    ) {
+        return strategyTags.stream()
+            .mapToLong(strategyType -> resolveScoreGain(strategyType, scoreGainByStrategyTag, fallbackScore))
+            .sum();
+    }
+
+    private static GameStrategyType resolveRepresentativeStrategyType(List<GameStrategyType> strategyTags) {
+        return strategyTags.get(0);
     }
 
     private static Map<GameStrategyType, Long> strategyScoreMap(
@@ -414,6 +436,14 @@ final class GameNotificationFactory {
         };
     }
 
+    private static String resolveTitle(List<GameStrategyType> strategyTags) {
+        if (strategyTags.size() == 1) {
+            return resolveTitle(strategyTags.get(0));
+        }
+
+        return "복합 하이라이트 기록";
+    }
+
     private static String resolveProjectedTitle(GameStrategyType strategyType) {
         return switch (strategyType) {
             case ATLAS_SHOT -> "아틀라스 샷 예상";
@@ -424,6 +454,14 @@ final class GameNotificationFactory {
             case SMALL_CASHOUT -> "스몰 캐시아웃 예상";
             case SNIPE -> "스나이프 예상";
         };
+    }
+
+    private static String resolveProjectedTitle(List<GameStrategyType> strategyTags) {
+        if (strategyTags.size() == 1) {
+            return resolveProjectedTitle(strategyTags.get(0));
+        }
+
+        return "복합 하이라이트 예상";
     }
 
     private static String resolveMessage(
@@ -443,6 +481,20 @@ final class GameNotificationFactory {
         };
     }
 
+    private static String resolveMessage(
+        Integer buyRank,
+        Integer highlightRank,
+        Integer rankDiff,
+        Double profitRatePercent,
+        List<GameStrategyType> strategyTags
+    ) {
+        return strategyTags.stream()
+            .map(strategyType -> resolveMessage(buyRank, highlightRank, rankDiff, profitRatePercent, strategyType))
+            .distinct()
+            .reduce((left, right) -> left + " " + right)
+            .orElse("");
+    }
+
     private static String resolveProjectedMessage(
         Integer buyRank,
         Integer highlightRank,
@@ -451,6 +503,17 @@ final class GameNotificationFactory {
         GameStrategyType strategyType
     ) {
         return resolveMessage(buyRank, highlightRank, rankDiff, profitRatePercent, strategyType)
+            + " 매도 시 하이라이트 점수로 확정됩니다.";
+    }
+
+    private static String resolveProjectedMessage(
+        Integer buyRank,
+        Integer highlightRank,
+        Integer rankDiff,
+        Double profitRatePercent,
+        List<GameStrategyType> strategyTags
+    ) {
+        return resolveMessage(buyRank, highlightRank, rankDiff, profitRatePercent, strategyTags)
             + " 매도 시 하이라이트 점수로 확정됩니다.";
     }
 

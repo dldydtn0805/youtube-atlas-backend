@@ -144,7 +144,7 @@ class GameNotificationFactoryTest {
     }
 
     @Test
-    void settledHighlightNotificationUsesPerTagScoreGain() {
+    void settledHighlightNotificationGroupsPerTagScoreGain() {
         GameHighlightResponse highlight = highlight(
             List.of(GameStrategyType.SMALL_CASHOUT, GameStrategyType.SNIPE),
             12_000L
@@ -160,13 +160,59 @@ class GameNotificationFactoryTest {
         );
 
         assertThat(notifications)
-            .anySatisfy(notification -> {
+            .singleElement()
+            .satisfies(notification -> {
+                assertThat(notification.id()).isEqualTo("game-300");
                 assertThat(notification.notificationType()).isEqualTo("SMALL_CASHOUT");
-                assertThat(notification.highlightScore()).isEqualTo(1_200L);
-            })
-            .anySatisfy(notification -> {
-                assertThat(notification.notificationType()).isEqualTo("SNIPE");
-                assertThat(notification.highlightScore()).isEqualTo(3_400L);
+                assertThat(notification.title()).isEqualTo("복합 하이라이트 기록");
+                assertThat(notification.strategyTags()).containsExactly(GameStrategyType.SMALL_CASHOUT, GameStrategyType.SNIPE);
+                assertThat(notification.highlightScore()).isEqualTo(4_600L);
+                assertThat(notification.message()).contains("수익률 547% 플레이가 기록됐습니다.");
+                assertThat(notification.message()).contains("140위에서 진입해 60계단을 앞질렀습니다.");
+            });
+    }
+
+    @Test
+    void projectedHighlightNotificationGroupsMultipleStrategyTags() {
+        GameSeason season = new GameSeason();
+        ReflectionTestUtils.setField(season, "id", 1L);
+
+        AppUser user = new AppUser();
+        ReflectionTestUtils.setField(user, "id", 7L);
+
+        GamePosition position = new GamePosition();
+        ReflectionTestUtils.setField(position, "id", 300L);
+        position.setSeason(season);
+        position.setUser(user);
+        position.setVideoId("video-1");
+        position.setTitle("테스트 영상");
+        position.setChannelTitle("테스트 채널");
+        position.setThumbnailUrl("https://example.com/thumb.jpg");
+        position.setBuyRank(150);
+        position.setStakePoints(100L);
+
+        List<GameNotificationResponse> notifications = GameNotificationFactory.fromPositionSnapshot(
+            position,
+            80,
+            450L,
+            Instant.parse("2026-04-22T12:00:00Z"),
+            List.of(GameStrategyType.SMALL_CASHOUT, GameStrategyType.SNIPE),
+            Map.of(
+                GameStrategyType.SMALL_CASHOUT, 2_500L,
+                GameStrategyType.SNIPE, 5_000L
+            )
+        );
+
+        assertThat(notifications)
+            .singleElement()
+            .satisfies(notification -> {
+                assertThat(notification.id()).isEqualTo("projected-game-300");
+                assertThat(notification.notificationEventType()).isEqualTo(GameNotificationEventType.PROJECTED_HIGHLIGHT);
+                assertThat(notification.notificationType()).isEqualTo("SMALL_CASHOUT");
+                assertThat(notification.title()).isEqualTo("복합 하이라이트 예상");
+                assertThat(notification.strategyTags()).containsExactly(GameStrategyType.SMALL_CASHOUT, GameStrategyType.SNIPE);
+                assertThat(notification.highlightScore()).isEqualTo(7_500L);
+                assertThat(notification.showModal()).isFalse();
             });
     }
 

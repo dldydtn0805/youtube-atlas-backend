@@ -1170,7 +1170,7 @@ class GameServiceTest {
                 org.mockito.ArgumentMatchers.eq(season),
                 org.mockito.ArgumentMatchers.argThat(notifications ->
                     notifications.stream().anyMatch(notification ->
-                        "game-302-SMALL_CASHOUT".equals(notification.id())
+                        "game-302".equals(notification.id())
                     )
                 )
             );
@@ -1237,7 +1237,7 @@ class GameServiceTest {
                 org.mockito.ArgumentMatchers.eq(season),
                 org.mockito.ArgumentMatchers.argThat(notifications ->
                     notifications.stream().anyMatch(notification ->
-                        "game-302-SMALL_CASHOUT".equals(notification.id())
+                        "game-302".equals(notification.id())
                     )
                 )
             );
@@ -1247,7 +1247,7 @@ class GameServiceTest {
                 org.mockito.ArgumentMatchers.eq(season),
                 org.mockito.ArgumentMatchers.argThat(notifications ->
                     notifications.stream().anyMatch(notification ->
-                        "game-301-SMALL_CASHOUT".equals(notification.id())
+                        "game-301".equals(notification.id())
                             && notification.highlightScore() != null
                             && notification.highlightScore() > 0L
                     )

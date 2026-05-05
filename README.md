@@ -490,11 +490,11 @@ values
 현재 로그인 사용자의 활성 시즌 게임 알림 중 삭제되지 않은 항목을 반환합니다.
 
 - `ATLAS_SHOT`, `MOONSHOT`, `BIG_CASHOUT`, `SMALL_CASHOUT`, `SNIPE` 조건을 만족하면 알림 항목으로 내려갑니다.
-- 한 포지션에서 여러 조건이 동시에 성립하면 조건별로 각각 반환합니다.
+- 한 포지션에서 여러 조건이 동시에 성립하면 하나의 알림으로 묶고, `strategyTags`에 충족한 조건들을 모두 담습니다.
 - 알림은 서버에 저장되며 `readAt`, `deletedAt` 상태로 읽음/삭제를 관리합니다.
 - 로그인 직후 `GET /api/game/seasons/current` 응답의 `notifications` 를 사용하거나 이 API를 따로 호출하면 됩니다.
 - 로그인 상태에서 WebSocket을 연결하면 같은 알림이 `/user/queue/game/notifications` 로 실시간 전달됩니다.
-- 하이라이트 알림의 `highlightScore` 는 같은 루트 포지션의 기존 최고 하이라이트 대비 해당 태그가 추가로 올린 점수입니다.
+- 하이라이트 알림의 `highlightScore` 는 같은 루트 포지션의 기존 최고 하이라이트 대비 이번 알림 묶음이 추가로 올린 점수 합계입니다.
 
 응답 예시:
 
