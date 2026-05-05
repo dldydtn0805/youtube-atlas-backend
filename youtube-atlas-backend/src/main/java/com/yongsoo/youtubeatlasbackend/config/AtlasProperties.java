@@ -285,7 +285,7 @@ public class AtlasProperties {
         private int payoutSlotMinutes = 5;
         private int seasonDurationDays = 7;
         private long startingBalancePoints = 10_000L;
-        private int minHoldSeconds = 600;
+        private int minHoldSeconds = 60;
         private int maxOpenPositions = 5;
         private int rankPointMultiplier = 100;
 

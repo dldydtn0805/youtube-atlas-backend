@@ -261,7 +261,7 @@ class GameScheduledSellOrderServiceTest {
         season.setStartAt(Instant.parse("2026-04-01T00:00:00Z"));
         season.setEndAt(Instant.parse("2026-04-08T00:00:00Z"));
         season.setStartingBalancePoints(10_000L);
-        season.setMinHoldSeconds(600);
+        season.setMinHoldSeconds(60);
         season.setMaxOpenPositions(5);
         season.setRankPointMultiplier(100);
         season.setCreatedAt(Instant.parse("2026-04-01T00:00:00Z"));

@@ -85,7 +85,7 @@ GAME_SETTLEMENT_CRON=0 */5 * * * *
 GAME_PAYOUT_SLOT_MINUTES=5
 GAME_SEASON_DURATION_DAYS=7
 GAME_STARTING_BALANCE_POINTS=10000
-GAME_MIN_HOLD_SECONDS=600
+GAME_MIN_HOLD_SECONDS=60
 GAME_MAX_OPEN_POSITIONS=5
 GAME_RANK_POINT_MULTIPLIER=100
 TRENDING_SCHEDULER_ENABLED=true
@@ -296,13 +296,13 @@ Authorization: Bearer {accessToken}
 insert into game_seasons
 (name, status, region_code, start_at, end_at, starting_balance_points, min_hold_seconds, max_open_positions, rank_point_multiplier, created_at)
 values
-('KR Daily Season', 'ACTIVE', 'KR', now(), now() + interval '7 day', 10000, 600, 5, 100, now());
+('KR Daily Season', 'ACTIVE', 'KR', now(), now() + interval '7 day', 10000, 60, 5, 100, now());
 ```
 
 권장 기본값:
 
 - `starting_balance_points = 10000`
-- `min_hold_seconds = 600`
+- `min_hold_seconds = 60`
 - `max_open_positions = 5`
 - `rank_point_multiplier = 100`
 
@@ -323,7 +323,7 @@ values
   "startAt": "2026-04-01T00:00:00Z",
   "endAt": "2026-04-08T00:00:00Z",
   "startingBalancePoints": 10000,
-  "minHoldSeconds": 600,
+  "minHoldSeconds": 60,
   "maxOpenPositions": 5,
   "rankPointMultiplier": 100,
   "inventorySlots": {
