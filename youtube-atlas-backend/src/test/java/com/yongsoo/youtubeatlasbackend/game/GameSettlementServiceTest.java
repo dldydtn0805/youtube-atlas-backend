@@ -67,6 +67,8 @@ class GameSettlementServiceTest {
             .thenReturn(List.of());
         when(gameTierService.getOrCreateTiers(any(GameSeason.class)))
             .thenAnswer(invocation -> List.of(tier(invocation.getArgument(0), "BRONZE", "브론즈", 0L, 1)));
+        when(gameTierService.resolveEffectiveTiers(any(GameSeason.class), any()))
+            .thenAnswer(invocation -> invocation.getArgument(1));
         when(gameTierService.resolveTier(any(), anyLong()))
             .thenAnswer(invocation -> invocation.<List<GameSeasonTier>>getArgument(0).get(0));
     }

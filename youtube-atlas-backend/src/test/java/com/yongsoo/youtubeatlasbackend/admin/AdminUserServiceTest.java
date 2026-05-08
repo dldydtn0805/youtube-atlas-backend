@@ -88,7 +88,17 @@ class AdminUserServiceTest {
         adminAccessService = org.mockito.Mockito.mock(AdminAccessService.class);
         clock = Clock.fixed(Instant.parse("2026-04-08T03:00:00Z"), ZoneOffset.UTC);
         GameSeasonTierRepository gameSeasonTierRepository = org.mockito.Mockito.mock(GameSeasonTierRepository.class);
-        GameTierService gameTierService = new GameTierService(gameSeasonTierRepository, clock);
+        GameTierService gameTierService = new GameTierService(
+            gameSeasonTierRepository,
+            gameWalletRepository,
+            gameHighlightStateRepository,
+            clock
+        );
+        when(gameWalletRepository.findBySeasonId(org.mockito.ArgumentMatchers.anyLong())).thenReturn(List.of());
+        when(gameHighlightStateRepository.findBySeasonIdAndBestSettledHighlightScoreGreaterThan(
+            org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.anyLong()
+        )).thenReturn(List.of());
         adminUserService = new AdminUserService(
             appUserRepository,
             authSessionRepository,
@@ -193,9 +203,8 @@ class AdminUserServiceTest {
         assertThat(response.activeSeasonGame().totalAssetPoints()).isEqualTo(15000L);
         assertThat(response.activeSeasonGame().tierScore()).isEqualTo(600_000L);
         assertThat(response.activeSeasonGame().currentTier()).isNotNull();
-        assertThat(response.activeSeasonGame().currentTier().tierCode()).isEqualTo("MASTER");
-        assertThat(response.activeSeasonGame().nextTier()).isNotNull();
-        assertThat(response.activeSeasonGame().nextTier().tierCode()).isEqualTo("LEGEND");
+        assertThat(response.activeSeasonGame().currentTier().tierCode()).isEqualTo("LEGEND");
+        assertThat(response.activeSeasonGame().nextTier()).isNull();
         assertThat(response.activeSeasonGame().openPositionCount()).isEqualTo(2L);
         assertThat(response.activeSeasonGame().closedPositionCount()).isEqualTo(5L);
     }

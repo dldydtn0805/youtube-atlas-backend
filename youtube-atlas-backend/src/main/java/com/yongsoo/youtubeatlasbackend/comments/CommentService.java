@@ -356,6 +356,7 @@ public class CommentService {
             return Optional.empty();
         }
 
+        List<GameSeasonTier> effectiveTiers = gameTierService.resolveEffectiveTiers(season, tiers);
         long highlightScore = gameHighlightStateRepository
             .findBySeasonIdAndUserIdAndBestSettledHighlightScoreGreaterThanOrderByBestSettledCreatedAtDesc(
                 season.getId(),
@@ -365,7 +366,7 @@ public class CommentService {
             .mapToLong(GameHighlightState::getBestSettledHighlightScore)
             .sum();
         long adjustedHighlightScore = highlightScore + normalizeTierScoreAdjustment(wallet.getManualTierScoreAdjustment());
-        return Optional.ofNullable(gameTierService.resolveTier(tiers, adjustedHighlightScore).getTierCode());
+        return Optional.ofNullable(gameTierService.resolveTier(effectiveTiers, adjustedHighlightScore).getTierCode());
     }
 
     private Optional<Comment> findLatestUserComment(String clientId, Long userId) {

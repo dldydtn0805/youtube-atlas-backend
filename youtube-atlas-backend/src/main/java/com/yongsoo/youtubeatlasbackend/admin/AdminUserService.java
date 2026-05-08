@@ -253,6 +253,7 @@ public class AdminUserService {
     private AdminUserGameSummaryResponse toGameSummary(Long userId, GameSeason activeSeason) {
         List<GameSeasonTier> tiers = gameTierService.getOrCreateTiers(activeSeason);
         long highlightScore = gameService.calculateSettledUserHighlightScore(activeSeason.getId(), userId);
+        List<GameSeasonTier> effectiveTiers = gameTierService.resolveEffectiveTiers(activeSeason, tiers);
         long openPositionCount = gamePositionRepository.countBySeasonIdAndUserIdAndStatus(
             activeSeason.getId(),
             userId,
@@ -268,8 +269,8 @@ public class AdminUserService {
             .map(wallet -> {
                 long manualTierScoreAdjustment = normalizeTierScoreAdjustment(wallet.getManualTierScoreAdjustment());
                 long tierScore = highlightScore + manualTierScoreAdjustment;
-                GameSeasonTier currentTier = resolveCurrentTier(tiers, tierScore);
-                GameSeasonTier nextTier = resolveNextTier(tiers, tierScore);
+                GameSeasonTier currentTier = resolveCurrentTier(effectiveTiers, tierScore);
+                GameSeasonTier nextTier = resolveNextTier(effectiveTiers, tierScore);
 
                 return new AdminUserGameSummaryResponse(
                     activeSeason.getId(),
@@ -301,8 +302,8 @@ public class AdminUserService {
                 0L,
                 highlightScore,
                 activeSeason.getStartingBalancePoints(),
-                toTierSummary(resolveCurrentTier(tiers, highlightScore)),
-                toTierSummary(resolveNextTier(tiers, highlightScore)),
+                toTierSummary(resolveCurrentTier(effectiveTiers, highlightScore)),
+                toTierSummary(resolveNextTier(effectiveTiers, highlightScore)),
                 openPositionCount,
                 closedPositionCount
             ));

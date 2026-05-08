@@ -161,6 +161,8 @@ class GameServiceTest {
         when(gameScheduledSellOrderRepository.findByPositionIdsAndStatus(any(), any())).thenReturn(List.of());
         when(gameNotificationService.syncAndListSeasonNotifications(any(GameSeason.class), any(), any()))
             .thenAnswer(invocation -> invocation.getArgument(2));
+        when(gameTierService.resolveEffectiveTiers(any(GameSeason.class), any()))
+            .thenAnswer(invocation -> invocation.getArgument(1));
         when(achievementTitleService.grantTitlesForHighlight(any(), any())).thenReturn(List.of());
         when(achievementTitleService.grantTitlesForHighlights(any(), any(), any(), any())).thenReturn(List.of());
     }

@@ -581,6 +581,7 @@ public class GameService {
                 state -> state.getUser().getId(),
                 Collectors.mapping(this::toStoredHighlightResponse, Collectors.toList())
             ));
+        List<GameSeasonTier> effectiveTiers = gameTierService.resolveEffectiveTiers(season, tiers);
         Map<Long, com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse> selectedTitleByUserId =
             achievementTitleService.findSelectedTitlesByUserIds(
                 wallets.stream().map(wallet -> wallet.getUser().getId()).toList()
@@ -597,7 +598,7 @@ public class GameService {
                 openPositionsByUserId.getOrDefault(wallet.getUser().getId(), List.of()),
                 highlightsByUserId.getOrDefault(wallet.getUser().getId(), List.of()),
                 signalByVideoId,
-                tiers,
+                effectiveTiers,
                 selectedTitles.get(wallet.getUser().getId())
             ))
             .sorted(
@@ -619,14 +620,9 @@ public class GameService {
         List<GameSeasonTier> tiers = gameTierService.getOrCreateTiers(season);
         long calculatedHighlightScore = calculateUserHighlightScore(season.getId(), authenticatedUser.id());
         long highlightScore = applyManualTierScoreAdjustment(wallet, calculatedHighlightScore);
-        GameSeasonTier currentTier = gameTierService.resolveTier(tiers, highlightScore);
-        GameSeasonTier nextTier = tiers.stream()
-            .filter(tier -> tier.getMinScore() > highlightScore)
-            .min(
-                Comparator.comparingLong(GameSeasonTier::getMinScore)
-                    .thenComparingInt(GameSeasonTier::getSortOrder)
-            )
-            .orElse(null);
+        List<GameSeasonTier> effectiveTiers = gameTierService.resolveEffectiveTiers(season, tiers);
+        GameSeasonTier currentTier = gameTierService.resolveTier(effectiveTiers, highlightScore);
+        GameSeasonTier nextTier = resolveNextTier(effectiveTiers, highlightScore);
 
         return new TierProgressResponse(
             season.getId(),
@@ -637,7 +633,7 @@ public class GameService {
             normalizeTierScoreAdjustment(wallet.getManualTierScoreAdjustment()),
             toTierResponse(currentTier),
             nextTier != null ? toTierResponse(nextTier) : null,
-            tiers.stream().map(this::toTierResponse).toList()
+            effectiveTiers.stream().map(this::toTierResponse).toList()
         );
     }
 
@@ -1405,9 +1401,10 @@ public class GameService {
 
         long calculatedHighlightScore = calculateUserHighlightScore(season.getId(), wallet.getUser().getId());
         long highlightScore = applyManualTierScoreAdjustment(wallet, calculatedHighlightScore);
-        GameSeasonTier currentTier = gameTierService.resolveTier(tiers, highlightScore);
-        GameSeasonTier nextTier = resolveNextTier(tiers, highlightScore);
-        int maxSlots = tiers.stream()
+        List<GameSeasonTier> effectiveTiers = gameTierService.resolveEffectiveTiers(season, tiers);
+        GameSeasonTier currentTier = gameTierService.resolveTier(effectiveTiers, highlightScore);
+        GameSeasonTier nextTier = resolveNextTier(effectiveTiers, highlightScore);
+        int maxSlots = effectiveTiers.stream()
             .mapToInt(tier -> Math.max(baseSlots, normalizePositive(tier.getInventorySlots())))
             .max()
             .orElse(baseSlots);
@@ -1420,7 +1417,7 @@ public class GameService {
             maxSlots,
             currentTier != null ? toTierResponse(currentTier) : null,
             nextTier != null ? toTierResponse(nextTier) : null,
-            tiers.stream().map(this::toTierResponse).toList()
+            effectiveTiers.stream().map(this::toTierResponse).toList()
         );
     }
 
@@ -2792,8 +2789,9 @@ public class GameService {
             return;
         }
 
-        GameSeasonTier previousTier = gameTierService.resolveTier(tiers, adjustedPreviousHighlightScore);
-        GameSeasonTier currentTier = gameTierService.resolveTier(tiers, adjustedCurrentHighlightScore);
+        List<GameSeasonTier> effectiveTiers = gameTierService.resolveEffectiveTiers(settledPosition.getSeason(), tiers);
+        GameSeasonTier previousTier = gameTierService.resolveTier(effectiveTiers, adjustedPreviousHighlightScore);
+        GameSeasonTier currentTier = gameTierService.resolveTier(effectiveTiers, adjustedCurrentHighlightScore);
         if (previousTier == null || currentTier == null || currentTier.getSortOrder() <= previousTier.getSortOrder()) {
             return;
         }

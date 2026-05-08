@@ -63,6 +63,8 @@ class CommentServiceTest {
         gameSeasonTierRepository = org.mockito.Mockito.mock(GameSeasonTierRepository.class);
         gameTierService = org.mockito.Mockito.mock(GameTierService.class);
         achievementTitleService = org.mockito.Mockito.mock(AchievementTitleService.class);
+        when(gameTierService.resolveEffectiveTiers(any(GameSeason.class), any()))
+            .thenAnswer(invocation -> invocation.getArgument(1));
         Clock fixedClock = Clock.fixed(Instant.parse("2026-03-24T10:00:00Z"), ZoneOffset.UTC);
         commentService = new CommentService(
             commentRepository,

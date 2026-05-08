@@ -156,7 +156,10 @@ public class GameSettlementService {
                 state -> state.getUser().getId(),
                 Collectors.summingLong(GameHighlightState::getBestSettledHighlightScore)
             ));
-        List<GameSeasonTier> tiers = gameTierService.getOrCreateTiers(season);
+        List<GameSeasonTier> tiers = gameTierService.resolveEffectiveTiers(
+            season,
+            gameTierService.getOrCreateTiers(season)
+        );
         List<SeasonResultCandidate> candidates = gameWalletRepository.findBySeasonId(season.getId()).stream()
             .map(wallet -> toSeasonResultCandidate(
                 wallet,
