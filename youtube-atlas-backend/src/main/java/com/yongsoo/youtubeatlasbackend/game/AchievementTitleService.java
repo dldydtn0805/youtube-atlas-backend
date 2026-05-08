@@ -132,12 +132,61 @@ public class AchievementTitleService {
             AchievementTitleGrade.ULTIMATE,
             "150위 밖에서 잡은 영상이 1위까지 올라온 전 구간 복합 하이라이트 달성자입니다.",
             130
+        ),
+        new DefaultAchievementTitle(
+            "DIAMOND_SEEKER",
+            "Diamond Seeker",
+            "D. Seeker",
+            AchievementTitleGrade.NORMAL,
+            "시즌 종료 티어를 다이아몬드로 1회 마무리한 플레이어입니다.",
+            140
+        ),
+        new DefaultAchievementTitle(
+            "DIAMOND_FINDER",
+            "Diamond Finder",
+            "D. Finder",
+            AchievementTitleGrade.RARE,
+            "시즌 종료 티어를 다이아몬드로 5회 마무리한 플레이어입니다.",
+            150
+        ),
+        new DefaultAchievementTitle(
+            "MASTER_FINDER",
+            "Master Finder",
+            "M. Finder",
+            AchievementTitleGrade.RARE,
+            "시즌 종료 티어를 마스터로 1회 마무리한 플레이어입니다.",
+            160
+        ),
+        new DefaultAchievementTitle(
+            "MASTER_WALKER",
+            "Master Walker",
+            "M. Walker",
+            AchievementTitleGrade.SUPER,
+            "시즌 종료 티어를 마스터로 5회 마무리한 플레이어입니다.",
+            170
+        ),
+        new DefaultAchievementTitle(
+            "LEGEND_WALKER",
+            "Legend Walker",
+            "L. Walker",
+            AchievementTitleGrade.SUPER,
+            "시즌 종료 티어를 레전드로 1회 마무리한 플레이어입니다.",
+            180
+        ),
+        new DefaultAchievementTitle(
+            "LEGEND_SNIPER",
+            "Legend Sniper",
+            "L. Sniper",
+            AchievementTitleGrade.ULTIMATE,
+            "시즌 종료 티어를 레전드로 5회 마무리한 플레이어입니다.",
+            190
         )
     );
 
     private final AchievementTitleRepository achievementTitleRepository;
     private final UserAchievementTitleRepository userAchievementTitleRepository;
     private final UserAchievementTitleSettingRepository userAchievementTitleSettingRepository;
+    private final GameSeasonResultRepository gameSeasonResultRepository;
     private final AppUserRepository appUserRepository;
     private final Clock clock;
 
@@ -145,12 +194,14 @@ public class AchievementTitleService {
         AchievementTitleRepository achievementTitleRepository,
         UserAchievementTitleRepository userAchievementTitleRepository,
         UserAchievementTitleSettingRepository userAchievementTitleSettingRepository,
+        GameSeasonResultRepository gameSeasonResultRepository,
         AppUserRepository appUserRepository,
         Clock clock
     ) {
         this.achievementTitleRepository = achievementTitleRepository;
         this.userAchievementTitleRepository = userAchievementTitleRepository;
         this.userAchievementTitleSettingRepository = userAchievementTitleSettingRepository;
+        this.gameSeasonResultRepository = gameSeasonResultRepository;
         this.appUserRepository = appUserRepository;
         this.clock = clock;
     }
@@ -234,6 +285,34 @@ public class AchievementTitleService {
             .flatMap(state -> resolveEarnedCodes(parseStrategyTags(state.getStrategyTags())).stream())
             .collect(Collectors.toSet());
         return grantTitles(user, season, null, codes, sourceType);
+    }
+
+    @Transactional
+    public List<AchievementTitle> grantTitlesForSeasonResult(GameSeasonResult seasonResult) {
+        if (seasonResult == null
+            || seasonResult.getUser() == null
+            || seasonResult.getSeason() == null
+            || !StringUtils.hasText(seasonResult.getRegionCode())) {
+            return List.of();
+        }
+
+        List<GameSeasonResult> seasonResults = new ArrayList<>(
+            gameSeasonResultRepository.findByUserIdAndRegionCode(
+                seasonResult.getUser().getId(),
+                seasonResult.getRegionCode()
+            )
+        );
+        if (!containsSeasonResult(seasonResults, seasonResult)) {
+            seasonResults.add(seasonResult);
+        }
+
+        return grantTitles(
+            seasonResult.getUser(),
+            seasonResult.getSeason(),
+            null,
+            resolveSeasonResultTitleCodes(seasonResults),
+            AchievementTitleSourceType.SEASON_RESULT
+        );
     }
 
     @Transactional(readOnly = true)
@@ -510,6 +589,51 @@ public class AchievementTitleService {
         }
 
         return codes;
+    }
+
+    private boolean containsSeasonResult(List<GameSeasonResult> seasonResults, GameSeasonResult seasonResult) {
+        return seasonResults.stream().anyMatch(candidate -> {
+            if (candidate.getId() != null && seasonResult.getId() != null) {
+                return candidate.getId().equals(seasonResult.getId());
+            }
+            return candidate.getSeason() != null
+                && seasonResult.getSeason() != null
+                && candidate.getSeason().getId() != null
+                && candidate.getSeason().getId().equals(seasonResult.getSeason().getId());
+        });
+    }
+
+    private Set<String> resolveSeasonResultTitleCodes(List<GameSeasonResult> seasonResults) {
+        long diamondCount = countFinalTier(seasonResults, "DIAMOND");
+        long masterCount = countFinalTier(seasonResults, "MASTER");
+        long legendCount = countFinalTier(seasonResults, "LEGEND");
+
+        Set<String> codes = new java.util.HashSet<>();
+        if (diamondCount >= 1) {
+            codes.add("DIAMOND_SEEKER");
+        }
+        if (diamondCount >= 5) {
+            codes.add("DIAMOND_FINDER");
+        }
+        if (masterCount >= 1) {
+            codes.add("MASTER_FINDER");
+        }
+        if (masterCount >= 5) {
+            codes.add("MASTER_WALKER");
+        }
+        if (legendCount >= 1) {
+            codes.add("LEGEND_WALKER");
+        }
+        if (legendCount >= 5) {
+            codes.add("LEGEND_SNIPER");
+        }
+        return codes;
+    }
+
+    private long countFinalTier(List<GameSeasonResult> seasonResults, String tierCode) {
+        return seasonResults.stream()
+            .filter(result -> tierCode.equals(result.getFinalTierCode()))
+            .count();
     }
 
     private AchievementTitleResponse toAchievementTitleResponse(

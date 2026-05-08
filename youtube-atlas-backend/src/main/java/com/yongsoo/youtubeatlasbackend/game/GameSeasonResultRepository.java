@@ -10,6 +10,8 @@ public interface GameSeasonResultRepository extends JpaRepository<GameSeasonResu
 
     List<GameSeasonResult> findBySeasonId(Long seasonId);
 
+    List<GameSeasonResult> findByUserIdAndRegionCode(Long userId, String regionCode);
+
     @Query("""
         select result
         from GameSeasonResult result

@@ -24,6 +24,7 @@ class AchievementTitleServiceTest {
     private AchievementTitleRepository achievementTitleRepository;
     private UserAchievementTitleRepository userAchievementTitleRepository;
     private UserAchievementTitleSettingRepository userAchievementTitleSettingRepository;
+    private GameSeasonResultRepository gameSeasonResultRepository;
     private AppUserRepository appUserRepository;
     private AchievementTitleService achievementTitleService;
     private List<AchievementTitle> titles;
@@ -35,6 +36,7 @@ class AchievementTitleServiceTest {
         achievementTitleRepository = org.mockito.Mockito.mock(AchievementTitleRepository.class);
         userAchievementTitleRepository = org.mockito.Mockito.mock(UserAchievementTitleRepository.class);
         userAchievementTitleSettingRepository = org.mockito.Mockito.mock(UserAchievementTitleSettingRepository.class);
+        gameSeasonResultRepository = org.mockito.Mockito.mock(GameSeasonResultRepository.class);
         appUserRepository = org.mockito.Mockito.mock(AppUserRepository.class);
         titles = new ArrayList<>();
         userTitles = new ArrayList<>();
@@ -44,6 +46,7 @@ class AchievementTitleServiceTest {
             achievementTitleRepository,
             userAchievementTitleRepository,
             userAchievementTitleSettingRepository,
+            gameSeasonResultRepository,
             appUserRepository,
             fixedClock
         );
@@ -175,6 +178,48 @@ class AchievementTitleServiceTest {
     }
 
     @Test
+    void grantTitlesForSeasonResultAwardsCumulativeTierTitles() {
+        GameSeasonResult currentResult = seasonResult("LEGEND", 100L);
+        when(gameSeasonResultRepository.findByUserIdAndRegionCode(7L, "KR")).thenReturn(List.of(
+            seasonResult("DIAMOND", 1L),
+            seasonResult("DIAMOND", 2L),
+            seasonResult("DIAMOND", 3L),
+            seasonResult("DIAMOND", 4L),
+            seasonResult("DIAMOND", 5L),
+            seasonResult("MASTER", 6L),
+            seasonResult("MASTER", 7L),
+            seasonResult("MASTER", 8L),
+            seasonResult("MASTER", 9L),
+            seasonResult("MASTER", 10L),
+            seasonResult("LEGEND", 11L),
+            seasonResult("LEGEND", 12L),
+            seasonResult("LEGEND", 13L),
+            seasonResult("LEGEND", 14L)
+        ));
+
+        List<AchievementTitle> unlockedTitles = achievementTitleService.grantTitlesForSeasonResult(currentResult);
+
+        assertThat(earnedCodes()).containsExactlyInAnyOrder(
+            "DIAMOND_SEEKER",
+            "DIAMOND_FINDER",
+            "MASTER_FINDER",
+            "MASTER_WALKER",
+            "LEGEND_WALKER",
+            "LEGEND_SNIPER"
+        );
+        assertThat(unlockedTitles).extracting(AchievementTitle::getCode)
+            .containsExactly(
+                "DIAMOND_SEEKER",
+                "DIAMOND_FINDER",
+                "MASTER_FINDER",
+                "MASTER_WALKER",
+                "LEGEND_WALKER",
+                "LEGEND_SNIPER"
+            );
+        assertThat(setting.getSelectedTitle().getCode()).isEqualTo("LEGEND_SNIPER");
+    }
+
+    @Test
     void grantTitlesForHighlightsDoesNotCombineSeparateHighlightsIntoSolarWalker() {
         List<AchievementTitle> unlockedTitles = achievementTitleService.grantTitlesForHighlights(
             user(),
@@ -230,6 +275,21 @@ class AchievementTitleServiceTest {
         season.setRegionCode("KR");
         season.setName("Season");
         season.setStatus(SeasonStatus.ACTIVE);
+        return season;
+    }
+
+    private GameSeasonResult seasonResult(String finalTierCode, Long seasonId) {
+        GameSeasonResult result = new GameSeasonResult();
+        result.setUser(user());
+        result.setSeason(season(seasonId));
+        result.setRegionCode("KR");
+        result.setFinalTierCode(finalTierCode);
+        return result;
+    }
+
+    private GameSeason season(Long id) {
+        GameSeason season = season();
+        ReflectionTestUtils.setField(season, "id", id);
         return season;
     }
 }

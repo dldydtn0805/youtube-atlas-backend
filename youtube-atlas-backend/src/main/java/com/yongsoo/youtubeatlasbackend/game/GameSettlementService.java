@@ -33,6 +33,7 @@ public class GameSettlementService {
     private final GameSeasonResultRepository gameSeasonResultRepository;
     private final GameHighlightStateRepository gameHighlightStateRepository;
     private final GameTierService gameTierService;
+    private final AchievementTitleService achievementTitleService;
     private final TrendSignalRepository trendSignalRepository;
     private final Clock clock;
 
@@ -45,6 +46,7 @@ public class GameSettlementService {
         GameSeasonResultRepository gameSeasonResultRepository,
         GameHighlightStateRepository gameHighlightStateRepository,
         GameTierService gameTierService,
+        AchievementTitleService achievementTitleService,
         TrendSignalRepository trendSignalRepository,
         Clock clock
     ) {
@@ -56,6 +58,7 @@ public class GameSettlementService {
         this.gameSeasonResultRepository = gameSeasonResultRepository;
         this.gameHighlightStateRepository = gameHighlightStateRepository;
         this.gameTierService = gameTierService;
+        this.achievementTitleService = achievementTitleService;
         this.trendSignalRepository = trendSignalRepository;
         this.clock = clock;
     }
@@ -180,7 +183,8 @@ public class GameSettlementService {
         for (int index = 0; index < candidates.size(); index += 1) {
             SeasonResultCandidate candidate = candidates.get(index);
             if (!existingUserIds.contains(candidate.wallet().getUser().getId())) {
-                gameSeasonResultRepository.save(toSeasonResult(season, candidate, index + 1, now));
+                GameSeasonResult result = gameSeasonResultRepository.save(toSeasonResult(season, candidate, index + 1, now));
+                achievementTitleService.grantTitlesForSeasonResult(result);
             }
         }
     }

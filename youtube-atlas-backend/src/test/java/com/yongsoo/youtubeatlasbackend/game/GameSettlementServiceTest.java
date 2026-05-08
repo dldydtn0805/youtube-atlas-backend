@@ -34,6 +34,7 @@ class GameSettlementServiceTest {
     private GameSeasonResultRepository gameSeasonResultRepository;
     private GameHighlightStateRepository gameHighlightStateRepository;
     private GameTierService gameTierService;
+    private AchievementTitleService achievementTitleService;
     private TrendSignalRepository trendSignalRepository;
     private GameSettlementService gameSettlementService;
 
@@ -47,6 +48,7 @@ class GameSettlementServiceTest {
         gameSeasonResultRepository = org.mockito.Mockito.mock(GameSeasonResultRepository.class);
         gameHighlightStateRepository = org.mockito.Mockito.mock(GameHighlightStateRepository.class);
         gameTierService = org.mockito.Mockito.mock(GameTierService.class);
+        achievementTitleService = org.mockito.Mockito.mock(AchievementTitleService.class);
         trendSignalRepository = org.mockito.Mockito.mock(TrendSignalRepository.class);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-04-08T00:01:00Z"), ZoneOffset.UTC);
 
@@ -59,10 +61,12 @@ class GameSettlementServiceTest {
             gameSeasonResultRepository,
             gameHighlightStateRepository,
             gameTierService,
+            achievementTitleService,
             trendSignalRepository,
             fixedClock
         );
         when(gameSeasonResultRepository.findBySeasonId(any())).thenReturn(List.of());
+        when(gameSeasonResultRepository.save(any(GameSeasonResult.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(gameHighlightStateRepository.findBySeasonIdAndBestSettledHighlightScoreGreaterThan(any(), any()))
             .thenReturn(List.of());
         when(gameTierService.getOrCreateTiers(any(GameSeason.class)))
@@ -128,6 +132,7 @@ class GameSettlementServiceTest {
         assertThat(result.getBestPositionProfitPoints()).isEqualTo(pnlPoints);
         assertThat(result.getBestPositionProfitRatePercent()).isEqualTo(rate(pnlPoints, buyPricePoints));
         assertThat(result.getBestPositionRankDiff()).isEqualTo(20);
+        verify(achievementTitleService).grantTitlesForSeasonResult(result);
         verify(gameSeasonRepository).save(season);
     }
 
