@@ -121,6 +121,32 @@ final class GamePointCalculator {
         return Math.max(0L, currentPricePoints - calculateSellFeePoints(currentPricePoints));
     }
 
+    static long estimatePreFeePointsFromSettledPoints(long settledPoints) {
+        if (settledPoints <= 0L) {
+            return 0L;
+        }
+
+        BigInteger estimatedPointValue = BigInteger.valueOf(settledPoints)
+            .add(BigInteger.ONE)
+            .multiply(BigInteger.valueOf(SELL_FEE_DENOMINATOR))
+            .add(BigInteger.valueOf(SELL_FEE_DENOMINATOR - SELL_FEE_NUMERATOR - 1L))
+            .divide(BigInteger.valueOf(SELL_FEE_DENOMINATOR - SELL_FEE_NUMERATOR))
+            .subtract(BigInteger.ONE);
+        if (estimatedPointValue.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) >= 0) {
+            return Long.MAX_VALUE;
+        }
+
+        long estimatedPoints = estimatedPointValue.longValueExact();
+
+        while (estimatedPoints > 0L && calculateSettledPoints(estimatedPoints) > settledPoints) {
+            estimatedPoints -= 1L;
+        }
+        while (estimatedPoints < Long.MAX_VALUE && calculateSettledPoints(estimatedPoints + 1L) <= settledPoints) {
+            estimatedPoints += 1L;
+        }
+        return estimatedPoints;
+    }
+
     static long calculateSellFeePoints(long currentPricePoints) {
         if (currentPricePoints <= 0L) {
             return 0L;

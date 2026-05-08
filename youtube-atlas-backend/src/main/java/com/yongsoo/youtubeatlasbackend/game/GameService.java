@@ -1823,10 +1823,11 @@ public class GameService {
             return null;
         }
 
+        long currentPricePoints = GamePointCalculator.estimatePreFeePointsFromSettledPoints(position.getSettledPoints());
         return new HighlightSnapshot(
             position.getSellRank(),
-            position.getSettledPoints(),
-            position.getPnlPoints(),
+            currentPricePoints,
+            GamePointCalculator.calculateProfitPoints(position.getStakePoints(), currentPricePoints),
             position.getClosedAt() != null ? position.getClosedAt() : position.getSellCapturedAt()
         );
     }

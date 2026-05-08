@@ -19,4 +19,11 @@ class GamePointCalculatorTest {
 
         assertThat(result).isEqualTo(12_000_000_000_000_000L);
     }
+
+    @Test
+    void estimatePreFeePointsFromSettledPointsRestoresThresholdBoundary() {
+        long settledPoints = GamePointCalculator.calculateSettledPoints(4_000L);
+
+        assertThat(GamePointCalculator.estimatePreFeePointsFromSettledPoints(settledPoints)).isEqualTo(4_000L);
+    }
 }

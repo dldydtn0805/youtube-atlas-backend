@@ -583,6 +583,80 @@ class GameServiceTest {
     }
 
     @Test
+    void sellAwardsSmallCashoutHighlightAtExactThreeHundredPercentBeforeFee() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = 1_000L;
+        long sellPricePoints = GamePointCalculator.calculatePricePoints(190);
+        GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            190,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        TrendSignal latestSignal = signal("video-1", 190, 0);
+
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.save(position)).thenReturn(position);
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = gameService.sell(authenticatedUser(), 300L);
+
+        assertThat(sellPricePoints).isEqualTo(4_000L);
+        assertThat(response.highlightScore()).isPositive();
+        assertThat(storedHighlightStates)
+            .singleElement()
+            .satisfies(state -> {
+                assertThat(state.getStrategyTags()).isEqualTo("SMALL_CASHOUT");
+                assertThat(state.getProfitRatePercent()).isEqualTo(300D);
+                assertThat(state.getBestSettledHighlightScore()).isPositive();
+            });
+    }
+
+    @Test
+    void sellAwardsBigCashoutHighlightAtExactOneThousandPercentBeforeFee() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = 10_000L;
+        long sellPricePoints = GamePointCalculator.calculatePricePoints(80);
+        GameWallet wallet = wallet(season, appUser, 20_000L - buyPricePoints, buyPricePoints, 0L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            80,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        TrendSignal latestSignal = signal("video-1", 80, 0);
+
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.save(position)).thenReturn(position);
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = gameService.sell(authenticatedUser(), 300L);
+
+        assertThat(sellPricePoints).isEqualTo(110_000L);
+        assertThat(response.highlightScore()).isPositive();
+        assertThat(storedHighlightStates)
+            .singleElement()
+            .satisfies(state -> {
+                assertThat(state.getStrategyTags()).isEqualTo("BIG_CASHOUT");
+                assertThat(state.getProfitRatePercent()).isEqualTo(1_000D);
+                assertThat(state.getBestSettledHighlightScore()).isPositive();
+            });
+    }
+
+    @Test
     void sellPublishesTierPromotionFromSettledHighlightScore() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
