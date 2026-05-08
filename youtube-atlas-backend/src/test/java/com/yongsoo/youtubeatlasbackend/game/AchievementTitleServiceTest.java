@@ -191,10 +191,20 @@ class AchievementTitleServiceTest {
             seasonResult("MASTER", 8L),
             seasonResult("MASTER", 9L),
             seasonResult("MASTER", 10L),
-            seasonResult("LEGEND", 11L),
-            seasonResult("LEGEND", 12L),
-            seasonResult("LEGEND", 13L),
-            seasonResult("LEGEND", 14L)
+            seasonResult("MASTER", 11L),
+            seasonResult("MASTER", 12L),
+            seasonResult("MASTER", 13L),
+            seasonResult("MASTER", 14L),
+            seasonResult("MASTER", 15L),
+            seasonResult("LEGEND", 16L),
+            seasonResult("LEGEND", 17L),
+            seasonResult("LEGEND", 18L),
+            seasonResult("LEGEND", 19L),
+            seasonResult("LEGEND", 20L),
+            seasonResult("LEGEND", 21L),
+            seasonResult("LEGEND", 22L),
+            seasonResult("LEGEND", 23L),
+            seasonResult("LEGEND", 24L)
         ));
 
         List<AchievementTitle> unlockedTitles = achievementTitleService.grantTitlesForSeasonResult(currentResult);
@@ -217,6 +227,29 @@ class AchievementTitleServiceTest {
                 "LEGEND_SNIPER"
             );
         assertThat(setting.getSelectedTitle().getCode()).isEqualTo("LEGEND_SNIPER");
+    }
+
+    @Test
+    void grantTitlesForSeasonResultDoesNotAwardMasterWalkerOrLegendSniperBeforeTenFinishes() {
+        GameSeasonResult currentResult = seasonResult("LEGEND", 100L);
+        when(gameSeasonResultRepository.findByUserIdAndRegionCode(7L, "KR")).thenReturn(List.of(
+            seasonResult("MASTER", 1L),
+            seasonResult("MASTER", 2L),
+            seasonResult("MASTER", 3L),
+            seasonResult("MASTER", 4L),
+            seasonResult("MASTER", 5L),
+            seasonResult("LEGEND", 6L),
+            seasonResult("LEGEND", 7L),
+            seasonResult("LEGEND", 8L),
+            seasonResult("LEGEND", 9L)
+        ));
+
+        List<AchievementTitle> unlockedTitles = achievementTitleService.grantTitlesForSeasonResult(currentResult);
+
+        assertThat(earnedCodes()).containsExactlyInAnyOrder("MASTER_FINDER", "LEGEND_WALKER");
+        assertThat(unlockedTitles).extracting(AchievementTitle::getCode)
+            .containsExactly("MASTER_FINDER", "LEGEND_WALKER");
+        assertThat(setting.getSelectedTitle().getCode()).isEqualTo("LEGEND_WALKER");
     }
 
     @Test

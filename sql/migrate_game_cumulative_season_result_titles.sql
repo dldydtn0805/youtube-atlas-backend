@@ -13,9 +13,9 @@ values
     ('DIAMOND_SEEKER', 'Diamond Seeker', 'D. Seeker', 'NORMAL', '시즌 종료 티어를 다이아몬드로 1회 마무리한 플레이어입니다.', 140, true, now(), now()),
     ('DIAMOND_FINDER', 'Diamond Finder', 'D. Finder', 'RARE', '시즌 종료 티어를 다이아몬드로 5회 마무리한 플레이어입니다.', 150, true, now(), now()),
     ('MASTER_FINDER', 'Master Finder', 'M. Finder', 'RARE', '시즌 종료 티어를 마스터로 1회 마무리한 플레이어입니다.', 160, true, now(), now()),
-    ('MASTER_WALKER', 'Master Walker', 'M. Walker', 'SUPER', '시즌 종료 티어를 마스터로 5회 마무리한 플레이어입니다.', 170, true, now(), now()),
+    ('MASTER_WALKER', 'Master Walker', 'M. Walker', 'SUPER', '시즌 종료 티어를 마스터로 10회 마무리한 플레이어입니다.', 170, true, now(), now()),
     ('LEGEND_WALKER', 'Legend Walker', 'L. Walker', 'SUPER', '시즌 종료 티어를 레전드로 1회 마무리한 플레이어입니다.', 180, true, now(), now()),
-    ('LEGEND_SNIPER', 'Legend Sniper', 'L. Sniper', 'ULTIMATE', '시즌 종료 티어를 레전드로 5회 마무리한 플레이어입니다.', 190, true, now(), now())
+    ('LEGEND_SNIPER', 'Legend Sniper', 'L. Sniper', 'ULTIMATE', '시즌 종료 티어를 레전드로 10회 마무리한 플레이어입니다.', 190, true, now(), now())
 on conflict (code) do update
 set display_name = excluded.display_name,
     short_name = excluded.short_name,
@@ -45,9 +45,9 @@ earned_codes as (
             case when ranked.final_tier_code = 'DIAMOND' and ranked.tier_count = 1 then 'DIAMOND_SEEKER' end,
             case when ranked.final_tier_code = 'DIAMOND' and ranked.tier_count = 5 then 'DIAMOND_FINDER' end,
             case when ranked.final_tier_code = 'MASTER' and ranked.tier_count = 1 then 'MASTER_FINDER' end,
-            case when ranked.final_tier_code = 'MASTER' and ranked.tier_count = 5 then 'MASTER_WALKER' end,
+            case when ranked.final_tier_code = 'MASTER' and ranked.tier_count = 10 then 'MASTER_WALKER' end,
             case when ranked.final_tier_code = 'LEGEND' and ranked.tier_count = 1 then 'LEGEND_WALKER' end,
-            case when ranked.final_tier_code = 'LEGEND' and ranked.tier_count = 5 then 'LEGEND_SNIPER' end
+            case when ranked.final_tier_code = 'LEGEND' and ranked.tier_count = 10 then 'LEGEND_SNIPER' end
         ], null)) as code
     from ranked_tier_results ranked
 )

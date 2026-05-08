@@ -162,7 +162,7 @@ public class AchievementTitleService {
             "Master Walker",
             "M. Walker",
             AchievementTitleGrade.SUPER,
-            "시즌 종료 티어를 마스터로 5회 마무리한 플레이어입니다.",
+            "시즌 종료 티어를 마스터로 10회 마무리한 플레이어입니다.",
             170
         ),
         new DefaultAchievementTitle(
@@ -178,7 +178,7 @@ public class AchievementTitleService {
             "Legend Sniper",
             "L. Sniper",
             AchievementTitleGrade.ULTIMATE,
-            "시즌 종료 티어를 레전드로 5회 마무리한 플레이어입니다.",
+            "시즌 종료 티어를 레전드로 10회 마무리한 플레이어입니다.",
             190
         )
     );
@@ -618,13 +618,13 @@ public class AchievementTitleService {
         if (masterCount >= 1) {
             codes.add("MASTER_FINDER");
         }
-        if (masterCount >= 5) {
+        if (masterCount >= 10) {
             codes.add("MASTER_WALKER");
         }
         if (legendCount >= 1) {
             codes.add("LEGEND_WALKER");
         }
-        if (legendCount >= 5) {
+        if (legendCount >= 10) {
             codes.add("LEGEND_SNIPER");
         }
         return codes;
