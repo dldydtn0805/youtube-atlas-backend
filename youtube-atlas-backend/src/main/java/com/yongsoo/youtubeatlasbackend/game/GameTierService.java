@@ -15,10 +15,10 @@ public class GameTierService {
     private static final List<DefaultTierDefinition> DEFAULT_TIER_DEFINITIONS = List.of(
         new DefaultTierDefinition("BRONZE", "브론즈", 0L, "season-bronze", "bronze-investor", "bronze", 5, 1),
         new DefaultTierDefinition("SILVER", "실버", 5_000L, "season-silver", "silver-investor", "silver", 7, 2),
-        new DefaultTierDefinition("GOLD", "골드", 15_000L, "season-gold", "gold-investor", "gold", 10, 3),
-        new DefaultTierDefinition("PLATINUM", "플래티넘", 60_000L, "season-platinum", "platinum-investor", "platinum", 12, 4),
-        new DefaultTierDefinition("DIAMOND", "다이아몬드", 300_000L, "season-diamond", "diamond-investor", "diamond", 15, 5),
-        new DefaultTierDefinition("MASTER", "마스터", 1_800_000L, "season-master", "master-investor", "master", 17, 6),
+        new DefaultTierDefinition("GOLD", "골드", 10_000L, "season-gold", "gold-investor", "gold", 10, 3),
+        new DefaultTierDefinition("PLATINUM", "플래티넘", 30_000L, "season-platinum", "platinum-investor", "platinum", 12, 4),
+        new DefaultTierDefinition("DIAMOND", "다이아몬드", 120_000L, "season-diamond", "diamond-investor", "diamond", 15, 5),
+        new DefaultTierDefinition("MASTER", "마스터", 500_000L, "season-master", "master-investor", "master", 20, 6),
         new DefaultTierDefinition("LEGEND", "레전드", 12_600_000L, "season-legend", "legend-investor", "legend", 20, 7)
     );
 

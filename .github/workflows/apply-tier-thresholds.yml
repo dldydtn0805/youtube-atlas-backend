@@ -60,16 +60,29 @@ jobs:
           set min_score = case tier_code
               when 'BRONZE' then 0
               when 'SILVER' then 5000
-              when 'GOLD' then 15000
-              when 'PLATINUM' then 60000
-              when 'DIAMOND' then 300000
-              when 'MASTER' then 1800000
+              when 'GOLD' then 10000
+              when 'PLATINUM' then 30000
+              when 'DIAMOND' then 120000
+              when 'MASTER' then 500000
               when 'LEGEND' then 12600000
               else min_score
           end
           where tier_code in ('BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', 'MASTER', 'LEGEND');
 
-          select season_id, tier_code, min_score
+          update game_season_tiers
+          set inventory_slots = case tier_code
+              when 'BRONZE' then 5
+              when 'SILVER' then 7
+              when 'GOLD' then 10
+              when 'PLATINUM' then 12
+              when 'DIAMOND' then 15
+              when 'MASTER' then 20
+              when 'LEGEND' then 20
+              else inventory_slots
+          end
+          where tier_code in ('BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', 'MASTER', 'LEGEND');
+
+          select season_id, tier_code, min_score, inventory_slots
           from game_season_tiers
           where season_id in (
               select id

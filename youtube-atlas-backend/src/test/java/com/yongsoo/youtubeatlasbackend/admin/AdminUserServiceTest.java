@@ -193,9 +193,9 @@ class AdminUserServiceTest {
         assertThat(response.activeSeasonGame().totalAssetPoints()).isEqualTo(15000L);
         assertThat(response.activeSeasonGame().tierScore()).isEqualTo(600_000L);
         assertThat(response.activeSeasonGame().currentTier()).isNotNull();
-        assertThat(response.activeSeasonGame().currentTier().tierCode()).isEqualTo("DIAMOND");
+        assertThat(response.activeSeasonGame().currentTier().tierCode()).isEqualTo("MASTER");
         assertThat(response.activeSeasonGame().nextTier()).isNotNull();
-        assertThat(response.activeSeasonGame().nextTier().tierCode()).isEqualTo("MASTER");
+        assertThat(response.activeSeasonGame().nextTier().tierCode()).isEqualTo("LEGEND");
         assertThat(response.activeSeasonGame().openPositionCount()).isEqualTo(2L);
         assertThat(response.activeSeasonGame().closedPositionCount()).isEqualTo(5L);
     }
@@ -385,10 +385,10 @@ class AdminUserServiceTest {
         return List.of(
             tier(season, "BRONZE", "브론즈", 0L, 1),
             tier(season, "SILVER", "실버", 5_000L, 2),
-            tier(season, "GOLD", "골드", 15_000L, 3),
-            tier(season, "PLATINUM", "플래티넘", 60_000L, 4),
-            tier(season, "DIAMOND", "다이아몬드", 300_000L, 5),
-            tier(season, "MASTER", "마스터", 1_800_000L, 6),
+            tier(season, "GOLD", "골드", 10_000L, 3),
+            tier(season, "PLATINUM", "플래티넘", 30_000L, 4),
+            tier(season, "DIAMOND", "다이아몬드", 120_000L, 5),
+            tier(season, "MASTER", "마스터", 500_000L, 6),
             tier(season, "LEGEND", "레전드", 12_600_000L, 7)
         );
     }

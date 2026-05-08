@@ -8,7 +8,7 @@ set inventory_slots = case tier_code
     when 'GOLD' then 10
     when 'PLATINUM' then 12
     when 'DIAMOND' then 15
-    when 'MASTER' then 17
+    when 'MASTER' then 20
     when 'LEGEND' then 20
     else inventory_slots
 end

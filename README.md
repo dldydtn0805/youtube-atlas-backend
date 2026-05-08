@@ -112,7 +112,7 @@ SKIP_DB_MIGRATIONS=false
 - `GOOGLE_CLIENT_SECRET` 는 같은 Google OAuth Web Client의 secret 이어야 합니다.
 - `GAME_SCHEDULER_ENABLED=true` 로 두면 종료 시즌 자동 정리와 다음 시즌 생성이 주기적으로 실행됩니다.
 - 로컬에서 빠르게 확인하려면 `GAME_SETTLEMENT_CRON=0 */1 * * * *` 로 두면 1분마다 시즌 정리를 테스트할 수 있습니다.
-- 인벤토리 슬롯은 현재 티어 보상으로 결정됩니다. 기본 브론즈는 5칸이고 레전드는 20칸입니다.
+- 인벤토리 슬롯은 현재 티어 보상으로 결정됩니다. 기본 브론즈는 5칸이고 마스터부터 20칸입니다.
 - `ADMIN_ALLOWED_EMAILS` 에 관리자 이메일을 쉼표로 구분해서 넣으면 `/api/admin/*` 엔드포인트 접근을 허용합니다.
 - `TRENDING_SYNC_MAX_PAGES_PER_SOURCE` 는 급상승 동기화 시 소스 카테고리별로 몇 페이지까지 수집할지 결정합니다.
 - `TRENDING_SCHEDULER_ENABLED` 기본값은 `true` 이므로, 로컬에서 자동 수집을 원하지 않으면 명시적으로 `false` 로 꺼 두는 편이 안전합니다.
@@ -377,7 +377,7 @@ values
   "currentTier": {
     "tierCode": "GOLD",
     "displayName": "골드",
-    "minScore": 15000,
+    "minScore": 10000,
     "badgeCode": "season-gold",
     "titleCode": "gold-investor",
     "profileThemeCode": "gold",
@@ -386,7 +386,7 @@ values
   "nextTier": {
     "tierCode": "PLATINUM",
     "displayName": "플래티넘",
-    "minScore": 60000,
+    "minScore": 30000,
     "badgeCode": "season-platinum",
     "titleCode": "platinum-investor",
     "profileThemeCode": "platinum",
@@ -403,7 +403,7 @@ values
 - 골드: 10칸
 - 플래티넘: 12칸
 - 다이아몬드: 15칸
-- 마스터: 17칸
+- 마스터: 20칸
 - 레전드: 20칸
 
 ### `GET /api/game/market`

@@ -2065,10 +2065,10 @@ class GameServiceTest {
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
         GameSeasonTier bronzeTier = tier(season, "BRONZE", "브론즈", 0L, 1);
         GameSeasonTier silverTier = tier(season, "SILVER", "실버", 5_000L, 2);
-        GameSeasonTier goldTier = tier(season, "GOLD", "골드", 15_000L, 3);
-        GameSeasonTier platinumTier = tier(season, "PLATINUM", "플래티넘", 60_000L, 4);
-        GameSeasonTier diamondTier = tier(season, "DIAMOND", "다이아몬드", 300_000L, 5);
-        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 1_800_000L, 6);
+        GameSeasonTier goldTier = tier(season, "GOLD", "골드", 10_000L, 3);
+        GameSeasonTier platinumTier = tier(season, "PLATINUM", "플래티넘", 30_000L, 4);
+        GameSeasonTier diamondTier = tier(season, "DIAMOND", "다이아몬드", 120_000L, 5);
+        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 500_000L, 6);
         GameSeasonTier legendTier = tier(season, "LEGEND", "레전드", 12_600_000L, 7);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
@@ -2493,7 +2493,7 @@ class GameServiceTest {
             case "GOLD" -> 10;
             case "PLATINUM" -> 12;
             case "DIAMOND" -> 15;
-            case "MASTER" -> 17;
+            case "MASTER" -> 20;
             case "LEGEND" -> 20;
             default -> 5;
         };
