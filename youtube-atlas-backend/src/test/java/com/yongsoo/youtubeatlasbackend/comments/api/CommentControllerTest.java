@@ -15,11 +15,12 @@ import com.yongsoo.youtubeatlasbackend.auth.AuthException;
 import com.yongsoo.youtubeatlasbackend.auth.AuthService;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.comments.CommentHighlight;
+import com.yongsoo.youtubeatlasbackend.comments.CommentHighlightDecoration;
+import com.yongsoo.youtubeatlasbackend.comments.CommentHighlightDecorationService;
 import com.yongsoo.youtubeatlasbackend.comments.CommentHighlightService;
 import com.yongsoo.youtubeatlasbackend.comments.CommentPresenceService;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
 import com.yongsoo.youtubeatlasbackend.game.AchievementTitleGrade;
-import com.yongsoo.youtubeatlasbackend.game.AchievementTitleService;
 import com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse;
 
 class CommentControllerTest {
@@ -28,14 +29,20 @@ class CommentControllerTest {
     void updatesPresenceDisplayNameForTheAuthenticatedParticipant() {
         CommentService commentService = org.mockito.Mockito.mock(CommentService.class);
         CommentHighlightService highlightService = org.mockito.Mockito.mock(CommentHighlightService.class);
+        CommentHighlightDecorationService decorationService = org.mockito.Mockito.mock(CommentHighlightDecorationService.class);
         CommentPresenceService presenceService = org.mockito.Mockito.mock(CommentPresenceService.class);
-        AchievementTitleService titleService = org.mockito.Mockito.mock(AchievementTitleService.class);
         AuthService authService = org.mockito.Mockito.mock(AuthService.class);
         ChatPresenceResponse presence = new ChatPresenceResponse(
             1,
             List.of(new ChatPresenceParticipantResponse("client-1", "Atlas User"))
         );
-        CommentController controller = new CommentController(commentService, highlightService, presenceService, titleService, authService);
+        CommentController controller = new CommentController(
+            commentService,
+            highlightService,
+            decorationService,
+            presenceService,
+            authService
+        );
 
         when(authService.requireCurrentUser("Bearer token"))
             .thenReturn(new AuthenticatedUser(7L, "atlas@example.com", "Atlas User", null));
@@ -54,10 +61,16 @@ class CommentControllerTest {
     void createGlobalCommentRequiresAuthenticatedUser() {
         CommentService commentService = org.mockito.Mockito.mock(CommentService.class);
         CommentHighlightService highlightService = org.mockito.Mockito.mock(CommentHighlightService.class);
+        CommentHighlightDecorationService decorationService = org.mockito.Mockito.mock(CommentHighlightDecorationService.class);
         CommentPresenceService presenceService = org.mockito.Mockito.mock(CommentPresenceService.class);
-        AchievementTitleService titleService = org.mockito.Mockito.mock(AchievementTitleService.class);
         AuthService authService = org.mockito.Mockito.mock(AuthService.class);
-        CommentController controller = new CommentController(commentService, highlightService, presenceService, titleService, authService);
+        CommentController controller = new CommentController(
+            commentService,
+            highlightService,
+            decorationService,
+            presenceService,
+            authService
+        );
         AuthenticatedUser user = authenticatedUser();
         CreateCommentRequest request = new CreateCommentRequest("익명", "로그인 채팅", "client-1");
         ChatMessageResponse message = message(1L);
@@ -76,10 +89,16 @@ class CommentControllerTest {
     void createVideoCommentRequiresAuthenticatedUser() {
         CommentService commentService = org.mockito.Mockito.mock(CommentService.class);
         CommentHighlightService highlightService = org.mockito.Mockito.mock(CommentHighlightService.class);
+        CommentHighlightDecorationService decorationService = org.mockito.Mockito.mock(CommentHighlightDecorationService.class);
         CommentPresenceService presenceService = org.mockito.Mockito.mock(CommentPresenceService.class);
-        AchievementTitleService titleService = org.mockito.Mockito.mock(AchievementTitleService.class);
         AuthService authService = org.mockito.Mockito.mock(AuthService.class);
-        CommentController controller = new CommentController(commentService, highlightService, presenceService, titleService, authService);
+        CommentController controller = new CommentController(
+            commentService,
+            highlightService,
+            decorationService,
+            presenceService,
+            authService
+        );
         AuthenticatedUser user = authenticatedUser();
         CreateCommentRequest request = new CreateCommentRequest("익명", "영상 채팅", "client-1");
         ChatMessageResponse message = message(2L);
@@ -98,10 +117,16 @@ class CommentControllerTest {
     void createGlobalCommentDoesNotStoreWhenUnauthenticated() {
         CommentService commentService = org.mockito.Mockito.mock(CommentService.class);
         CommentHighlightService highlightService = org.mockito.Mockito.mock(CommentHighlightService.class);
+        CommentHighlightDecorationService decorationService = org.mockito.Mockito.mock(CommentHighlightDecorationService.class);
         CommentPresenceService presenceService = org.mockito.Mockito.mock(CommentPresenceService.class);
-        AchievementTitleService titleService = org.mockito.Mockito.mock(AchievementTitleService.class);
         AuthService authService = org.mockito.Mockito.mock(AuthService.class);
-        CommentController controller = new CommentController(commentService, highlightService, presenceService, titleService, authService);
+        CommentController controller = new CommentController(
+            commentService,
+            highlightService,
+            decorationService,
+            presenceService,
+            authService
+        );
         CreateCommentRequest request = new CreateCommentRequest("익명", "익명 채팅", "client-1");
 
         when(authService.requireCurrentUser(null))
@@ -118,23 +143,28 @@ class CommentControllerTest {
     void getsPublicCommentHighlightsWithoutAuthentication() {
         CommentService commentService = org.mockito.Mockito.mock(CommentService.class);
         CommentHighlightService highlightService = org.mockito.Mockito.mock(CommentHighlightService.class);
+        CommentHighlightDecorationService decorationService = org.mockito.Mockito.mock(CommentHighlightDecorationService.class);
         CommentPresenceService presenceService = org.mockito.Mockito.mock(CommentPresenceService.class);
-        AchievementTitleService titleService = org.mockito.Mockito.mock(AchievementTitleService.class);
         AuthService authService = org.mockito.Mockito.mock(AuthService.class);
-        CommentController controller = new CommentController(commentService, highlightService, presenceService, titleService, authService);
+        CommentController controller = new CommentController(
+            commentService,
+            highlightService,
+            decorationService,
+            presenceService,
+            authService
+        );
+        CommentHighlight highlight = new CommentHighlight("comment-1", "@Viewer", "좋아요 많은 댓글", 42L);
+        SelectedAchievementTitleResponse title = new SelectedAchievementTitleResponse(
+            "ATLAS_SNIPER",
+            "Atlas Sniper",
+            "A. Sniper",
+            AchievementTitleGrade.ULTIMATE,
+            "전 구간 복합 하이라이트 달성자입니다."
+        );
 
-        when(highlightService.getHighlights("video-1")).thenReturn(List.of(
-            new CommentHighlight("comment-1", "@Viewer", "좋아요 많은 댓글", 42L)
-        ));
-        when(titleService.getPublicTitles()).thenReturn(List.of(
-            new SelectedAchievementTitleResponse(
-                "ATLAS_SNIPER",
-                "Atlas Sniper",
-                "A. Sniper",
-                AchievementTitleGrade.ULTIMATE,
-                "전 구간 복합 하이라이트 달성자입니다."
-            )
-        ));
+        when(highlightService.getHighlights("video-1")).thenReturn(List.of(highlight));
+        when(decorationService.decorate("video-1", List.of(highlight)))
+            .thenReturn(List.of(new CommentHighlightDecoration(title, "LEGEND")));
 
         List<CommentHighlightResponse> response = controller.getCommentHighlights("video-1");
 
@@ -145,6 +175,7 @@ class CommentControllerTest {
         assertThat(response.getFirst().likeCount()).isEqualTo(42L);
         assertThat(response.getFirst().selectedAchievementTitle().displayName()).isEqualTo("Atlas Sniper");
         assertThat(response.getFirst().selectedAchievementTitle().grade()).isEqualTo(AchievementTitleGrade.ULTIMATE);
+        assertThat(response.getFirst().currentTierCode()).isEqualTo("LEGEND");
         org.mockito.Mockito.verifyNoInteractions(authService);
     }
 

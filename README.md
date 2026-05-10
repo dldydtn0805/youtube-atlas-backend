@@ -1265,7 +1265,7 @@ Authorization: Bearer {accessToken}
 - 같은 로그인 사용자 계정으로 같은 메시지를 30초 안에 다시 보내면 중복으로 막습니다.
 - 댓글 응답 JSON은 `snake_case` 입니다.
 - 기존 `/api/videos/{videoId}/comments` 경로도 호환용으로 유지되지만, 같은 전역 채팅방을 조회/작성하며 작성 시 같은 인증 헤더가 필요합니다.
-- `/api/videos/{videoId}/comment-highlights` 는 로그인 없이 현재 영상의 인기 YouTube 댓글을 조회합니다. 각 항목에는 연출용 `selected_achievement_title` 이 포함되며, 프론트는 이 응답을 전역 채팅에 저장하지 않고 영상별 임시 채팅 피드로 재생합니다.
+- `/api/videos/{videoId}/comment-highlights` 는 로그인 없이 현재 영상의 인기 YouTube 댓글을 조회합니다. 각 항목에는 연출용 `selected_achievement_title` 과 `current_tier_code` 가 포함되며, 브론즈~골드 50%, 플래티넘~다이아몬드 30%, 마스터 10%, 레전드 10% 비율의 결정적 가중 선택을 사용합니다. 상위 티어일수록 높은 등급 칭호가 더 자주 붙습니다. 프론트는 이 응답을 전역 채팅에 저장하지 않고 영상별 임시 채팅 피드로 재생합니다.
 
 실시간 브로드캐스트:
 

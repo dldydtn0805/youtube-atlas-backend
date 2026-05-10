@@ -2,6 +2,7 @@ package com.yongsoo.youtubeatlasbackend.comments.api;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.stream.IntStream;
 
 import jakarta.validation.Valid;
 
@@ -16,11 +17,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.yongsoo.youtubeatlasbackend.auth.AuthService;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
+import com.yongsoo.youtubeatlasbackend.comments.CommentHighlight;
+import com.yongsoo.youtubeatlasbackend.comments.CommentHighlightDecoration;
+import com.yongsoo.youtubeatlasbackend.comments.CommentHighlightDecorationService;
 import com.yongsoo.youtubeatlasbackend.comments.CommentHighlightService;
 import com.yongsoo.youtubeatlasbackend.comments.CommentPresenceService;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
-import com.yongsoo.youtubeatlasbackend.game.AchievementTitleService;
-import com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse;
 
 @RestController
 public class CommentController {
@@ -29,21 +31,21 @@ public class CommentController {
 
     private final CommentService commentService;
     private final CommentHighlightService commentHighlightService;
+    private final CommentHighlightDecorationService commentHighlightDecorationService;
     private final CommentPresenceService commentPresenceService;
-    private final AchievementTitleService achievementTitleService;
     private final AuthService authService;
 
     public CommentController(
         CommentService commentService,
         CommentHighlightService commentHighlightService,
+        CommentHighlightDecorationService commentHighlightDecorationService,
         CommentPresenceService commentPresenceService,
-        AchievementTitleService achievementTitleService,
         AuthService authService
     ) {
         this.commentService = commentService;
         this.commentHighlightService = commentHighlightService;
+        this.commentHighlightDecorationService = commentHighlightDecorationService;
         this.commentPresenceService = commentPresenceService;
-        this.achievementTitleService = achievementTitleService;
         this.authService = authService;
     }
 
@@ -90,25 +92,20 @@ public class CommentController {
     @GetMapping("/api/videos/{videoId}/comment-highlights")
     public List<CommentHighlightResponse> getCommentHighlights(@PathVariable String videoId) {
         Instant fetchedAt = Instant.now();
-        List<SelectedAchievementTitleResponse> titles = achievementTitleService.getPublicTitles();
-
-        return commentHighlightService.getHighlights(videoId).stream()
+        List<CommentHighlight> comments = commentHighlightService.getHighlights(videoId).stream()
             .limit(MAX_PUBLIC_COMMENT_HIGHLIGHTS)
-            .map(comment -> CommentHighlightResponse.from(videoId, comment, fetchedAt, pickTitle(videoId, comment.id(), titles)))
             .toList();
-    }
+        List<CommentHighlightDecoration> decorations = commentHighlightDecorationService.decorate(videoId, comments);
 
-    private SelectedAchievementTitleResponse pickTitle(
-        String videoId,
-        String commentId,
-        List<SelectedAchievementTitleResponse> titles
-    ) {
-        if (titles.isEmpty()) {
-            return null;
-        }
-
-        int index = Math.floorMod((videoId + ":" + commentId).hashCode(), titles.size());
-        return titles.get(index);
+        return IntStream.range(0, comments.size())
+            .mapToObj(index -> CommentHighlightResponse.from(
+                videoId,
+                comments.get(index),
+                fetchedAt,
+                decorations.get(index).selectedAchievementTitle(),
+                decorations.get(index).currentTierCode()
+            ))
+            .toList();
     }
 
     @PostMapping("/api/videos/{videoId}/comments")

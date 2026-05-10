@@ -42,15 +42,18 @@ public class CommentHighlightStreamService {
     private final Map<String, ActiveCommentHighlightStream> activeStreamsBySessionId = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private final CommentHighlightService commentHighlightService;
+    private final CommentHighlightDecorationService commentHighlightDecorationService;
     private final SimpMessagingTemplate messagingTemplate;
     private final Clock clock;
 
     public CommentHighlightStreamService(
         CommentHighlightService commentHighlightService,
+        CommentHighlightDecorationService commentHighlightDecorationService,
         SimpMessagingTemplate messagingTemplate,
         Clock clock
     ) {
         this.commentHighlightService = commentHighlightService;
+        this.commentHighlightDecorationService = commentHighlightDecorationService;
         this.messagingTemplate = messagingTemplate;
         this.clock = clock;
     }
@@ -66,11 +69,15 @@ public class CommentHighlightStreamService {
             return;
         }
 
+        List<CommentHighlight> limitedHighlights = highlights.stream()
+            .limit(MAX_EMISSIONS_PER_STREAM)
+            .toList();
         ActiveCommentHighlightStream stream = new ActiveCommentHighlightStream(
             normalizedSessionId,
             userName,
             videoId,
-            highlights.stream().limit(MAX_EMISSIONS_PER_STREAM).toList()
+            limitedHighlights,
+            commentHighlightDecorationService.decorate(videoId, limitedHighlights)
         );
         activeStreamsBySessionId.put(normalizedSessionId, stream);
         emitNext(stream);
@@ -110,7 +117,9 @@ public class CommentHighlightStreamService {
             CommentHighlightResponse response = CommentHighlightResponse.from(
                 stream.videoId(),
                 stream.highlights().get(index),
-                Instant.now(clock)
+                Instant.now(clock),
+                stream.decorations().get(index).selectedAchievementTitle(),
+                stream.decorations().get(index).currentTierCode()
             );
             messagingTemplate.convertAndSendToUser(
                 stream.userName(),
@@ -195,6 +204,7 @@ public class CommentHighlightStreamService {
         private final String userName;
         private final String videoId;
         private final List<CommentHighlight> highlights;
+        private final List<CommentHighlightDecoration> decorations;
         private final AtomicInteger nextIndex = new AtomicInteger();
         private volatile ScheduledFuture<?> future;
 
@@ -202,12 +212,14 @@ public class CommentHighlightStreamService {
             String sessionId,
             String userName,
             String videoId,
-            List<CommentHighlight> highlights
+            List<CommentHighlight> highlights,
+            List<CommentHighlightDecoration> decorations
         ) {
             this.sessionId = sessionId;
             this.userName = userName;
             this.videoId = videoId;
             this.highlights = highlights;
+            this.decorations = decorations;
         }
 
         private String sessionId() {
@@ -224,6 +236,10 @@ public class CommentHighlightStreamService {
 
         private List<CommentHighlight> highlights() {
             return highlights;
+        }
+
+        private List<CommentHighlightDecoration> decorations() {
+            return decorations;
         }
 
         private int nextIndex() {

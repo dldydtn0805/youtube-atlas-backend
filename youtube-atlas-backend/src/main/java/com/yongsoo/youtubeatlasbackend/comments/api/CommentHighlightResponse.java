@@ -18,6 +18,7 @@ public record CommentHighlightResponse(
     String content,
     String clientId,
     SelectedAchievementTitleResponse selectedAchievementTitle,
+    String currentTierCode,
     long likeCount,
     boolean ephemeral,
     Instant createdAt
@@ -28,7 +29,7 @@ public record CommentHighlightResponse(
     private static final String ID_PREFIX = "yt-comment:";
 
     public static CommentHighlightResponse from(String videoId, CommentHighlight comment, Instant createdAt) {
-        return from(videoId, comment, createdAt, null);
+        return from(videoId, comment, createdAt, null, null);
     }
 
     public static CommentHighlightResponse from(
@@ -36,6 +37,16 @@ public record CommentHighlightResponse(
         CommentHighlight comment,
         Instant createdAt,
         SelectedAchievementTitleResponse selectedAchievementTitle
+    ) {
+        return from(videoId, comment, createdAt, selectedAchievementTitle, null);
+    }
+
+    public static CommentHighlightResponse from(
+        String videoId,
+        CommentHighlight comment,
+        Instant createdAt,
+        SelectedAchievementTitleResponse selectedAchievementTitle,
+        String currentTierCode
     ) {
         String id = ID_PREFIX + comment.id();
         return new CommentHighlightResponse(
@@ -48,6 +59,7 @@ public record CommentHighlightResponse(
             comment.text(),
             id,
             selectedAchievementTitle,
+            currentTierCode,
             comment.likeCount(),
             true,
             createdAt
