@@ -207,6 +207,14 @@ public class AchievementTitleService {
     }
 
     @Transactional
+    public List<SelectedAchievementTitleResponse> getPublicTitles() {
+        return getOrCreateTitles().stream()
+            .filter(title -> Boolean.TRUE.equals(title.getEnabled()))
+            .map(this::toSelectedTitleResponse)
+            .toList();
+    }
+
+    @Transactional
     public AchievementTitleCollectionResponse getMyTitles(AuthenticatedUser authenticatedUser) {
         AppUser user = requireUser(authenticatedUser.id());
         List<AchievementTitle> titles = getOrCreateTitles();

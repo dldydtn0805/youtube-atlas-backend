@@ -16,23 +16,34 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.yongsoo.youtubeatlasbackend.auth.AuthService;
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
+import com.yongsoo.youtubeatlasbackend.comments.CommentHighlightService;
 import com.yongsoo.youtubeatlasbackend.comments.CommentPresenceService;
 import com.yongsoo.youtubeatlasbackend.comments.CommentService;
+import com.yongsoo.youtubeatlasbackend.game.AchievementTitleService;
+import com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse;
 
 @RestController
 public class CommentController {
 
+    private static final int MAX_PUBLIC_COMMENT_HIGHLIGHTS = 100;
+
     private final CommentService commentService;
+    private final CommentHighlightService commentHighlightService;
     private final CommentPresenceService commentPresenceService;
+    private final AchievementTitleService achievementTitleService;
     private final AuthService authService;
 
     public CommentController(
         CommentService commentService,
+        CommentHighlightService commentHighlightService,
         CommentPresenceService commentPresenceService,
+        AchievementTitleService achievementTitleService,
         AuthService authService
     ) {
         this.commentService = commentService;
+        this.commentHighlightService = commentHighlightService;
         this.commentPresenceService = commentPresenceService;
+        this.achievementTitleService = achievementTitleService;
         this.authService = authService;
     }
 
@@ -74,6 +85,30 @@ public class CommentController {
         @RequestParam(required = false) String regionCode
     ) {
         return commentService.getComments(videoId, since, regionCode);
+    }
+
+    @GetMapping("/api/videos/{videoId}/comment-highlights")
+    public List<CommentHighlightResponse> getCommentHighlights(@PathVariable String videoId) {
+        Instant fetchedAt = Instant.now();
+        List<SelectedAchievementTitleResponse> titles = achievementTitleService.getPublicTitles();
+
+        return commentHighlightService.getHighlights(videoId).stream()
+            .limit(MAX_PUBLIC_COMMENT_HIGHLIGHTS)
+            .map(comment -> CommentHighlightResponse.from(videoId, comment, fetchedAt, pickTitle(videoId, comment.id(), titles)))
+            .toList();
+    }
+
+    private SelectedAchievementTitleResponse pickTitle(
+        String videoId,
+        String commentId,
+        List<SelectedAchievementTitleResponse> titles
+    ) {
+        if (titles.isEmpty()) {
+            return null;
+        }
+
+        int index = Math.floorMod((videoId + ":" + commentId).hashCode(), titles.size());
+        return titles.get(index);
     }
 
     @PostMapping("/api/videos/{videoId}/comments")

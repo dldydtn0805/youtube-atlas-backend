@@ -18,6 +18,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.yongsoo.youtubeatlasbackend.auth.AppUser;
 import com.yongsoo.youtubeatlasbackend.auth.AppUserRepository;
+import com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse;
 
 class AchievementTitleServiceTest {
 
@@ -93,6 +94,16 @@ class AchievementTitleServiceTest {
             ReflectionTestUtils.setField(setting, "id", 1L);
             return setting;
         });
+    }
+
+    @Test
+    void getPublicTitlesReturnsDefaultTitleDefinitions() {
+        List<SelectedAchievementTitleResponse> response = achievementTitleService.getPublicTitles();
+
+        assertThat(response).extracting(SelectedAchievementTitleResponse::code)
+            .contains("SNIPE_SEEKER", "ATLAS_SNIPER", "LEGEND_SNIPER");
+        assertThat(response.getFirst().displayName()).isEqualTo("Snipe Seeker");
+        assertThat(response.getFirst().shortName()).isEqualTo("Sn. Seeker");
     }
 
     @Test

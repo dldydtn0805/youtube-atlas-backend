@@ -5,6 +5,7 @@ import java.time.Instant;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.yongsoo.youtubeatlasbackend.comments.CommentHighlight;
+import com.yongsoo.youtubeatlasbackend.game.api.SelectedAchievementTitleResponse;
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record CommentHighlightResponse(
@@ -16,6 +17,7 @@ public record CommentHighlightResponse(
     String author,
     String content,
     String clientId,
+    SelectedAchievementTitleResponse selectedAchievementTitle,
     long likeCount,
     boolean ephemeral,
     Instant createdAt
@@ -26,6 +28,15 @@ public record CommentHighlightResponse(
     private static final String ID_PREFIX = "yt-comment:";
 
     public static CommentHighlightResponse from(String videoId, CommentHighlight comment, Instant createdAt) {
+        return from(videoId, comment, createdAt, null);
+    }
+
+    public static CommentHighlightResponse from(
+        String videoId,
+        CommentHighlight comment,
+        Instant createdAt,
+        SelectedAchievementTitleResponse selectedAchievementTitle
+    ) {
         String id = ID_PREFIX + comment.id();
         return new CommentHighlightResponse(
             id,
@@ -36,6 +47,7 @@ public record CommentHighlightResponse(
             comment.authorName(),
             comment.text(),
             id,
+            selectedAchievementTitle,
             comment.likeCount(),
             true,
             createdAt

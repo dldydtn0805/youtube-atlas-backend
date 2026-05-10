@@ -157,6 +157,7 @@ SKIP_DB_MIGRATIONS=false
 - `GET /api/comments`
 - `POST /api/comments`
 - `GET /api/videos/{videoId}/comments`
+- `GET /api/videos/{videoId}/comment-highlights`
 - `POST /api/videos/{videoId}/comments`
 - `GET /api/trending/signals?regionCode=KR&categoryId=0&videoIds=abc&videoIds=def`
 - `GET /api/trending/top-rank-risers?regionCode=KR`
@@ -1264,6 +1265,7 @@ Authorization: Bearer {accessToken}
 - 같은 로그인 사용자 계정으로 같은 메시지를 30초 안에 다시 보내면 중복으로 막습니다.
 - 댓글 응답 JSON은 `snake_case` 입니다.
 - 기존 `/api/videos/{videoId}/comments` 경로도 호환용으로 유지되지만, 같은 전역 채팅방을 조회/작성하며 작성 시 같은 인증 헤더가 필요합니다.
+- `/api/videos/{videoId}/comment-highlights` 는 로그인 없이 현재 영상의 인기 YouTube 댓글을 조회합니다. 각 항목에는 연출용 `selected_achievement_title` 이 포함되며, 프론트는 이 응답을 전역 채팅에 저장하지 않고 영상별 임시 채팅 피드로 재생합니다.
 
 실시간 브로드캐스트:
 
