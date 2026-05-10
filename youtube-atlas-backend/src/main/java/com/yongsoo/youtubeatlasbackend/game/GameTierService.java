@@ -84,6 +84,16 @@ public class GameTierService {
 
     @Transactional(readOnly = true)
     public List<GameSeasonTier> resolveEffectiveTiers(GameSeason season, List<GameSeasonTier> tiers) {
+        return resolveEffectiveTiers(season, tiers, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<GameSeasonTier> resolveEffectiveTiers(
+        GameSeason season,
+        List<GameSeasonTier> tiers,
+        Long highlightScoreOverrideUserId,
+        Long highlightScoreOverride
+    ) {
         if (season == null || tiers == null || tiers.isEmpty()) {
             return tiers;
         }
@@ -93,7 +103,11 @@ public class GameTierService {
             return tiers;
         }
 
-        long legendMinScore = resolveLegendMinScore(season.getId());
+        long legendMinScore = resolveLegendMinScore(
+            season.getId(),
+            highlightScoreOverrideUserId,
+            highlightScoreOverride
+        );
         return tiers.stream()
             .map(tier -> isLegendTier(tier) ? copyTierWithMinScore(tier, legendMinScore) : tier)
             .toList();
@@ -133,7 +147,11 @@ public class GameTierService {
             .toList();
     }
 
-    private long resolveLegendMinScore(Long seasonId) {
+    private long resolveLegendMinScore(
+        Long seasonId,
+        Long highlightScoreOverrideUserId,
+        Long highlightScoreOverride
+    ) {
         Map<Long, Long> highlightScoreByUserId = gameHighlightStateRepository
             .findBySeasonIdAndBestSettledHighlightScoreGreaterThan(seasonId, 0L)
             .stream()
@@ -141,6 +159,10 @@ public class GameTierService {
                 state -> state.getUser().getId(),
                 Collectors.summingLong(GameHighlightState::getBestSettledHighlightScore)
             ));
+        if (highlightScoreOverrideUserId != null && highlightScoreOverride != null) {
+            highlightScoreByUserId.put(highlightScoreOverrideUserId, highlightScoreOverride);
+        }
+
         List<Long> eligibleScores = gameWalletRepository.findBySeasonId(seasonId).stream()
             .map(wallet -> highlightScoreByUserId.getOrDefault(wallet.getUser().getId(), 0L)
                 + normalizeScoreAdjustment(wallet.getManualTierScoreAdjustment()))

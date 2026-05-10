@@ -2790,9 +2790,15 @@ public class GameService {
             return;
         }
 
-        List<GameSeasonTier> effectiveTiers = gameTierService.resolveEffectiveTiers(settledPosition.getSeason(), tiers);
-        GameSeasonTier previousTier = gameTierService.resolveTier(effectiveTiers, adjustedPreviousHighlightScore);
-        GameSeasonTier currentTier = gameTierService.resolveTier(effectiveTiers, adjustedCurrentHighlightScore);
+        List<GameSeasonTier> previousEffectiveTiers = gameTierService.resolveEffectiveTiers(
+            settledPosition.getSeason(),
+            tiers,
+            settledPosition.getUser().getId(),
+            previousHighlightScore
+        );
+        List<GameSeasonTier> currentEffectiveTiers = gameTierService.resolveEffectiveTiers(settledPosition.getSeason(), tiers);
+        GameSeasonTier previousTier = gameTierService.resolveTier(previousEffectiveTiers, adjustedPreviousHighlightScore);
+        GameSeasonTier currentTier = gameTierService.resolveTier(currentEffectiveTiers, adjustedCurrentHighlightScore);
         if (previousTier == null || currentTier == null || currentTier.getSortOrder() <= previousTier.getSortOrder()) {
             return;
         }

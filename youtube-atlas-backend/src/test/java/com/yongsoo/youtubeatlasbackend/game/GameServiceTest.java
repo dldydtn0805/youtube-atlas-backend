@@ -163,6 +163,8 @@ class GameServiceTest {
             .thenAnswer(invocation -> invocation.getArgument(2));
         when(gameTierService.resolveEffectiveTiers(any(GameSeason.class), any()))
             .thenAnswer(invocation -> invocation.getArgument(1));
+        when(gameTierService.resolveEffectiveTiers(any(GameSeason.class), any(), any(), any()))
+            .thenAnswer(invocation -> invocation.getArgument(1));
         when(achievementTitleService.grantTitlesForHighlight(any(), any())).thenReturn(List.of());
         when(achievementTitleService.grantTitlesForHighlights(any(), any(), any(), any())).thenReturn(List.of());
     }
@@ -812,6 +814,72 @@ class GameServiceTest {
                     notifications.stream().anyMatch(notification ->
                         notification.notificationType().equals("TIER_PROMOTION")
                             && notification.notificationEventType() == GameNotificationEventType.TIER_PROMOTION
+                    )
+                )
+            );
+    }
+
+    @Test
+    void sellDoesNotRepublishLegendPromotionWhenUserWasAlreadyLegend() {
+        GameSeason season = activeSeason();
+        AppUser appUser = user(7L);
+        long buyPricePoints = GamePointCalculator.calculatePricePoints(150);
+        GameWallet wallet = wallet(season, appUser, 10_000L - buyPricePoints, buyPricePoints, 0L);
+        GamePosition position = openPosition(
+            season,
+            appUser,
+            "video-1",
+            150,
+            buyPricePoints,
+            Instant.parse("2026-04-01T05:45:00Z")
+        );
+        TrendSignal latestSignal = signal("video-1", 10, 0);
+        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 500_000L, 6);
+        GameSeasonTier previousLegendTier = tier(season, "LEGEND", "레전드", 80_000L, 7);
+        GameSeasonTier currentLegendTier = tier(season, "LEGEND", "레전드", 100_000L, 7);
+        List<GameSeasonTier> tiers = List.of(masterTier, currentLegendTier);
+        List<GameSeasonTier> previousEffectiveTiers = List.of(masterTier, previousLegendTier);
+        List<GameSeasonTier> currentEffectiveTiers = List.of(masterTier, currentLegendTier);
+        GameHighlightState state = new GameHighlightState();
+        state.setSeason(season);
+        state.setUser(appUser);
+        state.setRootPositionId(position.getId());
+        state.setBestSettledHighlightScore(80_000L);
+        storedHighlightStates.add(state);
+
+        when(gamePositionRepository.findByIdAndUserIdForUpdate(300L, 7L)).thenReturn(Optional.of(position));
+        when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L)).thenReturn(List.of(position));
+        when(trendSignalRepository.findById(new TrendSignalId("KR", "0", "video-1"))).thenReturn(Optional.of(latestSignal));
+        when(gameWalletRepository.findBySeasonIdAndUserIdForUpdate(1L, 7L)).thenReturn(Optional.of(wallet));
+        when(gamePositionRepository.save(position)).thenReturn(position);
+        when(gameWalletRepository.save(wallet)).thenReturn(wallet);
+        when(gameLedgerRepository.save(any(GameLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(gameTierService.getOrCreateTiers(season)).thenReturn(tiers);
+        when(gameTierService.resolveEffectiveTiers(season, tiers, 7L, 80_000L)).thenReturn(previousEffectiveTiers);
+        when(gameTierService.resolveEffectiveTiers(season, tiers)).thenReturn(currentEffectiveTiers);
+        when(gameTierService.resolveTier(
+            org.mockito.ArgumentMatchers.anyList(),
+            org.mockito.ArgumentMatchers.anyLong()
+        )).thenAnswer(invocation -> {
+            List<GameSeasonTier> effectiveTiers = invocation.getArgument(0);
+            long score = invocation.getArgument(1, Long.class);
+            GameSeasonTier legendTier = effectiveTiers.stream()
+                .filter(tier -> "LEGEND".equals(tier.getTierCode()))
+                .findFirst()
+                .orElseThrow();
+            return score >= legendTier.getMinScore() ? legendTier : masterTier;
+        });
+
+        gameService.sell(authenticatedUser(), 300L);
+
+        verify(commentService, never()).publishTierSystemMessage(any());
+        verify(gameNotificationService, never())
+            .createAndPush(
+                org.mockito.ArgumentMatchers.eq(appUser),
+                org.mockito.ArgumentMatchers.eq(season),
+                org.mockito.ArgumentMatchers.argThat(notifications ->
+                    notifications.stream().anyMatch(notification ->
+                        notification.notificationEventType() == GameNotificationEventType.TIER_PROMOTION
                     )
                 )
             );

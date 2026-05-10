@@ -97,6 +97,34 @@ class GameTierServiceTest {
         assertThat(gameTierService.resolveTier(effectiveTiers, 850_000L).getTierCode()).isEqualTo("MASTER");
     }
 
+    @Test
+    void resolveEffectiveTiersCanUsePreviousUserHighlightScoreForLegendCutoff() {
+        GameSeason season = season();
+        AppUser topUser = user(1L);
+        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 500_000L, 6);
+        GameSeasonTier legendTier = tier(season, "LEGEND", "레전드", 500_000L, 7);
+
+        when(gameWalletRepository.findBySeasonId(1L))
+            .thenReturn(List.of(wallet(season, topUser, 0L)));
+        when(gameHighlightStateRepository.findBySeasonIdAndBestSettledHighlightScoreGreaterThan(1L, 0L))
+            .thenReturn(List.of(highlight(season, topUser, 1_000_000L)));
+
+        List<GameSeasonTier> previousEffectiveTiers = gameTierService.resolveEffectiveTiers(
+            season,
+            List.of(masterTier, legendTier),
+            1L,
+            900_000L
+        );
+        List<GameSeasonTier> currentEffectiveTiers = gameTierService.resolveEffectiveTiers(
+            season,
+            List.of(masterTier, legendTier)
+        );
+
+        assertThat(previousEffectiveTiers.get(1).getMinScore()).isEqualTo(900_000L);
+        assertThat(currentEffectiveTiers.get(1).getMinScore()).isEqualTo(1_000_000L);
+        assertThat(gameTierService.resolveTier(previousEffectiveTiers, 900_000L).getTierCode()).isEqualTo("LEGEND");
+    }
+
     private GameSeason season() {
         GameSeason season = new GameSeason();
         ReflectionTestUtils.setField(season, "id", 1L);
