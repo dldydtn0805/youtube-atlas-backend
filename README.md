@@ -226,8 +226,7 @@ SKIP_DB_MIGRATIONS=false
 ```text
 anchorPrices = {200: 3000, 190: 4000, ..., 20: 750000, 10: 1050000, 2: 1333333, 1: 2000000}
 basePricePoints = anchorPrices 를 기준으로 rank 구간별 기하보간
-momentumRankChange = clamp(rankChange, -30, 30)
-momentumMultiplier = rankChange > 0 이면 exp(0.002 * momentumRankChange), rankChange < 0 이면 exp(0.003 * momentumRankChange)
+momentumMultiplier = max(0, 1 + rankChange / 100)
 currentPricePoints = round(basePricePoints * momentumMultiplier)
 buyPricePoints = buy 시점 currentPricePoints
 sellPricePoints = sell 시점 currentPricePoints
@@ -240,6 +239,7 @@ profitPoints = settledPoints - buyPricePoints
 - `rankChange < 0` 인 실시간 급하락 영상은 세일 가격이 적용됩니다.
 - 프리미엄/세일은 마켓 가격, 매수 가격 검증, 오픈 포지션 평가, 매도 정산에 동일하게 반영됩니다.
 - 랭킹 스냅샷만 있고 `rankChange` 를 알 수 없는 fallback 정산은 기존 순위 기반 가격을 사용합니다.
+- 차트아웃된 영상의 평가/매도 가격은 `0` 포인트입니다.
 
 예시:
 
@@ -263,8 +263,10 @@ profitPoints = settledPoints - buyPricePoints
 
 실시간 모멘텀 예시:
 
-- `171위`, `rankChange = 20`이면 기본 순위 가격에 약 `4.1%` 프리미엄 적용
-- `171위`, `rankChange = -20`이면 기본 순위 가격에 약 `5.8%` 세일 적용
+- `171위`, `rankChange = 20`이면 기본 순위 가격에 `20%` 프리미엄 적용
+- `171위`, `rankChange = -20`이면 기본 순위 가격에 `20%` 세일 적용
+- `171위`, `rankChange = 50`이면 기본 순위 가격에 `50%` 프리미엄 적용
+- `171위`, `rankChange = 100`이면 기본 순위 가격에 `100%` 프리미엄 적용
 
 ## 프론트 연동 순서
 
@@ -424,10 +426,10 @@ values
       "previousRank": 5,
       "rankChange": 2,
       "basePricePoints": 1320000,
-      "currentPricePoints": 1320000,
-      "momentumPriceDeltaPoints": 0,
-      "momentumPriceDeltaPercent": 0.0,
-      "momentumPriceType": "NONE",
+      "currentPricePoints": 1346400,
+      "momentumPriceDeltaPoints": 26400,
+      "momentumPriceDeltaPercent": 2.0,
+      "momentumPriceType": "PREMIUM",
       "currentViewCount": 123456,
       "viewCountDelta": 3456,
       "isNew": false,

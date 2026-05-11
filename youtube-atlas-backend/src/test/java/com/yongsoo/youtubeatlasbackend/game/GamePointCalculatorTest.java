@@ -26,4 +26,27 @@ class GamePointCalculatorTest {
 
         assertThat(GamePointCalculator.estimatePreFeePointsFromSettledPoints(settledPoints)).isEqualTo(4_000L);
     }
+
+    @Test
+    void calculateMomentumAdjustedPricePointsUsesRankChangeAsPercent() {
+        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, 20)).isEqualTo(8_725L);
+        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, -20)).isEqualTo(5_817L);
+    }
+
+    @Test
+    void calculateMomentumAdjustedPricePointsDoesNotCapSurgingPremium() {
+        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, 50)).isEqualTo(10_907L);
+        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, 100)).isEqualTo(14_542L);
+    }
+
+    @Test
+    void calculateMomentumAdjustedPricePointsFloorsExtremeDiscountAtZero() {
+        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, -100)).isZero();
+        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, -150)).isZero();
+    }
+
+    @Test
+    void calculateChartOutUnitPricePointsReturnsZero() {
+        assertThat(GamePointCalculator.calculateChartOutUnitPricePoints()).isZero();
+    }
 }

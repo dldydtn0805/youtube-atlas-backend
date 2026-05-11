@@ -1667,7 +1667,7 @@ class GameServiceTest {
     }
 
     @Test
-    void getMyPositionsUsesDiscountedFloorPriceWhenPositionIsChartOut() {
+    void getMyPositionsUsesZeroPriceWhenPositionIsChartOut() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);
         long buyPricePoints = GamePointCalculator.calculatePricePoints(170);
@@ -1713,6 +1713,7 @@ class GameServiceTest {
         assertThat(response.get(0).chartOut()).isTrue();
         assertThat(response.get(0).currentRank()).isEqualTo(13);
         assertThat(response.get(0).currentPricePoints()).isEqualTo(currentPricePoints);
+        assertThat(response.get(0).currentPricePoints()).isZero();
         assertThat(response.get(0).profitPoints()).isEqualTo(profitPoints);
     }
 
