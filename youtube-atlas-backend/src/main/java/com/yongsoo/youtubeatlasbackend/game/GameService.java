@@ -1334,10 +1334,23 @@ public class GameService {
             .map(this::toSeasonResultHighlightItemResponse)
             .orElse(null);
 
+        SeasonResultHighlightItemResponse highestTierScore = candidates.stream()
+            .filter(candidate -> valueOrZero(candidate.highlightScore()) > 0L)
+            .max(
+                Comparator
+                    .comparingLong((SeasonResultHighlightCandidate candidate) -> valueOrZero(candidate.highlightScore()))
+                    .thenComparingInt(SeasonResultHighlightCandidate::tagCount)
+                    .thenComparingLong(candidate -> valueOrZero(candidate.position().getPnlPoints()))
+                    .thenComparing(candidate -> candidate.position().getClosedAt(), Comparator.nullsFirst(Comparator.naturalOrder()))
+            )
+            .map(this::toSeasonResultHighlightItemResponse)
+            .orElse(null);
+
         return new SeasonResultHighlightsResponse(
             topRankRiser,
             mostTagged != null ? List.of(mostTagged) : List.of(),
-            longestHeld
+            longestHeld,
+            highestTierScore
         );
     }
 

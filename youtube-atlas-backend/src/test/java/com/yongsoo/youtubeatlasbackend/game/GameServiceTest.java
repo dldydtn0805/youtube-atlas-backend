@@ -261,6 +261,10 @@ class GameServiceTest {
         assertThat(response.highlights().mostTaggedPositions().getFirst().tagCount()).isGreaterThan(1);
         assertThat(response.highlights().longestHeld().positionId()).isEqualTo(303L);
         assertThat(response.highlights().longestHeld().holdDurationSeconds()).isEqualTo(259_200L);
+        assertThat(response.highlights().highestTierScore().positionId()).isEqualTo(304L);
+        long highestTierScore = response.highlights().highestTierScore().highlightScore();
+        assertThat(highestTierScore).isEqualTo(response.highlights().mostTaggedPositions().getFirst().highlightScore());
+        assertThat(highestTierScore).isGreaterThan(response.highlights().topRankRiser().highlightScore());
     }
 
     @Test
