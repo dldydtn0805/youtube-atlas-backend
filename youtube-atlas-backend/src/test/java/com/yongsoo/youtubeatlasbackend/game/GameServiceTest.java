@@ -1837,6 +1837,28 @@ class GameServiceTest {
     }
 
     @Test
+    void getMarketAllowsAnonymousPriceLookup() {
+        GameSeason season = activeSeason();
+        TrendSignal signal = signal("video-1", 170, 0);
+
+        when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
+            .thenReturn(Optional.of(season));
+        when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
+            .thenReturn(List.of(signal));
+
+        var response = gameService.getMarket(null, "KR");
+
+        assertThat(response).singleElement().satisfies(item -> {
+            assertThat(item.videoId()).isEqualTo("video-1");
+            assertThat(item.currentPricePoints()).isEqualTo(GamePointCalculator.calculatePricePoints(170));
+            assertThat(item.canBuy()).isFalse();
+            assertThat(item.buyBlockedReason()).isEqualTo("로그인 후 매수할 수 있습니다.");
+        });
+        verify(gameWalletRepository, never()).findBySeasonIdAndUserId(any(), any());
+        verify(gamePositionRepository, never()).countDistinctVideoIdBySeasonIdAndUserIdAndStatus(any(), any(), any());
+    }
+
+    @Test
     void getMarketAppliesMomentumPremiumAndDiscountToCurrentPrice() {
         GameSeason season = activeSeason();
         AppUser appUser = user(7L);

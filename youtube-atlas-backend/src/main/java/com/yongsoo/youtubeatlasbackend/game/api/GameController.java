@@ -77,10 +77,10 @@ public class GameController {
 
     @GetMapping("/market")
     public List<MarketVideoResponse> getMarket(
-        @RequestHeader("Authorization") String authorizationHeader,
+        @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
         @RequestParam String regionCode
     ) {
-        return gameService.getMarket(authService.requireCurrentUser(authorizationHeader), regionCode);
+        return gameService.getMarket(authService.getCurrentUserOrNull(authorizationHeader), regionCode);
     }
 
     @GetMapping("/market/buyable-chart")

@@ -191,7 +191,7 @@ public class GameService {
     @Transactional
     public List<MarketVideoResponse> getMarket(AuthenticatedUser authenticatedUser, String regionCode) {
         GameSeason season = requireActiveSeason(regionCode);
-        GameWallet wallet = getOrCreateWallet(season, authenticatedUser);
+        GameWallet wallet = authenticatedUser != null ? getOrCreateWallet(season, authenticatedUser) : null;
         return buildMarketVideos(season, authenticatedUser, wallet);
     }
 
@@ -279,20 +279,26 @@ public class GameService {
         AuthenticatedUser authenticatedUser,
         GameWallet wallet
     ) {
-        long openDistinctVideoCount = gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(
-            season.getId(),
-            authenticatedUser.id(),
-            PositionStatus.OPEN
-        );
-        List<GamePosition> openPositions = gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(
-            season.getId(),
-            authenticatedUser.id(),
-            PositionStatus.OPEN
-        );
+        boolean authenticated = authenticatedUser != null && wallet != null;
+        long openDistinctVideoCount = authenticated
+            ? gamePositionRepository.countDistinctVideoIdBySeasonIdAndUserIdAndStatus(
+                season.getId(),
+                authenticatedUser.id(),
+                PositionStatus.OPEN
+            )
+            : 0L;
+        List<GamePosition> openPositions = authenticated
+            ? gamePositionRepository.findBySeasonIdAndUserIdAndStatusOrderByCreatedAtDesc(
+                season.getId(),
+                authenticatedUser.id(),
+                PositionStatus.OPEN
+            )
+            : List.of();
         java.util.Set<String> ownedVideoIds = openPositions.stream()
             .map(GamePosition::getVideoId)
             .collect(Collectors.toSet());
-        boolean maxOpenReached = openDistinctVideoCount >= resolveInventorySlotContext(season, wallet).totalSlots();
+        boolean maxOpenReached = authenticated &&
+            openDistinctVideoCount >= resolveInventorySlotContext(season, wallet).totalSlots();
         List<TrendSignal> rankedSignals = trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc(
             season.getRegionCode(),
             TRENDING_CATEGORY_ID
@@ -314,7 +320,9 @@ public class GameService {
                     );
                     long momentumPriceDeltaPoints = currentPricePoints - basePricePoints;
                     boolean alreadyOwned = ownedVideoIds.contains(signal.getId().getVideoId());
-                    String blockedReason = resolveBuyBlockedReason(wallet, currentPricePoints, maxOpenReached, alreadyOwned);
+                    String blockedReason = authenticated
+                        ? resolveBuyBlockedReason(wallet, currentPricePoints, maxOpenReached, alreadyOwned)
+                        : "로그인 후 매수할 수 있습니다.";
 
                     return new MarketVideoResponse(
                         signal.getId().getVideoId(),
@@ -369,7 +377,9 @@ public class GameService {
             );
             long momentumPriceDeltaPoints = currentPricePoints - basePricePoints;
             boolean alreadyOwned = ownedVideoIds.contains(videoId);
-            String blockedReason = resolveBuyBlockedReason(wallet, currentPricePoints, maxOpenReached, alreadyOwned);
+            String blockedReason = authenticated
+                ? resolveBuyBlockedReason(wallet, currentPricePoints, maxOpenReached, alreadyOwned)
+                : "로그인 후 매수할 수 있습니다.";
 
             return new MarketVideoResponse(
                 videoId,
