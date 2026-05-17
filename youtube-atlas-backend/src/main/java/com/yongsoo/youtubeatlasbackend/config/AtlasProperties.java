@@ -128,21 +128,36 @@ public class AtlasProperties {
     }
 
     public static class Realtime {
-        private List<String> allowedOrigins = new ArrayList<>(List.of(
+        private static final List<String> DEFAULT_ALLOWED_ORIGINS = List.of(
             "http://localhost:5173",
             "http://127.0.0.1:5173",
             "http://localhost:5174",
             "http://127.0.0.1:5174",
             "https://youtube-atlas.vercel.app",
-            "https://*.vercel.app"
-        ));
+            "https://*.vercel.app",
+            "https://trg.life",
+            "https://www.trg.life",
+            "https://youtube-atlas.duckdns.org"
+        );
+
+        private List<String> allowedOrigins = new ArrayList<>(DEFAULT_ALLOWED_ORIGINS);
 
         public List<String> getAllowedOrigins() {
             return allowedOrigins;
         }
 
         public void setAllowedOrigins(List<String> allowedOrigins) {
-            this.allowedOrigins = allowedOrigins;
+            this.allowedOrigins = new ArrayList<>(DEFAULT_ALLOWED_ORIGINS);
+            if (allowedOrigins == null) {
+                return;
+            }
+
+            for (String allowedOrigin : allowedOrigins) {
+                if (allowedOrigin == null || allowedOrigin.isBlank() || this.allowedOrigins.contains(allowedOrigin)) {
+                    continue;
+                }
+                this.allowedOrigins.add(allowedOrigin);
+            }
         }
     }
 
