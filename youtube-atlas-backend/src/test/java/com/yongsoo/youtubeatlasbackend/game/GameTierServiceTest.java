@@ -38,22 +38,22 @@ class GameTierServiceTest {
     @Test
     void resolveEffectiveTiersSetsLegendToTopTenPercentCutoffAmongEligibleUsers() {
         GameSeason season = season();
-        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 500_000L, 6);
-        GameSeasonTier legendTier = tier(season, "LEGEND", "레전드", 12_600_000L, 7);
+        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 6_000_000L, 6);
+        GameSeasonTier legendTier = tier(season, "LEGEND", "레전드", 6_000_000L, 7);
         List<AppUser> users = java.util.stream.LongStream.rangeClosed(1L, 10L)
             .mapToObj(this::user)
             .toList();
         List<Long> scores = List.of(
-            1_400_000L,
-            1_300_000L,
-            1_200_000L,
-            1_100_000L,
-            1_000_000L,
-            900_000L,
-            800_000L,
-            700_000L,
-            600_000L,
-            500_000L
+            16_800_000L,
+            15_600_000L,
+            14_400_000L,
+            13_200_000L,
+            12_000_000L,
+            10_800_000L,
+            9_600_000L,
+            8_400_000L,
+            7_200_000L,
+            6_000_000L
         );
 
         when(gameWalletRepository.findBySeasonId(1L))
@@ -69,9 +69,9 @@ class GameTierServiceTest {
         );
 
         GameSeasonTier effectiveLegendTier = effectiveTiers.get(1);
-        assertThat(effectiveLegendTier.getMinScore()).isEqualTo(1_400_000L);
-        assertThat(gameTierService.resolveTier(effectiveTiers, 1_400_000L).getTierCode()).isEqualTo("LEGEND");
-        assertThat(gameTierService.resolveTier(effectiveTiers, 1_399_999L).getTierCode()).isEqualTo("MASTER");
+        assertThat(effectiveLegendTier.getMinScore()).isEqualTo(16_800_000L);
+        assertThat(gameTierService.resolveTier(effectiveTiers, 16_800_000L).getTierCode()).isEqualTo("LEGEND");
+        assertThat(gameTierService.resolveTier(effectiveTiers, 16_799_999L).getTierCode()).isEqualTo("MASTER");
     }
 
     @Test
@@ -79,50 +79,50 @@ class GameTierServiceTest {
         GameSeason season = season();
         AppUser topUser = user(1L);
         AppUser secondUser = user(2L);
-        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 500_000L, 6);
-        GameSeasonTier legendTier = tier(season, "LEGEND", "레전드", 12_600_000L, 7);
+        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 6_000_000L, 6);
+        GameSeasonTier legendTier = tier(season, "LEGEND", "레전드", 6_000_000L, 7);
 
         when(gameWalletRepository.findBySeasonId(1L))
-            .thenReturn(List.of(wallet(season, topUser, 800_000L), wallet(season, secondUser, 0L)));
+            .thenReturn(List.of(wallet(season, topUser, 9_600_000L), wallet(season, secondUser, 0L)));
         when(gameHighlightStateRepository.findBySeasonIdAndBestSettledHighlightScoreGreaterThan(1L, 0L))
-            .thenReturn(List.of(highlight(season, topUser, 100_000L), highlight(season, secondUser, 850_000L)));
+            .thenReturn(List.of(highlight(season, topUser, 1_200_000L), highlight(season, secondUser, 10_200_000L)));
 
         List<GameSeasonTier> effectiveTiers = gameTierService.resolveEffectiveTiers(
             season,
             List.of(masterTier, legendTier)
         );
 
-        assertThat(effectiveTiers.get(1).getMinScore()).isEqualTo(900_000L);
-        assertThat(gameTierService.resolveTier(effectiveTiers, 900_000L).getTierCode()).isEqualTo("LEGEND");
-        assertThat(gameTierService.resolveTier(effectiveTiers, 850_000L).getTierCode()).isEqualTo("MASTER");
+        assertThat(effectiveTiers.get(1).getMinScore()).isEqualTo(10_800_000L);
+        assertThat(gameTierService.resolveTier(effectiveTiers, 10_800_000L).getTierCode()).isEqualTo("LEGEND");
+        assertThat(gameTierService.resolveTier(effectiveTiers, 10_200_000L).getTierCode()).isEqualTo("MASTER");
     }
 
     @Test
     void resolveEffectiveTiersCanUsePreviousUserHighlightScoreForLegendCutoff() {
         GameSeason season = season();
         AppUser topUser = user(1L);
-        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 500_000L, 6);
-        GameSeasonTier legendTier = tier(season, "LEGEND", "레전드", 500_000L, 7);
+        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 6_000_000L, 6);
+        GameSeasonTier legendTier = tier(season, "LEGEND", "레전드", 6_000_000L, 7);
 
         when(gameWalletRepository.findBySeasonId(1L))
             .thenReturn(List.of(wallet(season, topUser, 0L)));
         when(gameHighlightStateRepository.findBySeasonIdAndBestSettledHighlightScoreGreaterThan(1L, 0L))
-            .thenReturn(List.of(highlight(season, topUser, 1_000_000L)));
+            .thenReturn(List.of(highlight(season, topUser, 12_000_000L)));
 
         List<GameSeasonTier> previousEffectiveTiers = gameTierService.resolveEffectiveTiers(
             season,
             List.of(masterTier, legendTier),
             1L,
-            900_000L
+            10_800_000L
         );
         List<GameSeasonTier> currentEffectiveTiers = gameTierService.resolveEffectiveTiers(
             season,
             List.of(masterTier, legendTier)
         );
 
-        assertThat(previousEffectiveTiers.get(1).getMinScore()).isEqualTo(900_000L);
-        assertThat(currentEffectiveTiers.get(1).getMinScore()).isEqualTo(1_000_000L);
-        assertThat(gameTierService.resolveTier(previousEffectiveTiers, 900_000L).getTierCode()).isEqualTo("LEGEND");
+        assertThat(previousEffectiveTiers.get(1).getMinScore()).isEqualTo(10_800_000L);
+        assertThat(currentEffectiveTiers.get(1).getMinScore()).isEqualTo(12_000_000L);
+        assertThat(gameTierService.resolveTier(previousEffectiveTiers, 10_800_000L).getTierCode()).isEqualTo("LEGEND");
     }
 
     private GameSeason season() {

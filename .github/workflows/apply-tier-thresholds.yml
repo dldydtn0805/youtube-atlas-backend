@@ -1,4 +1,4 @@
-name: Apply tier thresholds
+name: Apply tier thresholds 12x
 
 on:
   workflow_dispatch:
@@ -52,23 +52,16 @@ jobs:
 
           DB_URL="${DB_URL#jdbc:}"
 
+          sudo docker run --rm \
+            -e PGPASSWORD="$DB_PASSWORD" \
+            -v "$PWD:/work:ro" \
+            postgres:18 \
+            psql "$DB_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 -f /work/sql/migrate_game_tier_thresholds.sql
+
           sudo docker run --rm -i \
             -e PGPASSWORD="$DB_PASSWORD" \
             postgres:18 \
             psql "$DB_URL" -U "$DB_USERNAME" -v ON_ERROR_STOP=1 <<'SQL'
-          update game_season_tiers
-          set min_score = case tier_code
-              when 'BRONZE' then 0
-              when 'SILVER' then 5000
-              when 'GOLD' then 10000
-              when 'PLATINUM' then 30000
-              when 'DIAMOND' then 120000
-              when 'MASTER' then 500000
-              when 'LEGEND' then 12600000
-              else min_score
-          end
-          where tier_code in ('BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', 'MASTER', 'LEGEND');
-
           update game_season_tiers
           set inventory_slots = case tier_code
               when 'BRONZE' then 5

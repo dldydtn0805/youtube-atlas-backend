@@ -838,7 +838,7 @@ class GameServiceTest {
             Instant.parse("2026-04-01T05:45:00Z")
         );
         TrendSignal latestSignal = signal("video-1", 10, 0);
-        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 500_000L, 6);
+        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 6_000_000L, 6);
         GameSeasonTier previousLegendTier = tier(season, "LEGEND", "레전드", 80_000L, 7);
         GameSeasonTier currentLegendTier = tier(season, "LEGEND", "레전드", 100_000L, 7);
         List<GameSeasonTier> tiers = List.of(masterTier, currentLegendTier);
@@ -2235,12 +2235,12 @@ class GameServiceTest {
         AppUser appUser = user(7L);
         GameWallet wallet = wallet(season, appUser, 10_000L, 0L, 0L);
         GameSeasonTier bronzeTier = tier(season, "BRONZE", "브론즈", 0L, 1);
-        GameSeasonTier silverTier = tier(season, "SILVER", "실버", 5_000L, 2);
-        GameSeasonTier goldTier = tier(season, "GOLD", "골드", 10_000L, 3);
-        GameSeasonTier platinumTier = tier(season, "PLATINUM", "플래티넘", 30_000L, 4);
-        GameSeasonTier diamondTier = tier(season, "DIAMOND", "다이아몬드", 120_000L, 5);
-        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 500_000L, 6);
-        GameSeasonTier legendTier = tier(season, "LEGEND", "레전드", 12_600_000L, 7);
+        GameSeasonTier silverTier = tier(season, "SILVER", "실버", 60_000L, 2);
+        GameSeasonTier goldTier = tier(season, "GOLD", "골드", 120_000L, 3);
+        GameSeasonTier platinumTier = tier(season, "PLATINUM", "플래티넘", 360_000L, 4);
+        GameSeasonTier diamondTier = tier(season, "DIAMOND", "다이아몬드", 1_440_000L, 5);
+        GameSeasonTier masterTier = tier(season, "MASTER", "마스터", 6_000_000L, 6);
+        GameSeasonTier legendTier = tier(season, "LEGEND", "레전드", 6_000_000L, 7);
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));

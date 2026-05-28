@@ -185,7 +185,7 @@ class AdminUserServiceTest {
         when(gamePositionRepository.countBySeasonIdAndUserIdAndStatusIn(eq(5L), eq(9L), any())).thenReturn(0L);
         when(gameWalletRepository.findBySeasonIdAndUserId(3L, 9L)).thenReturn(Optional.of(wallet));
         when(gameWalletRepository.findBySeasonIdAndUserId(5L, 9L)).thenReturn(Optional.empty());
-        when(gameService.calculateSettledUserHighlightScore(3L, 9L)).thenReturn(600_000L);
+        when(gameService.calculateSettledUserHighlightScore(3L, 9L)).thenReturn(6_000_000L);
         when(gameService.calculateSettledUserHighlightScore(5L, 9L)).thenReturn(0L);
 
         var response = adminUserService.getUser(9L);
@@ -201,7 +201,7 @@ class AdminUserServiceTest {
         assertThat(response.activeSeasonGames().get(1).regionCode()).isEqualTo("US");
         assertThat(response.activeSeasonGame().participating()).isTrue();
         assertThat(response.activeSeasonGame().totalAssetPoints()).isEqualTo(15000L);
-        assertThat(response.activeSeasonGame().tierScore()).isEqualTo(600_000L);
+        assertThat(response.activeSeasonGame().tierScore()).isEqualTo(6_000_000L);
         assertThat(response.activeSeasonGame().currentTier()).isNotNull();
         assertThat(response.activeSeasonGame().currentTier().tierCode()).isEqualTo("LEGEND");
         assertThat(response.activeSeasonGame().nextTier()).isNull();
@@ -393,12 +393,12 @@ class AdminUserServiceTest {
     private List<GameSeasonTier> defaultTiers(GameSeason season) {
         return List.of(
             tier(season, "BRONZE", "브론즈", 0L, 1),
-            tier(season, "SILVER", "실버", 5_000L, 2),
-            tier(season, "GOLD", "골드", 10_000L, 3),
-            tier(season, "PLATINUM", "플래티넘", 30_000L, 4),
-            tier(season, "DIAMOND", "다이아몬드", 120_000L, 5),
-            tier(season, "MASTER", "마스터", 500_000L, 6),
-            tier(season, "LEGEND", "레전드", 12_600_000L, 7)
+            tier(season, "SILVER", "실버", 60_000L, 2),
+            tier(season, "GOLD", "골드", 120_000L, 3),
+            tier(season, "PLATINUM", "플래티넘", 360_000L, 4),
+            tier(season, "DIAMOND", "다이아몬드", 1_440_000L, 5),
+            tier(season, "MASTER", "마스터", 6_000_000L, 6),
+            tier(season, "LEGEND", "레전드", 6_000_000L, 7)
         );
     }
 

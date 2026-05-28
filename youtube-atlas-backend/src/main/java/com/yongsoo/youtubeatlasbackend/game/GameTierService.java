@@ -15,16 +15,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class GameTierService {
 
     private static final String LEGEND_TIER_CODE = "LEGEND";
-    private static final long LEGEND_ELIGIBLE_MIN_SCORE = 500_000L;
+    private static final long TIER_SCORE_MULTIPLIER = 12L;
+    private static final long LEGEND_ELIGIBLE_MIN_SCORE = 500_000L * TIER_SCORE_MULTIPLIER;
     private static final double LEGEND_TOP_RATE = 0.10D;
 
     private static final List<DefaultTierDefinition> DEFAULT_TIER_DEFINITIONS = List.of(
-        new DefaultTierDefinition("BRONZE", "브론즈", 0L, "season-bronze", "bronze-investor", "bronze", 5, 1),
-        new DefaultTierDefinition("SILVER", "실버", 5_000L, "season-silver", "silver-investor", "silver", 7, 2),
-        new DefaultTierDefinition("GOLD", "골드", 10_000L, "season-gold", "gold-investor", "gold", 10, 3),
-        new DefaultTierDefinition("PLATINUM", "플래티넘", 30_000L, "season-platinum", "platinum-investor", "platinum", 12, 4),
-        new DefaultTierDefinition("DIAMOND", "다이아몬드", 120_000L, "season-diamond", "diamond-investor", "diamond", 15, 5),
-        new DefaultTierDefinition("MASTER", "마스터", 500_000L, "season-master", "master-investor", "master", 20, 6),
+        new DefaultTierDefinition("BRONZE", "브론즈", scaleTierScore(0L), "season-bronze", "bronze-investor", "bronze", 5, 1),
+        new DefaultTierDefinition("SILVER", "실버", scaleTierScore(5_000L), "season-silver", "silver-investor", "silver", 7, 2),
+        new DefaultTierDefinition("GOLD", "골드", scaleTierScore(10_000L), "season-gold", "gold-investor", "gold", 10, 3),
+        new DefaultTierDefinition("PLATINUM", "플래티넘", scaleTierScore(30_000L), "season-platinum", "platinum-investor", "platinum", 12, 4),
+        new DefaultTierDefinition("DIAMOND", "다이아몬드", scaleTierScore(120_000L), "season-diamond", "diamond-investor", "diamond", 15, 5),
+        new DefaultTierDefinition("MASTER", "마스터", scaleTierScore(500_000L), "season-master", "master-investor", "master", 20, 6),
         new DefaultTierDefinition("LEGEND", "레전드", LEGEND_ELIGIBLE_MIN_SCORE, "season-legend", "legend-investor", "legend", 20, 7)
     );
 
@@ -224,6 +225,10 @@ public class GameTierService {
 
     private int normalizeInventorySlots(Integer inventorySlots) {
         return inventorySlots == null || inventorySlots < 1 ? 5 : inventorySlots;
+    }
+
+    private static long scaleTierScore(long baseScore) {
+        return baseScore * TIER_SCORE_MULTIPLIER;
     }
 
     private long normalizeScoreAdjustment(Long scoreAdjustment) {
