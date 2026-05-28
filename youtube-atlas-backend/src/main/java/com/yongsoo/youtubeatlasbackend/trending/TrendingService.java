@@ -19,6 +19,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.game.GameScheduledSellOrderService;
@@ -50,6 +52,7 @@ import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasVideo;
 @Service
 public class TrendingService {
 
+    private static final Logger log = LoggerFactory.getLogger(TrendingService.class);
     private static final int TOP_RANK_RISERS_LIMIT = 10;
     private static final int TOP_VIDEOS_PAGE_SIZE = 50;
     private static final int TOP_VIDEOS_MAX_COUNT = 200;
@@ -504,7 +507,11 @@ public class TrendingService {
         }
 
         for (String regionCode : scheduledRegions) {
-            syncAllCategory(regionCode);
+            try {
+                syncAllCategory(regionCode);
+            } catch (RuntimeException exception) {
+                log.error("Trending sync failed for region {}", regionCode, exception);
+            }
         }
     }
 

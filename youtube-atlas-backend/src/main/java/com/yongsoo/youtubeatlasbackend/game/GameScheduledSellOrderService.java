@@ -6,6 +6,7 @@ import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import com.yongsoo.youtubeatlasbackend.auth.AuthenticatedUser;
 import com.yongsoo.youtubeatlasbackend.game.api.CreateScheduledSellOrderRequest;
@@ -116,7 +117,7 @@ public class GameScheduledSellOrderService {
         return toResponse(gameScheduledSellOrderRepository.save(order));
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void executeTriggeredOrders(String regionCode) {
         String normalizedRegionCode = normalizeRegionCode(regionCode);
         List<GameScheduledSellOrder> pendingOrders = gameScheduledSellOrderRepository
