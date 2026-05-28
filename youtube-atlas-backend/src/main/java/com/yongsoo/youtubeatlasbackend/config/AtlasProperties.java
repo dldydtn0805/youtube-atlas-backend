@@ -298,7 +298,7 @@ public class AtlasProperties {
         private boolean schedulerEnabled;
         private String cron = "0 */5 * * * *";
         private int payoutSlotMinutes = 5;
-        private int seasonDurationDays = 7;
+        private int seasonDurationMonths = 4;
         private long startingBalancePoints = 10_000L;
         private int minHoldSeconds = 60;
         private int maxOpenPositions = 5;
@@ -328,12 +328,12 @@ public class AtlasProperties {
             this.payoutSlotMinutes = payoutSlotMinutes;
         }
 
-        public int getSeasonDurationDays() {
-            return seasonDurationDays;
+        public int getSeasonDurationMonths() {
+            return seasonDurationMonths;
         }
 
-        public void setSeasonDurationDays(int seasonDurationDays) {
-            this.seasonDurationDays = seasonDurationDays;
+        public void setSeasonDurationMonths(int seasonDurationMonths) {
+            this.seasonDurationMonths = seasonDurationMonths;
         }
 
         public long getStartingBalancePoints() {

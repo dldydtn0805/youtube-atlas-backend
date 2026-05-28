@@ -83,7 +83,7 @@ ADMIN_ALLOWED_EMAILS=admin@example.com,owner@example.com
 GAME_SCHEDULER_ENABLED=true
 GAME_SETTLEMENT_CRON=0 */5 * * * *
 GAME_PAYOUT_SLOT_MINUTES=5
-GAME_SEASON_DURATION_DAYS=7
+GAME_SEASON_DURATION_MONTHS=4
 GAME_STARTING_BALANCE_POINTS=10000
 GAME_MIN_HOLD_SECONDS=60
 GAME_MAX_OPEN_POSITIONS=5
@@ -300,7 +300,7 @@ Authorization: Bearer {accessToken}
 insert into game_seasons
 (name, status, region_code, start_at, end_at, starting_balance_points, min_hold_seconds, max_open_positions, rank_point_multiplier, created_at)
 values
-('KR Daily Season', 'ACTIVE', 'KR', now(), now() + interval '7 day', 10000, 60, 5, 100, now());
+('KR Season', 'ACTIVE', 'KR', now(), now() + interval '4 month', 10000, 60, 5, 100, now());
 ```
 
 권장 기본값:
@@ -321,7 +321,7 @@ values
 ```json
 {
   "seasonId": 1,
-  "seasonName": "KR Daily Season",
+  "seasonName": "KR Season",
   "status": "ACTIVE",
   "regionCode": "KR",
   "startAt": "2026-04-01T00:00:00Z",
@@ -761,7 +761,7 @@ Authorization: Bearer {accessToken}
   },
   "activeSeason": {
     "id": 4,
-    "name": "KR Daily Season",
+    "name": "KR Season",
     "status": "ACTIVE",
     "regionCode": "KR",
     "startAt": "2026-04-01T00:00:00Z",
@@ -771,7 +771,7 @@ Authorization: Bearer {accessToken}
   "activeSeasons": [
     {
       "id": 4,
-      "name": "KR Daily Season",
+      "name": "KR Season",
       "status": "ACTIVE",
       "regionCode": "KR",
       "startAt": "2026-04-01T00:00:00Z",
@@ -780,7 +780,7 @@ Authorization: Bearer {accessToken}
     },
     {
       "id": 8,
-      "name": "US Daily Season",
+      "name": "US Season",
       "status": "ACTIVE",
       "regionCode": "US",
       "startAt": "2026-04-02T00:00:00Z",

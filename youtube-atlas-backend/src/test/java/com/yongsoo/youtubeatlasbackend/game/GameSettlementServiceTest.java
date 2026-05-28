@@ -191,7 +191,7 @@ class GameSettlementServiceTest {
         assertThat(createdSeason.getRegionCode()).isEqualTo("US");
         assertThat(createdSeason.getStatus()).isEqualTo(SeasonStatus.ACTIVE);
         assertThat(createdSeason.getStartAt()).isEqualTo(Instant.parse("2026-04-08T00:01:00Z"));
-        assertThat(createdSeason.getEndAt()).isEqualTo(Instant.parse("2026-04-15T00:01:00Z"));
+        assertThat(createdSeason.getEndAt()).isEqualTo(Instant.parse("2026-08-08T00:01:00Z"));
         assertThat(createdSeason.getStartingBalancePoints()).isEqualTo(latestUsSeason.getStartingBalancePoints());
         assertThat(createdSeason.getMinHoldSeconds()).isEqualTo(latestUsSeason.getMinHoldSeconds());
         assertThat(createdSeason.getMaxOpenPositions()).isEqualTo(latestUsSeason.getMaxOpenPositions());
@@ -201,7 +201,7 @@ class GameSettlementServiceTest {
     @Test
     void settleEndedSeasonsScheduledCreatesInitialSeasonFromDefaultsWhenNoHistoryExists() {
         atlasProperties.getGame().setSchedulerEnabled(true);
-        atlasProperties.getGame().setSeasonDurationDays(3);
+        atlasProperties.getGame().setSeasonDurationMonths(4);
         atlasProperties.getGame().setStartingBalancePoints(30_000L);
         atlasProperties.getGame().setMinHoldSeconds(300);
         atlasProperties.getGame().setMaxOpenPositions(7);
@@ -225,7 +225,7 @@ class GameSettlementServiceTest {
 
         assertThat(createdSeason.getRegionCode()).isEqualTo("BR");
         assertThat(createdSeason.getStartAt()).isEqualTo(Instant.parse("2026-04-08T00:01:00Z"));
-        assertThat(createdSeason.getEndAt()).isEqualTo(Instant.parse("2026-04-11T00:01:00Z"));
+        assertThat(createdSeason.getEndAt()).isEqualTo(Instant.parse("2026-08-08T00:01:00Z"));
         assertThat(createdSeason.getStartingBalancePoints()).isEqualTo(30_000L);
         assertThat(createdSeason.getMinHoldSeconds()).isEqualTo(300);
         assertThat(createdSeason.getMaxOpenPositions()).isEqualTo(7);
@@ -235,7 +235,7 @@ class GameSettlementServiceTest {
     @Test
     void settleEndedSeasonsScheduledUsesConfiguredSeasonDurationInsteadOfLongPreviousSeason() {
         atlasProperties.getGame().setSchedulerEnabled(true);
-        atlasProperties.getGame().setSeasonDurationDays(7);
+        atlasProperties.getGame().setSeasonDurationMonths(4);
         atlasProperties.getTrending().setJobs(List.of(syncJob("KR")));
         GameSeason longSeason = endedSeason("KR");
         longSeason.setStartAt(Instant.parse("2026-04-01T00:00:00Z"));
@@ -253,7 +253,7 @@ class GameSettlementServiceTest {
 
         org.mockito.ArgumentCaptor<GameSeason> captor = org.mockito.ArgumentCaptor.forClass(GameSeason.class);
         verify(gameSeasonRepository).save(captor.capture());
-        assertThat(captor.getValue().getEndAt()).isEqualTo(Instant.parse("2026-04-15T00:01:00Z"));
+        assertThat(captor.getValue().getEndAt()).isEqualTo(Instant.parse("2026-08-08T00:01:00Z"));
     }
 
     private GameSeason activeSeasonEndingNow() {

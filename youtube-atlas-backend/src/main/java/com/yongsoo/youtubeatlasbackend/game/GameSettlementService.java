@@ -1,8 +1,10 @@
 package com.yongsoo.youtubeatlasbackend.game;
 
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
+import java.time.Period;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -370,14 +372,13 @@ public class GameSettlementService {
 
     private GameSeason createNextSeason(String regionCode, GameSeason latestSeason, Instant now) {
         Instant startAt = resolveNextSeasonStartAt(latestSeason, now);
-        Duration duration = resolveSeasonDuration();
 
         GameSeason season = new GameSeason();
-        season.setName(regionCode + " Daily Season");
+        season.setName(regionCode + " Season");
         season.setStatus(SeasonStatus.ACTIVE);
         season.setRegionCode(regionCode);
         season.setStartAt(startAt);
-        season.setEndAt(startAt.plus(duration));
+        season.setEndAt(resolveSeasonEndAt(startAt));
         season.setStartingBalancePoints(latestSeason != null
             ? latestSeason.getStartingBalancePoints()
             : atlasProperties.getGame().getStartingBalancePoints());
@@ -404,8 +405,10 @@ public class GameSettlementService {
             : now;
     }
 
-    private Duration resolveSeasonDuration() {
-        return Duration.ofDays(Math.max(1, atlasProperties.getGame().getSeasonDurationDays()));
+    private Instant resolveSeasonEndAt(Instant startAt) {
+        int seasonDurationMonths = Math.max(1, atlasProperties.getGame().getSeasonDurationMonths());
+        ZonedDateTime startDateTime = ZonedDateTime.ofInstant(startAt, ZoneOffset.UTC);
+        return startDateTime.plus(Period.ofMonths(seasonDurationMonths)).toInstant();
     }
 
     private record SeasonResultCandidate(
