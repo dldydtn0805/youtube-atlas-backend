@@ -75,7 +75,7 @@ final class GamePointCalculator {
             return basePricePoints;
         }
 
-        long multiplierPercent = Math.max(0L, 100L + rankChange.longValue());
+        long multiplierPercent = Math.max(0L, 100L + (rankChange.longValue() * 10L));
         return BigInteger.valueOf(basePricePoints)
             .multiply(BigInteger.valueOf(multiplierPercent))
             .add(BigInteger.valueOf(50L))

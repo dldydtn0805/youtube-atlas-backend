@@ -28,15 +28,17 @@ class GamePointCalculatorTest {
     }
 
     @Test
-    void calculateMomentumAdjustedPricePointsUsesRankChangeAsPercent() {
-        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, 20)).isEqualTo(8_725L);
-        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, -20)).isEqualTo(5_817L);
+    void calculateMomentumAdjustedPricePointsUsesTenPercentPerRankChange() {
+        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, 1)).isEqualTo(7_998L);
+        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, -1)).isEqualTo(6_544L);
+        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, 10)).isEqualTo(14_542L);
+        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, -10)).isZero();
     }
 
     @Test
     void calculateMomentumAdjustedPricePointsDoesNotCapSurgingPremium() {
-        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, 50)).isEqualTo(10_907L);
-        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, 100)).isEqualTo(14_542L);
+        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, 50)).isEqualTo(43_626L);
+        assertThat(GamePointCalculator.calculateMomentumAdjustedPricePoints(171, 100)).isEqualTo(79_981L);
     }
 
     @Test
