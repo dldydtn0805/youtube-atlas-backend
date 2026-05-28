@@ -76,11 +76,11 @@ DB_URL=jdbc:postgresql://localhost:5432/youtube_atlas
 DB_USERNAME=postgres
 DB_PASSWORD=postgres
 SPRING_JPA_HIBERNATE_DDL_AUTO=update
-ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,https://trg.life
 YOUTUBE_CATEGORY_LANGUAGE=ko
 AUTH_SESSION_TTL_DAYS=30
 ADMIN_ALLOWED_EMAILS=admin@example.com,owner@example.com
-GAME_SCHEDULER_ENABLED=false
+GAME_SCHEDULER_ENABLED=true
 GAME_SETTLEMENT_CRON=0 */5 * * * *
 GAME_PAYOUT_SLOT_MINUTES=5
 GAME_SEASON_DURATION_DAYS=7
@@ -107,10 +107,11 @@ SKIP_DB_MIGRATIONS=false
 - 배포 DB에 로컬 앱을 직접 붙일 때는 `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` 또는 `none` 으로 두는 편이 안전합니다.
 - Docker 배포에서는 컨테이너 시작 시 `sql/*.sql` 이 자동 실행된 뒤 애플리케이션이 시작됩니다.
 - 마이그레이션을 건너뛰려면 `SKIP_DB_MIGRATIONS=true` 를 설정하면 됩니다.
-- `ALLOWED_ORIGINS` 기본값에는 로컬 개발 주소와 Vercel 배포 주소 패턴이 포함됩니다.
+- `ALLOWED_ORIGINS` 기본값에는 로컬 개발 주소, Vercel 배포 주소 패턴, `https://trg.life` 가 포함됩니다.
 - `GOOGLE_CLIENT_ID` 는 프론트의 Google OAuth Client ID와 동일해야 합니다.
 - `GOOGLE_CLIENT_SECRET` 는 같은 Google OAuth Web Client의 secret 이어야 합니다.
-- `GAME_SCHEDULER_ENABLED=true` 로 두면 종료 시즌 자동 정리와 다음 시즌 생성이 주기적으로 실행됩니다.
+- 기본 애플리케이션 값은 `GAME_SCHEDULER_ENABLED=true`, `TRENDING_SCHEDULER_ENABLED=true` 입니다.
+- `./scripts/boot-local.sh` 로 로컬 실행할 때는 두 스케줄러가 기본으로 `false` 처리되어 로컬 부팅 중 원격 데이터에 영향을 주지 않도록 합니다.
 - 로컬에서 빠르게 확인하려면 `GAME_SETTLEMENT_CRON=0 */1 * * * *` 로 두면 1분마다 시즌 정리를 테스트할 수 있습니다.
 - 인벤토리 슬롯은 현재 티어 보상으로 결정됩니다. 기본 브론즈는 5칸이고 마스터부터 20칸입니다.
 - `ADMIN_ALLOWED_EMAILS` 에 관리자 이메일을 쉼표로 구분해서 넣으면 `/api/admin/*` 엔드포인트 접근을 허용합니다.

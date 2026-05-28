@@ -6,21 +6,18 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$ROOT_DIR/youtube-atlas-backend/.env.local"
 PG_BIN="${PG_BIN:-/opt/homebrew/opt/postgresql@18/bin}"
 BACKUP_DIR="${BACKUP_DIR:-/tmp/youtube-atlas-db-backups}"
+LOAD_ENV_LIB="$ROOT_DIR/scripts/lib/load-env.sh"
+
+source "$LOAD_ENV_LIB"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "$ENV_FILE 파일이 없습니다."
   exit 1
 fi
 
-read_env() {
-  local key="$1"
-  awk -v key="$key" 'BEGIN { FS = "=" } $1 == key { sub(/^[^=]*=/, ""); print; exit }' "$ENV_FILE" \
-    | sed 's/^"//; s/"$//'
-}
-
-AWS_DB_URL="$(read_env AWS_DB_URL)"
-AWS_DB_USERNAME="$(read_env AWS_DB_USERNAME)"
-AWS_DB_PASSWORD="$(read_env AWS_DB_PASSWORD)"
+AWS_DB_URL="$(env_get "$ENV_FILE" AWS_DB_URL)"
+AWS_DB_USERNAME="$(env_get "$ENV_FILE" AWS_DB_USERNAME)"
+AWS_DB_PASSWORD="$(env_get "$ENV_FILE" AWS_DB_PASSWORD)"
 DUMP_FILE="${1:-$(find "$BACKUP_DIR" -name '*.dump' -size +0 -print | sort | tail -1)}"
 
 if [[ -z "$AWS_DB_URL" || -z "$AWS_DB_USERNAME" || -z "$AWS_DB_PASSWORD" ]]; then

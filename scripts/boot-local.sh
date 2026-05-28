@@ -6,23 +6,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_DIR="$ROOT_DIR/youtube-atlas-backend"
 ENV_FILE="$APP_DIR/.env.local"
 EXAMPLE_FILE="$APP_DIR/.env.local.example"
+LOAD_ENV_LIB="$ROOT_DIR/scripts/lib/load-env.sh"
+
+source "$LOAD_ENV_LIB"
 
 if [[ -f "$ENV_FILE" ]]; then
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-
-    key="${line%%=*}"
-    value="${line#*=}"
-
-    key="${key#"${key%%[![:space:]]*}"}"
-    key="${key%"${key##*[![:space:]]}"}"
-
-    if [[ "$value" =~ ^\".*\"$ ]]; then
-      value="${value:1:${#value}-2}"
-    fi
-
-    export "$key=$value"
-  done < "$ENV_FILE"
+  env_export_file "$ENV_FILE"
 else
   cat <<EOF
 $ENV_FILE 파일이 없습니다.
@@ -44,6 +33,10 @@ if [[ -n "${REMOTE_DB_URL:-}" ]]; then
   export SPRING_DATASOURCE_DRIVER_CLASS_NAME="${REMOTE_DB_DRIVER:-org.postgresql.Driver}"
   export SPRING_JPA_HIBERNATE_DDL_AUTO="${SPRING_JPA_HIBERNATE_DDL_AUTO:-validate}"
 fi
+
+# Local boot should stay side-effect free unless explicitly overridden.
+export GAME_SCHEDULER_ENABLED="${GAME_SCHEDULER_ENABLED:-false}"
+export TRENDING_SCHEDULER_ENABLED="${TRENDING_SCHEDULER_ENABLED:-false}"
 
 cd "$APP_DIR"
 ./gradlew bootRun

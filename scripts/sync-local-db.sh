@@ -7,16 +7,16 @@ ENV_FILE="$ROOT_DIR/youtube-atlas-backend/.env.local"
 DUMP_FILE="/tmp/youtube_atlas_remote.sql"
 RESTORE_LOG="/tmp/youtube_atlas_restore.log"
 LOCAL_DB_NAME="youtube_atlas_local"
+LOAD_ENV_LIB="$ROOT_DIR/scripts/lib/load-env.sh"
+
+source "$LOAD_ENV_LIB"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "$ENV_FILE 파일이 없습니다."
   exit 1
 fi
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
+env_export_file "$ENV_FILE"
 
 REMOTE_SOURCE_URL="${REMOTE_DB_URL:-}"
 REMOTE_SOURCE_USER="${REMOTE_DB_USERNAME:-}"

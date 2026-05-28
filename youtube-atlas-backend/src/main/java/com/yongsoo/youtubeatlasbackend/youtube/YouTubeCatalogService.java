@@ -9,9 +9,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import com.yongsoo.youtubeatlasbackend.common.ExternalServiceException;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignal;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSignalRepository;
 import com.yongsoo.youtubeatlasbackend.trending.TrendSnapshot;
@@ -32,6 +35,7 @@ public class YouTubeCatalogService {
     private static final int MIN_VIDEOS_PER_SOURCE_PAGE = 12;
     private static final int SNAPSHOT_PAGE_SIZE = 50;
     private static final String TRENDING_CATEGORY_ID = CategoryCatalog.ALL_VIDEO_CATEGORY_ID;
+    private static final Logger log = LoggerFactory.getLogger(YouTubeCatalogService.class);
 
     private final CategoryCatalog categoryCatalog;
     private final CatalogResponseCache catalogResponseCache;
@@ -72,10 +76,16 @@ public class YouTubeCatalogService {
     public VideoItemResponse getVideoById(String videoId) {
         String normalizedVideoId = normalizeVideoId(videoId);
 
-        return youTubeApiClient.fetchVideosByIds(List.of(normalizedVideoId)).stream()
-            .findFirst()
-            .map(this::toVideoResponse)
-            .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 영상입니다: " + normalizedVideoId));
+        try {
+            return youTubeApiClient.fetchVideosByIds(List.of(normalizedVideoId)).stream()
+                .findFirst()
+                .map(this::toVideoResponse)
+                .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 영상입니다: " + normalizedVideoId));
+        } catch (ExternalServiceException exception) {
+            return trendSnapshotRepository.findTopByVideoIdOrderByRun_IdDesc(normalizedVideoId)
+                .map(snapshot -> toSnapshotVideoResponse(snapshot, null))
+                .orElseThrow(() -> exception);
+        }
     }
 
     public VideoCategorySectionResponse getPopularVideosForChannels(
@@ -126,7 +136,14 @@ public class YouTubeCatalogService {
     }
 
     private List<VideoCategoryResponse> loadCategories(String normalizedRegionCode) {
-        List<RemoteVideoCategoryItem> remoteCategories = youTubeApiClient.fetchVideoCategories(normalizedRegionCode);
+        List<RemoteVideoCategoryItem> remoteCategories;
+        try {
+            remoteCategories = youTubeApiClient.fetchVideoCategories(normalizedRegionCode);
+        } catch (ExternalServiceException exception) {
+            log.warn("YouTube 카테고리 조회 실패, 기본 카테고리로 대체합니다: regionCode={}, message={}", normalizedRegionCode, exception.getMessage());
+            return List.of(toResponse(categoryCatalog.allCategory()));
+        }
+
         List<AtlasVideoCategory> categories = new ArrayList<>();
 
         for (RemoteVideoCategoryItem remoteCategory : remoteCategories) {

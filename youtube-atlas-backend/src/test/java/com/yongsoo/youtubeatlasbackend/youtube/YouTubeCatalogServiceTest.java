@@ -77,6 +77,17 @@ class YouTubeCatalogServiceTest {
     }
 
     @Test
+    void getCategoriesFallsBackToDefaultCategoryWhenYoutubeFails() {
+        when(youTubeApiClient.fetchVideoCategories("KR"))
+            .thenThrow(new ExternalServiceException("YouTube API 요청에 실패했습니다."));
+
+        var categories = youTubeCatalogService.getCategories("KR");
+
+        assertThat(categories).extracting("id").containsExactly("0");
+        verify(youTubeApiClient, times(1)).fetchVideoCategories("KR");
+    }
+
+    @Test
     void getPopularVideosByCategoryReturnsEmptySectionWhenNoSnapshotExists() {
         when(youTubeApiClient.fetchVideoCategories("KR")).thenReturn(List.of(
             new RemoteVideoCategoryItem("10", new RemoteCategorySnippet(true, "Music"))
@@ -169,6 +180,25 @@ class YouTubeCatalogServiceTest {
 
         assertThat(response.id()).isEqualTo("video-1");
         assertThat(response.snippet().title()).isEqualTo("Title");
+    }
+
+    @Test
+    void getVideoByIdFallsBackToLatestSnapshotWhenYoutubeFails() {
+        TrendRun latestRun = trendRun(11L, Instant.parse("2026-04-18T08:00:00Z"));
+        TrendSnapshot snapshot = snapshot(latestRun, "video-1", 3, "10", "Music");
+
+        when(youTubeApiClient.fetchVideosByIds(List.of("video-1")))
+            .thenThrow(new ExternalServiceException("YouTube API 요청에 실패했습니다."));
+        when(trendSnapshotRepository.findTopByVideoIdOrderByRun_IdDesc("video-1"))
+            .thenReturn(java.util.Optional.of(snapshot));
+
+        var response = youTubeCatalogService.getVideoById("video-1");
+
+        assertThat(response.id()).isEqualTo("video-1");
+        assertThat(response.snippet().title()).isEqualTo("Title video-1");
+        assertThat(response.snippet().categoryLabel()).isEqualTo("Music");
+        assertThat(response.trend()).isNotNull();
+        assertThat(response.trend().currentRank()).isEqualTo(3);
     }
 
     @Test

@@ -9,11 +9,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yongsoo.youtubeatlasbackend.common.ExternalServiceException;
 import com.yongsoo.youtubeatlasbackend.config.AtlasProperties;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasContentDetails;
@@ -29,10 +32,16 @@ public class YouTubeApiClient {
 
     private final AtlasProperties atlasProperties;
     private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
 
-    public YouTubeApiClient(AtlasProperties atlasProperties, RestTemplateBuilder restTemplateBuilder) {
+    public YouTubeApiClient(
+        AtlasProperties atlasProperties,
+        RestTemplateBuilder restTemplateBuilder,
+        ObjectMapper objectMapper
+    ) {
         this.atlasProperties = atlasProperties;
         this.restTemplate = restTemplateBuilder.build();
+        this.objectMapper = objectMapper;
     }
 
     public List<RemoteVideoCategoryItem> fetchVideoCategories(String regionCode) {
@@ -162,9 +171,41 @@ public class YouTubeApiClient {
             }
 
             return body;
+        } catch (RestClientResponseException exception) {
+            throw new ExternalServiceException(resolveErrorMessage(exception), exception);
         } catch (RestClientException exception) {
             throw new ExternalServiceException("YouTube API 요청에 실패했습니다.", exception);
         }
+    }
+
+    private String resolveErrorMessage(RestClientResponseException exception) {
+        String parsedMessage = extractErrorMessage(exception.getResponseBodyAsString());
+        if (StringUtils.hasText(parsedMessage)) {
+            return parsedMessage;
+        }
+
+        if (StringUtils.hasText(exception.getMessage())) {
+            return exception.getMessage();
+        }
+
+        return "YouTube API 요청에 실패했습니다.";
+    }
+
+    private String extractErrorMessage(String responseBody) {
+        if (!StringUtils.hasText(responseBody)) {
+            return null;
+        }
+
+        try {
+            RemoteErrorEnvelope envelope = objectMapper.readValue(responseBody, RemoteErrorEnvelope.class);
+            if (envelope.error() != null && StringUtils.hasText(envelope.error().message())) {
+                return envelope.error().message();
+            }
+        } catch (JsonProcessingException ignored) {
+            // Fall through to the raw body below.
+        }
+
+        return responseBody.trim();
     }
 
     private String requireApiKey() {
@@ -276,6 +317,12 @@ public class YouTubeApiClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record RemoteApiError(
         String message
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record RemoteErrorEnvelope(
+        RemoteApiError error
     ) {
     }
 

@@ -49,6 +49,8 @@ public interface TrendSnapshotRepository extends JpaRepository<TrendSnapshot, Lo
         String videoId
     );
 
+    Optional<TrendSnapshot> findTopByVideoIdOrderByRun_IdDesc(String videoId);
+
     List<TrendSnapshot> findByRegionCodeAndCategoryIdAndVideoIdAndRun_IdBetweenOrderByRun_IdAsc(
         String regionCode,
         String categoryId,
