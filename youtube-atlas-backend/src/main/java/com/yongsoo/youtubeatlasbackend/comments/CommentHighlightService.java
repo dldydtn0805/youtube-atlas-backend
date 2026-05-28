@@ -9,6 +9,7 @@ import org.springframework.util.StringUtils;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.yongsoo.youtubeatlasbackend.common.ExternalServiceException;
 import com.yongsoo.youtubeatlasbackend.youtube.YouTubeApiClient;
 import com.yongsoo.youtubeatlasbackend.youtube.model.AtlasCommentHighlight;
 
@@ -36,11 +37,25 @@ public class CommentHighlightService {
     }
 
     private List<CommentHighlight> loadHighlights(String videoId) {
-        return youTubeApiClient.fetchTopLevelCommentHighlights(videoId).stream()
-            .map(this::toHighlight)
-            .filter(comment -> StringUtils.hasText(comment.id()) && StringUtils.hasText(comment.text()))
-            .sorted(Comparator.comparingLong(CommentHighlight::likeCount).reversed())
-            .toList();
+        try {
+            return youTubeApiClient.fetchTopLevelCommentHighlights(videoId).stream()
+                .map(this::toHighlight)
+                .filter(comment -> StringUtils.hasText(comment.id()) && StringUtils.hasText(comment.text()))
+                .sorted(Comparator.comparingLong(CommentHighlight::likeCount).reversed())
+                .toList();
+        } catch (ExternalServiceException exception) {
+            if (isCommentsDisabledError(exception)) {
+                return List.of();
+            }
+
+            throw exception;
+        }
+    }
+
+    private boolean isCommentsDisabledError(ExternalServiceException exception) {
+        String message = exception.getMessage();
+        return StringUtils.hasText(message)
+            && message.toLowerCase().contains("disabled comments");
     }
 
     private CommentHighlight toHighlight(AtlasCommentHighlight comment) {

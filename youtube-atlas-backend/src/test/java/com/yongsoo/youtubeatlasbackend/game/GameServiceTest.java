@@ -1432,7 +1432,11 @@ class GameServiceTest {
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
         when(gamePositionRepository.findBySeasonId(1L)).thenReturn(List.of(openPosition, settledPosition));
-        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(openPosition));
+        when(gamePositionRepository.findBySeasonIdAndStatusOrderByIdAsc(
+            org.mockito.ArgumentMatchers.eq(1L),
+            org.mockito.ArgumentMatchers.eq(PositionStatus.OPEN),
+            org.mockito.ArgumentMatchers.any(org.springframework.data.domain.Pageable.class)
+        )).thenReturn(List.of(openPosition), List.of());
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))
             .thenReturn(List.of(signal("video-1", 10, 0)));
 
@@ -1477,7 +1481,11 @@ class GameServiceTest {
 
         when(gameSeasonRepository.findTopByStatusAndRegionCodeOrderByStartAtDesc(SeasonStatus.ACTIVE, "KR"))
             .thenReturn(Optional.of(season));
-        when(gamePositionRepository.findBySeasonIdAndStatus(1L, PositionStatus.OPEN)).thenReturn(List.of(openPosition));
+        when(gamePositionRepository.findBySeasonIdAndStatusOrderByIdAsc(
+            org.mockito.ArgumentMatchers.eq(1L),
+            org.mockito.ArgumentMatchers.eq(PositionStatus.OPEN),
+            org.mockito.ArgumentMatchers.any(org.springframework.data.domain.Pageable.class)
+        )).thenReturn(List.of(openPosition), List.of());
         when(gamePositionRepository.findBySeasonIdAndUserIdOrderByCreatedAtDesc(1L, 7L))
             .thenReturn(List.of(settledPosition, openPosition));
         when(trendSignalRepository.findByIdRegionCodeAndIdCategoryIdOrderByCurrentRankAsc("KR", "0"))

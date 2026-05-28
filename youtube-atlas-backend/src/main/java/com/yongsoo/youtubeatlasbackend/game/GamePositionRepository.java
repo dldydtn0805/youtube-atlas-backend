@@ -109,6 +109,8 @@ public interface GamePositionRepository extends JpaRepository<GamePosition, Long
 
     List<GamePosition> findBySeasonIdAndStatus(Long seasonId, PositionStatus status);
 
+    List<GamePosition> findBySeasonIdAndStatusOrderByIdAsc(Long seasonId, PositionStatus status, Pageable pageable);
+
     List<GamePosition> findBySeasonId(Long seasonId);
 
     @org.springframework.data.jpa.repository.Modifying

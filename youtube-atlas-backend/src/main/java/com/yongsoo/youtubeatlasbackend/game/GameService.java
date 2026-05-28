@@ -72,6 +72,7 @@ public class GameService {
     private static final String BUYABLE_CHART_DESCRIPTION = "현재 지갑과 보유 상태 기준으로 바로 매수 가능한 영상만 모았습니다.";
     private static final int BUYABLE_CHART_MAX_COUNT = 200;
     private static final int BUYABLE_CHART_PAGE_SIZE = 50;
+    private static final int PROJECTED_HIGHLIGHT_BATCH_SIZE = 200;
     private static final int DEFAULT_FALLBACK_RANK = 201;
     private static final long ATLAS_SHOT_HIGHLIGHT_BASE_SCORE = 60_000L;
     private static final long GALAXY_SHOT_HIGHLIGHT_BASE_SCORE = 45_000L;
@@ -2663,9 +2664,20 @@ public class GameService {
             TRENDING_CATEGORY_ID
         ).stream().collect(Collectors.toMap(signal -> signal.getId().getVideoId(), Function.identity()));
 
-        gamePositionRepository.findBySeasonIdAndStatus(season.getId(), PositionStatus.OPEN).forEach(position ->
-            publishProjectedHighlightNotification(position, signalsByVideoId)
-        );
+        int page = 0;
+        while (true) {
+            List<GamePosition> positions = gamePositionRepository.findBySeasonIdAndStatusOrderByIdAsc(
+                season.getId(),
+                PositionStatus.OPEN,
+                PageRequest.of(page, PROJECTED_HIGHLIGHT_BATCH_SIZE)
+            );
+            if (positions.isEmpty()) {
+                return;
+            }
+
+            positions.forEach(position -> publishProjectedHighlightNotification(position, signalsByVideoId));
+            page += 1;
+        }
     }
 
     private void publishProjectedHighlightNotification(
