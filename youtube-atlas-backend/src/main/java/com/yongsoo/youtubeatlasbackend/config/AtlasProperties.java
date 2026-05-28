@@ -299,7 +299,7 @@ public class AtlasProperties {
         private String cron = "0 */5 * * * *";
         private int payoutSlotMinutes = 5;
         private int seasonDurationMonths = 4;
-        private long startingBalancePoints = 10_000L;
+        private long startingBalancePoints = 100_000L;
         private int minHoldSeconds = 60;
         private int maxOpenPositions = 5;
         private int rankPointMultiplier = 100;

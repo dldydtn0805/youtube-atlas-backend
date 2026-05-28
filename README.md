@@ -84,7 +84,7 @@ GAME_SCHEDULER_ENABLED=true
 GAME_SETTLEMENT_CRON=0 */5 * * * *
 GAME_PAYOUT_SLOT_MINUTES=5
 GAME_SEASON_DURATION_MONTHS=4
-GAME_STARTING_BALANCE_POINTS=10000
+GAME_STARTING_BALANCE_POINTS=100000
 GAME_MIN_HOLD_SECONDS=60
 GAME_MAX_OPEN_POSITIONS=5
 GAME_RANK_POINT_MULTIPLIER=100
@@ -305,7 +305,7 @@ values
 
 권장 기본값:
 
-- `starting_balance_points = 10000`
+- `starting_balance_points = 100000`
 - `min_hold_seconds = 60`
 - `max_open_positions = 5`
 - `rank_point_multiplier = 100`
