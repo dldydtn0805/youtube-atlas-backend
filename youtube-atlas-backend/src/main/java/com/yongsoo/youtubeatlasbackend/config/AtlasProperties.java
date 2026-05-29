@@ -228,11 +228,7 @@ public class AtlasProperties {
 
         private static List<SyncJob> defaultJobs() {
             return new ArrayList<>(List.of(
-                syncJob("KR"),
-                syncJob("US"),
-                syncJob("JP"),
-                syncJob("BR"),
-                syncJob("ID")
+                syncJob("KR")
             ));
         }
 
